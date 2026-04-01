@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -33,7 +32,10 @@ public sealed class NotificationQueue : IDisposable
     private int _isDispatching; // 0 = idle, 1 = dispatching; use Interlocked for thread safety
     private volatile bool _isPaused;
     private volatile bool _disposed;
+
+    // Reusable timers — avoids allocating a new DispatcherTimer per notification
     private DispatcherTimer? _pauseTimer;
+    private DispatcherTimer? _gapTimer;
 
     private static readonly TimeSpan GapBetweenNotifications = TimeSpan.FromMilliseconds(500);
 
@@ -135,16 +137,7 @@ public sealed class NotificationQueue : IDisposable
         if (_isPaused)
         {
             _log?.Invoke("Notifications paused, waiting to dispatch...");
-            if (_pauseTimer == null)
-            {
-                _pauseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-                _pauseTimer.Tick += (_, _) =>
-                {
-                    _pauseTimer.Stop();
-                    DispatchNext();
-                };
-            }
-            _pauseTimer.Start();
+            ScheduleRetry(_pauseTimer ??= CreateTimer(), TimeSpan.FromSeconds(1));
             return;
         }
 
@@ -161,82 +154,46 @@ public sealed class NotificationQueue : IDisposable
 
         try
         {
-            var gameWindowRect = GetForegroundWindowRect();
+            var gameWindowRect = AppUtilities.GetForegroundWindowRect();
             _log?.Invoke($"Showing notification: {item.AchievementName} at ({gameWindowRect.Left},{gameWindowRect.Top} {gameWindowRect.Width}x{gameWindowRect.Height})");
 
             _soundPlayer?.Play();
 
             var window = new NotificationWindow(_config.DisplayDuration);
-            window.Closed += (_, _) =>
-            {
-                // After window closes, wait a short gap then show next
-                var gapTimer = new DispatcherTimer { Interval = GapBetweenNotifications };
-                gapTimer.Tick += (_, _) =>
-                {
-                    gapTimer.Stop();
-                    DispatchNext();
-                };
-                gapTimer.Start();
-            };
+            window.Closed += (_, _) => ScheduleRetry(_gapTimer ??= CreateTimer(), GapBetweenNotifications);
 
             window.Show(item.AchievementName, item.Description, item.IconPath, gameWindowRect);
         }
         catch (Exception ex)
         {
             _log?.Invoke($"Error dispatching notification: {ex.Message}");
-
-            // Schedule next dispatch attempt after gap to avoid stalling the queue
-            var retryTimer = new DispatcherTimer { Interval = GapBetweenNotifications };
-            retryTimer.Tick += (_, _) =>
-            {
-                retryTimer.Stop();
-                DispatchNext();
-            };
-            retryTimer.Start();
+            ScheduleRetry(_gapTimer ??= CreateTimer(), GapBetweenNotifications);
         }
     }
 
-    /// <summary>
-    /// Gets the work area of the monitor containing the foreground window.
-    /// Uses WinForms Screen class which handles multi-monitor and DPI correctly.
-    /// Falls back to the primary screen work area.
-    /// </summary>
-    internal static Rect GetForegroundWindowRect()
+    private DispatcherTimer CreateTimer()
     {
-        try
+        var timer = new DispatcherTimer();
+        timer.Tick += (_, _) =>
         {
-            var hwnd = GetForegroundWindow();
-            if (hwnd != IntPtr.Zero)
-            {
-                var screen = System.Windows.Forms.Screen.FromHandle(hwnd);
-                var wa = screen.WorkingArea;
-                // Screen.WorkingArea returns physical pixels. WPF positions windows
-                // using the primary monitor's DPI as the coordinate basis, so convert
-                // all coordinates using the primary monitor's DPI scale.
-                var primaryDpiScale = SystemParameters.PrimaryScreenHeight > 0
-                    ? System.Windows.Forms.Screen.PrimaryScreen!.Bounds.Height / SystemParameters.PrimaryScreenHeight
-                    : 1.0;
-                return new Rect(wa.Left / primaryDpiScale, wa.Top / primaryDpiScale, wa.Width / primaryDpiScale, wa.Height / primaryDpiScale);
-            }
-        }
-        catch
-        {
-            // Fall through to default
-        }
+            timer.Stop();
+            DispatchNext();
+        };
+        return timer;
+    }
 
-        var area = SystemParameters.WorkArea;
-        return new Rect(0, 0, area.Width, area.Height);
+    private static void ScheduleRetry(DispatcherTimer timer, TimeSpan interval)
+    {
+        timer.Stop();
+        timer.Interval = interval;
+        timer.Start();
     }
 
     public void Dispose()
     {
         _disposed = true;
         _pauseTimer?.Stop();
-        // Drain the queue
+        _gapTimer?.Stop();
         while (_queue.TryDequeue(out _)) { }
     }
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
-
 }

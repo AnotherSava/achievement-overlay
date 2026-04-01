@@ -24,6 +24,7 @@ public sealed class AchievementWatcher : IDisposable
     private FileSystemWatcher? _watcher;
     private readonly string _gseSavesPath;
     private readonly Action<string>? _log;
+    private readonly Action<string>? _warn;
 
     // Tracks last-seen earned_time per (appid, achievementName) to avoid duplicate notifications
     private readonly ConcurrentDictionary<string, long> _seenAchievements = new();
@@ -43,12 +44,14 @@ public sealed class AchievementWatcher : IDisposable
     public AchievementWatcher(
         string gseSavesPath,
         Action<string>? log = null,
+        Action<string>? warn = null,
         TimeSpan? debounceDelay = null,
         int maxRetries = 3,
         TimeSpan? retryDelay = null)
     {
         _gseSavesPath = gseSavesPath;
         _log = log;
+        _warn = warn;
         _debounceDelay = debounceDelay ?? TimeSpan.FromMilliseconds(100);
         _maxRetries = maxRetries;
         _retryDelay = retryDelay ?? TimeSpan.FromMilliseconds(200);
@@ -77,11 +80,13 @@ public sealed class AchievementWatcher : IDisposable
         {
             Filter = "achievements.json",
             IncludeSubdirectories = true,
+            InternalBufferSize = 32768,
             NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.CreationTime | NotifyFilters.FileName
         };
 
         _watcher.Changed += OnFileChanged;
         _watcher.Created += OnFileChanged;
+        _watcher.Error += (_, e) => _warn?.Invoke($"FileSystemWatcher error: {e.GetException().Message}");
         _watcher.EnableRaisingEvents = true;
 
         _log?.Invoke($"Watching for achievements in '{_gseSavesPath}'");

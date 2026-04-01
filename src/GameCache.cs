@@ -64,7 +64,6 @@ public sealed class GameCache
         _log?.Invoke($"Game cache scan complete. Found {count} game(s) with achievement metadata:");
     }
 
-    /// <summary>
     public IEnumerable<string> GetAllAppIds() => _cache.Keys;
 
     /// <summary>

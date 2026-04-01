@@ -186,7 +186,13 @@ public sealed class AppConfig
 
     private static SettingsData Deserialize(string json)
     {
-        return JsonSerializer.Deserialize<SettingsData>(json, JsonOptions) ?? new SettingsData();
+        // Merge with embedded defaults so missing properties get filled in
+        var defaults = JsonSerializer.Deserialize<SettingsData>(GetEmbeddedDefault(), JsonOptions) ?? new SettingsData();
+        var result = JsonSerializer.Deserialize<SettingsData>(json, JsonOptions) ?? defaults;
+        if (string.IsNullOrEmpty(result.GseSavesPath)) result.GseSavesPath = defaults.GseSavesPath;
+        if (string.IsNullOrEmpty(result.Language)) result.Language = defaults.Language;
+        if (result.DisplayDuration <= 0) result.DisplayDuration = defaults.DisplayDuration;
+        return result;
     }
 
     internal static string GetEmbeddedDefault()
@@ -254,23 +260,27 @@ public sealed class AppConfig
     }
 }
 
+/// <summary>
+/// Settings model. Defaults come from the embedded config/default.json resource —
+/// do not add default values to properties here.
+/// </summary>
 public sealed class SettingsData
 {
     [JsonPropertyName("gseSavesPath")]
-    public string GseSavesPath { get; set; } = @"%appdata%\GSE Saves";
+    public string GseSavesPath { get; set; } = "";
 
     [JsonPropertyName("gamesPaths")]
-    public string GamesPaths { get; set; } = @"C:\Games";
+    public string GamesPaths { get; set; } = "";
 
     [JsonPropertyName("language")]
-    public string Language { get; set; } = "english";
+    public string Language { get; set; } = "";
 
     [JsonPropertyName("soundEnabled")]
-    public bool SoundEnabled { get; set; } = true;
+    public bool SoundEnabled { get; set; }
 
     [JsonPropertyName("soundPath")]
     public string SoundPath { get; set; } = "";
 
     [JsonPropertyName("displayDuration")]
-    public int DisplayDuration { get; set; } = 7;
+    public int DisplayDuration { get; set; }
 }

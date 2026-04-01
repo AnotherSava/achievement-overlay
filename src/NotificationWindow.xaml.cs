@@ -12,11 +12,12 @@ public partial class NotificationWindow : Window
     private const double WindowWidthFraction = 0.15;
     private const double IconSizeFraction = 0.25;
     private const double MarginFraction = 0.02;
-    private const double SlideDistance = 60;
+    private const double SlideDistanceFraction = 0.015;
 
     private static readonly Duration SlideDuration = new(TimeSpan.FromMilliseconds(300));
     private static readonly Duration FadeDuration = new(TimeSpan.FromMilliseconds(500));
     private readonly DispatcherTimer _holdTimer;
+    private double _slideDistance;
 
     public NotificationWindow(int displayDurationSeconds = 10)
     {
@@ -125,6 +126,7 @@ public partial class NotificationWindow : Window
     {
         var notificationWidth = Math.Max(250, gameWindowRect.Width * WindowWidthFraction);
         var margin = Math.Min(gameWindowRect.Width, gameWindowRect.Height) * MarginFraction;
+        _slideDistance = gameWindowRect.Height * SlideDistanceFraction;
         MaxWidth = notificationWidth;
         MinWidth = notificationWidth;
 
@@ -133,15 +135,15 @@ public partial class NotificationWindow : Window
         var actualHeight = DesiredSize.Height > 0 ? DesiredSize.Height : 80;
 
         Left = gameWindowRect.Right - notificationWidth - margin;
-        Top = gameWindowRect.Bottom - actualHeight - margin - SlideDistance;
+        Top = gameWindowRect.Bottom - actualHeight - margin - _slideDistance;
     }
 
     private void StartSlideIn()
     {
         // Slide up from below
-        SlideTransform.Y = SlideDistance;
+        SlideTransform.Y = _slideDistance;
 
-        var slideAnim = new DoubleAnimation(SlideDistance, 0, SlideDuration)
+        var slideAnim = new DoubleAnimation(_slideDistance, 0, SlideDuration)
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
         };
