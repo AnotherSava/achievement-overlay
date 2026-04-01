@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
+    <AssemblyName>AchievementOverlay</AssemblyName>
+    <RootNamespace>AchievementOverlay</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AchievementOverlay.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\config\default.json" LogicalName="AchievementOverlay.default.json" />
+    <EmbeddedResource Include="Assets\achievement_sound.wav" LogicalName="AchievementOverlay.achievement_sound.wav" />
+    <EmbeddedResource Include="Assets\icon.ico" LogicalName="AchievementOverlay.icon.ico" />
+  </ItemGroup>
+
+
+</Project>

@@ -6,10 +6,9 @@ publish/
 # Claude Code
 .claude/settings.local.json
 
-# Local docs
-docs/
-!docs/plans/completed/
-!docs/plans/draft/
+# Local docs — ignore all except plans
+docs/*
+!docs/plans/
 
 # Runtime config (generated on first run)
 config.json
