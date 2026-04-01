@@ -1,0 +1,18 @@
+# Build output
+bin/
+obj/
+publish/
+
+# Claude Code
+.claude/settings.local.json
+
+# Local docs
+docs/
+!docs/plans/completed/
+!docs/plans/draft/
+
+# Runtime config (generated on first run)
+config.json
+
+# Local deploy config (machine-specific install path)
+config/deploy.env
