@@ -15,6 +15,7 @@ public sealed class RecentAchievementsDisplay : IDisposable
     private readonly UnlockSoundPlayer? _soundPlayer;
     private readonly List<NotificationWindow> _windows = new();
     private GlobalHotkey? _escHotkey;
+    private DispatcherTimer? _cascadeTimer;
     private const int ESC_HOTKEY_ID = 9999;
     private const double GapBetweenWindows = 6;
     private DateTime _lastShowTime;
@@ -133,13 +134,13 @@ public sealed class RecentAchievementsDisplay : IDisposable
 
             if (index + 1 < ctx.Entries.Count)
             {
-                var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
-                timer.Tick += (_, _) =>
+                _cascadeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+                _cascadeTimer.Tick += (_, _) =>
                 {
-                    timer.Stop();
+                    _cascadeTimer.Stop();
                     ShowNext(index + 1, ctx);
                 };
-                timer.Start();
+                _cascadeTimer.Start();
             }
             else
             {
@@ -170,6 +171,8 @@ public sealed class RecentAchievementsDisplay : IDisposable
     {
         Logger.Info("Dismissing recent achievements display");
 
+        _cascadeTimer?.Stop();
+        _cascadeTimer = null;
         _escHotkey?.Dispose();
         _escHotkey = null;
 

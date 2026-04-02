@@ -39,19 +39,11 @@ public partial class NotificationWindow : Window
     /// <param name="description">Achievement description text.</param>
     /// <param name="iconPath">Path to the achievement icon file, or null for default.</param>
     /// <param name="gameWindowRect">Rectangle of the game window (left, top, width, height).</param>
-    public void Show(string achievementName, string description, string? iconPath, Rect gameWindowRect)
+    public void ShowNotification(string achievementName, string description, string? iconPath, Rect gameWindowRect)
     {
         AchievementName.Text = achievementName;
         AchievementDescription.Text = description;
-
-        if (!string.IsNullOrEmpty(description))
-        {
-            AchievementDescription.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            AchievementDescription.Visibility = Visibility.Collapsed;
-        }
+        AchievementDescription.Visibility = string.IsNullOrEmpty(description) ? Visibility.Collapsed : Visibility.Visible;
 
         LoadIcon(iconPath, gameWindowRect.Width);
         SizeAndPosition(gameWindowRect);

@@ -141,7 +141,7 @@ public sealed class NotificationQueue : IDisposable
             var window = new NotificationWindow(_config.DisplayDuration);
             window.Closed += (_, _) => ScheduleRetry(_gapTimer ??= CreateTimer(), GapBetweenNotifications);
 
-            window.Show(item.AchievementName, item.Description, item.IconPath, gameWindowRect);
+            window.ShowNotification(item.AchievementName, item.Description, item.IconPath, gameWindowRect);
         }
         catch (Exception ex)
         {
