@@ -58,10 +58,7 @@ public sealed class GameCache
             count += ScanDirectory(basePath);
         }
 
-        if (count > 0)
-            Logger.Info($"Game cache scan complete. Found {count} game(s) with achievement metadata:");
-        else
-            Logger.Warn("Game cache scan complete. No games with achievement metadata found — check 'gamesPaths' in config");
+        Logger.Info($"Game cache scan complete. Found {count} game(s) with achievement metadata:");
     }
 
     public IEnumerable<string> GetAllAppIds() => _cache.Keys;

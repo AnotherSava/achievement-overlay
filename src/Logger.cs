@@ -10,7 +10,7 @@ public static class Logger
     {
         try
         {
-            var logPath = Path.Combine(AppContext.BaseDirectory, "achievement-overlay.log");
+            var logPath = Path.Combine(AppContext.BaseDirectory, "overlay.log");
             _writer = new StreamWriter(logPath, append: false) { AutoFlush = true };
         }
         catch

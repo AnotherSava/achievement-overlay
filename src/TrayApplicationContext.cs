@@ -13,18 +13,18 @@ namespace AchievementOverlay;
 /// </summary>
 public sealed class TrayApplicationContext : ApplicationContext
 {
-    private readonly AppConfig _config;
-    private readonly GameCache _gameCache;
-    private readonly AchievementWatcher _watcher;
-    private readonly NotificationQueue _notificationQueue;
-    private readonly UnlockSoundPlayer _soundPlayer;
-    private readonly AchievementHistory _achievementHistory;
-    private readonly RecentAchievementsDisplay _recentDisplay;
-    private readonly GlobalHotkey _hotkey;
-    private readonly NotifyIcon _trayIcon;
-    private readonly ToolStripMenuItem _soundEnabledItem;
-    private readonly ToolStripMenuItem _pauseItem;
-    private readonly ToolStripMenuItem _startWithWindowsItem;
+    private readonly AppConfig _config = null!;
+    private readonly GameCache _gameCache = null!;
+    private readonly AchievementWatcher _watcher = null!;
+    private readonly NotificationQueue _notificationQueue = null!;
+    private readonly UnlockSoundPlayer _soundPlayer = null!;
+    private readonly AchievementHistory _achievementHistory = null!;
+    private readonly RecentAchievementsDisplay _recentDisplay = null!;
+    private readonly GlobalHotkey _hotkey = null!;
+    private readonly NotifyIcon _trayIcon = null!;
+    private readonly ToolStripMenuItem _soundEnabledItem = null!;
+    private readonly ToolStripMenuItem _pauseItem = null!;
+    private readonly ToolStripMenuItem _startWithWindowsItem = null!;
 
     private Icon? _activeIcon;
     private Icon? _pausedIcon;
@@ -42,18 +42,30 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             _config = new AppConfig();
         }
-        catch (Exception ex) when (ex is JsonException or IOException)
+        catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException)
         {
             var configPath = Path.Combine(AppContext.BaseDirectory, "config.json");
-            Logger.Error($"Config file is invalid or unreadable: '{configPath}': {ex.Message}");
-            MessageBox.Show($"Config file error:\n{configPath}\n\n{ex.Message}\n\nFix the file and restart.", "Achievement Overlay", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            Environment.Exit(1);
+            Logger.Error($"Config error: '{configPath}': {ex.Message}");
+            var heading = ex is FileNotFoundException ? "Config file not found" : "Config file is invalid";
+            var detail = ex switch
+            {
+                FileNotFoundException => "Expected config.json next to the executable.",
+                JsonException je => je.Message.Split('.')[0] + ".",
+                InvalidOperationException ioe => ioe.Message.Replace("Invalid config: ", ""),
+                _ => "Check log file for more details."
+            };
+            ShowConfigError(heading, detail);
             return;
         }
-        Logger.Info($"Config: gseSavesPath='{_config.GseSavesPath}', gamesPaths='{string.Join(";", _config.GamesPaths)}', language={_config.Language}, soundEnabled={_config.SoundEnabled}, soundPath='{_config.SoundPath}', displayDuration={_config.DisplayDuration}, recentAchievementsShortcut={_config.RecentAchievementsShortcut}, recentAchievementsCount={_config.RecentAchievementsCount}");
+        Logger.Info($"Config: gamesPaths='{string.Join(";", _config.GamesPaths)}', gseSavesPath='{_config.GseSavesPath}', language={_config.Language}, soundEnabled={_config.SoundEnabled}, soundPath='{_config.SoundPath}', displayDuration={_config.DisplayDuration}, recentAchievementsShortcut={_config.RecentAchievementsShortcut}, recentAchievementsCount={_config.RecentAchievementsCount}");
 
         _gameCache = new GameCache(_config);
         _gameCache.ScanAll();
+        if (_gameCache.GetAll().Count == 0)
+        {
+            ShowConfigError("No games with achievement metadata found", "Check 'gamesPaths' in config.");
+            return;
+        }
         foreach (var game in _gameCache.GetAll())
             Logger.Info($"  {game.GameName}, appid={game.AppId}, path='{game.MetadataPath}'");
 
@@ -193,6 +205,26 @@ public sealed class TrayApplicationContext : ApplicationContext
             Logger.Close();
         }
         base.Dispose(disposing);
+    }
+
+    private static void ShowConfigError(string heading, string detail)
+    {
+        var logPath = Path.Combine(AppContext.BaseDirectory, "overlay.log");
+        Logger.Close();
+        var logContent = "";
+        try { logContent = File.ReadAllText(logPath); } catch { }
+        var page = new TaskDialogPage
+        {
+            Heading = heading,
+            Text = detail,
+            Icon = TaskDialogIcon.Error,
+            Caption = "Achievement Overlay",
+            Buttons = { TaskDialogButton.OK }
+        };
+        if (!string.IsNullOrEmpty(logContent))
+            page.Expander = new TaskDialogExpander { Text = logContent, CollapsedButtonText = "Details", ExpandedButtonText = "Details", Position = TaskDialogExpanderPosition.AfterFootnote };
+        TaskDialog.ShowDialog(page);
+        Environment.Exit(1);
     }
 
     private static bool GetStartWithWindows()

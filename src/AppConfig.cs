@@ -37,8 +37,8 @@ public sealed class AppConfig
         _settings = Load(settingsPath);
     }
 
-    public string GseSavesPath { get { Reload(); return ExpandAndCache(ref _gseSavesPathExpanded, _settings.GseSavesPath); } }
     public string[] GamesPaths { get { Reload(); return _gamesPaths ??= ParseGamesPaths(_settings.GamesPaths); } }
+    public string GseSavesPath { get { Reload(); return ExpandAndCache(ref _gseSavesPathExpanded, _settings.GseSavesPath); } }
     public string Language { get { Reload(); return _settings.Language; } }
     public bool SoundEnabled { get { Reload(); return _settings.SoundEnabled; } }
     public string SoundPath { get { Reload(); return _settings.SoundPath; } }
@@ -67,9 +67,12 @@ public sealed class AppConfig
             string json;
             try
             {
-                json = File.Exists(settingsPath)
-                    ? File.ReadAllText(settingsPath)
-                    : GetEmbeddedDefault();
+                if (!File.Exists(settingsPath))
+                {
+                    Logger.Warn($"Config file not found, cannot update '{propertyName}'");
+                    return;
+                }
+                json = File.ReadAllText(settingsPath);
             }
             catch (IOException ex)
             {
@@ -119,21 +122,7 @@ public sealed class AppConfig
             return result;
         }
 
-        // Fall back to embedded default and try to write it out
-        var defaultJson2 = GetEmbeddedDefault();
-        try
-        {
-            var dir = Path.GetDirectoryName(filePath);
-            if (dir != null && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-            File.WriteAllText(filePath, defaultJson2);
-            _lastWriteTimeUtc = File.GetLastWriteTimeUtc(filePath);
-        }
-        catch (Exception)
-        {
-            // Directory may be read-only — use defaults in memory
-        }
-        return Deserialize(defaultJson2);
+        throw new FileNotFoundException($"Config file not found: '{filePath}'. The file should be in the same directory as the executable.");
     }
 
     private void Reload(string? path = null)
@@ -181,28 +170,23 @@ public sealed class AppConfig
 
     private static SettingsData Deserialize(string json)
     {
-        // Merge with embedded defaults so missing properties get filled in
-        var defaults = JsonSerializer.Deserialize<SettingsData>(GetEmbeddedDefault(), JsonOptions) ?? new SettingsData();
-        var result = JsonSerializer.Deserialize<SettingsData>(json, JsonOptions) ?? defaults;
-        if (string.IsNullOrEmpty(result.GseSavesPath)) result.GseSavesPath = defaults.GseSavesPath;
-        if (string.IsNullOrEmpty(result.Language)) result.Language = defaults.Language;
-        if (result.DisplayDuration <= 0) result.DisplayDuration = defaults.DisplayDuration;
-        if (string.IsNullOrEmpty(result.RecentAchievementsShortcut)) result.RecentAchievementsShortcut = defaults.RecentAchievementsShortcut;
-        if (result.RecentAchievementsCount <= 0) result.RecentAchievementsCount = defaults.RecentAchievementsCount;
+        var result = JsonSerializer.Deserialize<SettingsData>(json, JsonOptions) ?? new SettingsData();
+        Validate(result);
         return result;
     }
 
-    internal static string GetEmbeddedDefault()
+    private static void Validate(SettingsData settings)
     {
-        var assembly = Assembly.GetExecutingAssembly();
-        using var stream = assembly.GetManifestResourceStream("AchievementOverlay.default.json");
-        if (stream == null)
-        {
-            // Fallback hardcoded default if resource not found (e.g. in tests)
-            return JsonSerializer.Serialize(new SettingsData(), JsonOptions);
-        }
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(settings.GseSavesPath))
+            errors.Add("'gseSavesPath' is missing or empty");
+        else if (!Directory.Exists(ExpandEnvironmentVariables(settings.GseSavesPath)))
+            errors.Add("'gseSavesPath' directory does not exist");
+        if (string.IsNullOrWhiteSpace(settings.GamesPaths)) errors.Add("'gamesPaths' is missing or empty");
+        if (settings.DisplayDuration <= 0) errors.Add("'displayDuration' is missing or invalid");
+        if (settings.RecentAchievementsCount <= 0) errors.Add("'recentAchievementsCount' is missing or invalid");
+        if (errors.Count > 0)
+            throw new InvalidOperationException("Invalid config: " + string.Join("\n", errors));
     }
 
     public static string ExpandEnvironmentVariables(string path)
@@ -263,11 +247,11 @@ public sealed class AppConfig
 /// </summary>
 public sealed class SettingsData
 {
-    [JsonPropertyName("gseSavesPath")]
-    public string GseSavesPath { get; set; } = "";
-
     [JsonPropertyName("gamesPaths")]
     public string GamesPaths { get; set; } = "";
+
+    [JsonPropertyName("gseSavesPath")]
+    public string GseSavesPath { get; set; } = "";
 
     [JsonPropertyName("language")]
     public string Language { get; set; } = "";

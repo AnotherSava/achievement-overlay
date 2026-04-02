@@ -18,6 +18,7 @@ public class NotificationQueueTests : IDisposable
         _tempDir = Path.Combine(Path.GetTempPath(), "ach-queue-tests-" + Guid.NewGuid().ToString("N")[..8]);
         _gamesDir = Path.Combine(_tempDir, "Games");
         Directory.CreateDirectory(_gamesDir);
+        Directory.CreateDirectory(Path.Combine(_tempDir, "GSE Saves"));
 
         // Create a test game with achievements metadata
         SetupTestGame("12345", "TestGame", new[]
@@ -34,7 +35,10 @@ public class NotificationQueueTests : IDisposable
             gamesPaths = _gamesDir,
             language = "english",
             soundEnabled = true,
-            soundPath = ""
+            soundPath = "",
+            displayDuration = 7,
+            recentAchievementsShortcut = "Ctrl+Shift+H",
+            recentAchievementsCount = 5
         };
         File.WriteAllText(_settingsPath, JsonSerializer.Serialize(settings));
 

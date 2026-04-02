@@ -64,12 +64,6 @@ public sealed class AchievementWatcher : IDisposable
 
         SeedExistingAchievementsFromDirectory(_gseSavesPath, knownAppIds);
 
-        if (!Directory.Exists(_gseSavesPath))
-        {
-            Logger.Warn($"GSE Saves path does not exist: '{_gseSavesPath}' — check 'gseSavesPath' in config");
-            return;
-        }
-
         _watcher = new FileSystemWatcher(_gseSavesPath)
         {
             Filter = "achievements.json",

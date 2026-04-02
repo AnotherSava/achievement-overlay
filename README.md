@@ -18,7 +18,7 @@ The Steam emulator stores achievement data in JSON files and updates them as soo
 - **Automatic game detection** — scans configured directories for games with achievement metadata
 - **Multi-monitor support** — notifications appear on the monitor with the foreground window, with correct DPI scaling across mixed-DPI setups
 - **Unlock sound** — plays a default or user-defined sound on achievement unlock
-- **Configurable** via `config.json` (auto-generated on first run)
+- **Configurable** via `config.json` (ships with the app)
 - **Start with Windows** option in the tray menu
 
 ## Installation
@@ -28,11 +28,11 @@ Download the latest release from [GitHub Releases](https://github.com/AnotherSav
 - **Self-contained** — single exe, just unzip and run (no dependencies, larger size)
 - **Framework-dependent** — smaller download, requires [.NET Desktop Runtime 10](https://dotnet.microsoft.com/download/dotnet/10.0)
 
+After extracting, check `gamesPaths` in [`config.json`](#configuration) — it should point to the directories where your games are installed.
+
 You can also build the most recent (and potentially less stable) version [from source](#building-from-source).
 
 ## System tray menu
-
-<img src="docs/screenshots/tray-menu.png" alt="System tray menu">
 
 Right-click the tray icon for these options:
 
@@ -43,16 +43,18 @@ Right-click the tray icon for these options:
 - **Open Config Location** — opens Explorer with `config.json` selected
 - **Exit** — stops watching and exits the app
 
+<img src="docs/screenshots/tray-menu.png" alt="System tray menu">
+
 ## Configuration
 
-On first run, a `config.json` file is created next to the executable with sensible defaults. `soundEnabled`, `soundPath`, and `displayDuration` are picked up automatically on change. Changing `gseSavesPath` or `gamesPaths` requires a restart.
+A `config.json` file ships next to the executable with sensible defaults. Edit it before or after the first run. `soundEnabled`, `soundPath`, and `displayDuration` are picked up automatically on change. Changing `gseSavesPath` or `gamesPaths` requires a restart.
 
 ### Settings
 
 | Setting | Description | Default |
 |---|---|---|
-| `gseSavesPath` | Path to GSE Saves directory. Supports `%appdata%` and other env vars. | `%appdata%\GSE Saves` |
 | `gamesPaths` | Semicolon-separated list of directories to scan for games with `steam_appid.txt`. | `C:\Games` |
+| `gseSavesPath` | Path to GSE Saves directory. Supports `%appdata%` and other env vars. | `%appdata%\GSE Saves` |
 | `language` | Preferred language for achievement display text. Falls back to english. | `english` |
 | `soundEnabled` | Play a sound on achievement unlock. | `true` |
 | `soundPath` | Custom `.wav` sound file path. Empty uses the built-in default. | (empty) |
@@ -64,8 +66,8 @@ On first run, a `config.json` file is created next to the executable with sensib
 
 ```json
 {
-  "gseSavesPath": "%appdata%\\GSE Saves",
   "gamesPaths": "C:\\Games;D:\\Games",
+  "gseSavesPath": "%appdata%\\GSE Saves",
   "language": "english",
   "soundEnabled": true,
   "soundPath": "",
@@ -77,11 +79,17 @@ On first run, a `config.json` file is created next to the executable with sensib
 
 ## Troubleshooting
 
-The app writes a log file (`achievement-overlay.log`) next to the config file (use the tray context menu to find it). Check it for diagnostic information. Look for `[WARN]` and `[ERROR]` entries.
+The app writes a log file (`overlay.log`) next to the config file (use the tray context menu to find it). Check it for diagnostic information. Look for `[WARN]` and `[ERROR]` entries.
 
 ### App won't start
 
-If the app exits immediately with a config file reading error, make sure that you have a valid `config.json` file in the same folder as the app. Use the [example config](#example-config) above as a reference, or delete `config.json` and it will get restored to default values upon the next launch.
+The app shows an error dialog on startup if the config is missing, has invalid JSON, or has invalid settings. Click "Details" to see the full log. Common causes:
+
+- **Config file not found** — make sure `config.json` is in the same folder as the executable. Re-extract it from the release archive if needed.
+- **Invalid JSON** — fix the syntax in `config.json`. Use the [example config](#example-config) above as a reference.
+- **Invalid settings** — required fields like `gseSavesPath`, `gamesPaths`, `displayDuration`, or `recentAchievementsCount` may be missing or have invalid values.
+- **GSE Saves directory does not exist** — check that `gseSavesPath` points to a valid directory (default: `%appdata%\GSE Saves`).
+- **No games with achievement metadata found** — check that `gamesPaths` points to directories containing games with `steam_appid.txt` and `steam_settings/achievements.json`. Generate metadata using [generate_emu_config](https://github.com/Detanup01/gbe_fork_tools/tree/main/generate_emu_config_old) if needed.
 
 ### Game is not found
 
@@ -91,11 +99,7 @@ If the game doesn't appear in the log at all, make sure its directory is under o
 
 If the log shows `[WARN] Skipped: appid=... (no 'achievements.json')`, the game is detected but has no achievement metadata. Generate it using [generate_emu_config](https://github.com/Detanup01/gbe_fork_tools/tree/main/generate_emu_config_old) and restart the app.
 
-If no games are found at all, the log shows `[WARN] No games with achievement metadata found` — check `gamesPaths` in config.
-
-### Achievement unlocked but no notification
-
-Check logs for `[WARN] GSE Saves path does not exist` — check that `gseSavesPath` in `config.json` points to the correct directory (default: `%appdata%\GSE Saves`).
+If no games are found at all, the app exits with an error dialog — check `gamesPaths` in config.
 
 ### Notification shows default icon instead of achievement icon
 
