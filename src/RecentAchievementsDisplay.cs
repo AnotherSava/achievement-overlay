@@ -12,6 +12,7 @@ public sealed class RecentAchievementsDisplay : IDisposable
 {
     private readonly AchievementHistory _history;
     private readonly AppConfig _config;
+    private readonly UnlockSoundPlayer? _soundPlayer;
     private readonly Action<string>? _log;
     private readonly List<NotificationWindow> _windows = new();
     private GlobalHotkey? _escHotkey;
@@ -21,10 +22,11 @@ public sealed class RecentAchievementsDisplay : IDisposable
 
     public bool IsVisible => _windows.Count > 0;
 
-    public RecentAchievementsDisplay(AchievementHistory history, AppConfig config, Action<string>? log = null)
+    public RecentAchievementsDisplay(AchievementHistory history, AppConfig config, UnlockSoundPlayer? soundPlayer = null, Action<string>? log = null)
     {
         _history = history;
         _config = config;
+        _soundPlayer = soundPlayer;
         _log = log;
     }
 
@@ -121,6 +123,7 @@ public sealed class RecentAchievementsDisplay : IDisposable
         var finalTop = ctx.NextBottomEdge - estimatedHeight;
         double slideUpDistance = estimatedHeight + GapBetweenWindows;
 
+        _soundPlayer?.Play();
         window.ShowRecent(entry.AchievementName, entry.Description, entry.IconPath, ctx.GameWindowRect, finalTop, slideUpDistance, gameInfoLine);
         _windows.Add(window);
 

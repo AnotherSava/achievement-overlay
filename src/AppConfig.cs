@@ -21,6 +21,7 @@ public sealed class AppConfig
     private SettingsData _settings = null!;
     private readonly object _lock = new();
     private readonly string _settingsFilePath;
+    private Action<string>? _warn;
 
     public AppConfig()
     {
@@ -36,6 +37,12 @@ public sealed class AppConfig
         _settingsFilePath = settingsPath;
         _settings = Load(settingsPath);
     }
+
+    /// <summary>
+    /// Sets the warn callback. Called after construction since AppConfig is
+    /// created before logging is wired up.
+    /// </summary>
+    public void SetWarnCallback(Action<string> warn) => _warn = warn;
 
     public string GseSavesPath { get { Reload(); return ExpandAndCache(ref _gseSavesPathExpanded, _settings.GseSavesPath); } }
     public string[] GamesPaths { get { Reload(); return _gamesPaths ??= ParseGamesPaths(_settings.GamesPaths); } }
@@ -71,12 +78,9 @@ public sealed class AppConfig
                     ? File.ReadAllText(settingsPath)
                     : GetEmbeddedDefault();
             }
-            catch (IOException)
+            catch (IOException ex)
             {
-                // File is transiently locked — bail out without overwriting to avoid
-                // destroying on-disk data with potentially stale in-memory defaults
-                // (e.g. if _settings was populated from embedded defaults after a startup read failure).
-                // The setting won't persist until the file is accessible again.
+                _warn?.Invoke($"Could not read config to update '{propertyName}': {ex.Message}");
                 return;
             }
 
@@ -86,11 +90,9 @@ public sealed class AppConfig
                 dict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, JsonOptions)
                        ?? new Dictionary<string, JsonElement>();
             }
-            catch (JsonException)
+            catch (JsonException ex)
             {
-                // Existing file is malformed (e.g. user is mid-edit) — bail out without
-                // overwriting to avoid destroying on-disk edits with stale in-memory data.
-                // The setting won't persist until the file is valid again.
+                _warn?.Invoke($"Config file is malformed, could not update '{propertyName}': {ex.Message}");
                 return;
             }
 
@@ -103,11 +105,9 @@ public sealed class AppConfig
                 File.WriteAllText(settingsPath, updated);
                 _lastWriteTimeUtc = File.GetLastWriteTimeUtc(settingsPath);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
-                // File is transiently locked for writing — the setting won't persist
-                // until the file is accessible again, but update in-memory state so the
-                // current session reflects the change.
+                _warn?.Invoke($"Could not write config for '{propertyName}': {ex.Message}");
             }
             _settings = Deserialize(updated);
             InvalidateCaches();

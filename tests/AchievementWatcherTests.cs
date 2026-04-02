@@ -265,13 +265,14 @@ public class AchievementWatcherTests : IDisposable
     }
 
     [Fact]
-    public void Start_NonExistentPath_CreatesDirectory()
+    public void Start_NonExistentPath_WarnsAndSkips()
     {
         var nonExistent = Path.Combine(_tempDir, "new_saves_dir");
-        var watcher = new AchievementWatcher(nonExistent, Log);
+        var watcher = new AchievementWatcher(nonExistent, Log, Log);
         watcher.Start();
 
-        Assert.True(Directory.Exists(nonExistent));
+        Assert.False(Directory.Exists(nonExistent));
+        Assert.Contains(_logMessages, m => m.Contains("does not exist"));
         watcher.Dispose();
     }
 

@@ -24,20 +24,23 @@ public sealed class GameCache
     private readonly AppConfig? _config;
     private readonly string[]? _staticGamesPaths;
     private readonly Action<string>? _log;
+    private readonly Action<string>? _warn;
 
-    public GameCache(AppConfig config, Action<string>? log = null)
+    public GameCache(AppConfig config, Action<string>? log = null, Action<string>? warn = null)
     {
         _config = config;
         _log = log;
+        _warn = warn;
     }
 
     /// <summary>
     /// Constructor for testing — accepts static paths instead of AppConfig.
     /// </summary>
-    internal GameCache(string[] gamesPaths, Action<string>? log = null)
+    internal GameCache(string[] gamesPaths, Action<string>? log = null, Action<string>? warn = null)
     {
         _staticGamesPaths = gamesPaths;
         _log = log;
+        _warn = warn;
     }
 
     private string[] GetGamesPaths() => _config?.GamesPaths ?? _staticGamesPaths ?? Array.Empty<string>();
@@ -54,14 +57,17 @@ public sealed class GameCache
         {
             if (!Directory.Exists(basePath))
             {
-                _log?.Invoke($"  Game path does not exist, skipping: '{basePath}'");
+                _warn?.Invoke($"  Game path does not exist, skipping: '{basePath}'");
                 continue;
             }
 
             count += ScanDirectory(basePath);
         }
 
-        _log?.Invoke($"Game cache scan complete. Found {count} game(s) with achievement metadata:");
+        if (count > 0)
+            _log?.Invoke($"Game cache scan complete. Found {count} game(s) with achievement metadata:");
+        else
+            _warn?.Invoke("Game cache scan complete. No games with achievement metadata found — check 'gamesPaths' in config");
     }
 
     public IEnumerable<string> GetAllAppIds() => _cache.Keys;
@@ -121,7 +127,7 @@ public sealed class GameCache
 
                 if (!File.Exists(metadataPath))
                 {
-                    _log?.Invoke($"  Skipped: appid={appId} at '{gameDir}' (no 'achievements.json')");
+                    _warn?.Invoke($"  Skipped: appid={appId} at '{gameDir}' (no 'achievements.json')");
                     continue;
                 }
 

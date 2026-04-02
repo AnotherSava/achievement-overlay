@@ -34,7 +34,10 @@ public sealed class GlobalHotkey : IDisposable
         _window.CreateHandle(new CreateParams());
 
         var (modifiers, vk) = ParseHotkeyString(hotkeyString);
-        _registered = RegisterHotKey(_window.Handle, _id, modifiers | MOD_NOREPEAT, vk);
+        if (vk == 0)
+            _registered = false;
+        else
+            _registered = RegisterHotKey(_window.Handle, _id, modifiers | MOD_NOREPEAT, vk);
     }
 
     /// <summary>

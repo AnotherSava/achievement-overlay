@@ -72,8 +72,8 @@ public sealed class AchievementWatcher : IDisposable
 
         if (!Directory.Exists(_gseSavesPath))
         {
-            _log?.Invoke($"GSE Saves path does not exist, creating: '{_gseSavesPath}'");
-            Directory.CreateDirectory(_gseSavesPath);
+            _warn?.Invoke($"GSE Saves path does not exist: '{_gseSavesPath}' — check 'gseSavesPath' in config");
+            return;
         }
 
         _watcher = new FileSystemWatcher(_gseSavesPath)

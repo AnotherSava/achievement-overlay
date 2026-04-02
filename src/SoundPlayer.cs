@@ -9,15 +9,15 @@ namespace AchievementOverlay;
 public sealed class UnlockSoundPlayer : IDisposable
 {
     private readonly AppConfig _config;
-    private readonly Action<string>? _log;
+    private readonly Action<string>? _warn;
     private System.Media.SoundPlayer? _defaultPlayer;
     private System.Media.SoundPlayer? _customPlayer;
     private string? _customPlayerPath;
 
-    public UnlockSoundPlayer(AppConfig config, Action<string>? log = null)
+    public UnlockSoundPlayer(AppConfig config, Action<string>? warn = null)
     {
         _config = config;
-        _log = log;
+        _warn = warn;
     }
 
     /// <summary>
@@ -32,9 +32,12 @@ public sealed class UnlockSoundPlayer : IDisposable
         try
         {
             var customPath = _config.SoundPath;
-            if (!string.IsNullOrEmpty(customPath) && File.Exists(customPath))
+            if (!string.IsNullOrEmpty(customPath))
             {
-                PlayFile(customPath);
+                if (File.Exists(customPath))
+                    PlayFile(customPath);
+                else
+                    _warn?.Invoke($"Custom sound file not found: '{customPath}'");
             }
             else
             {
@@ -43,13 +46,12 @@ public sealed class UnlockSoundPlayer : IDisposable
         }
         catch (Exception ex)
         {
-            _log?.Invoke($"Error playing sound: {ex.Message}");
+            _warn?.Invoke($"Error playing sound: {ex.Message}");
         }
     }
 
     private void PlayFile(string path)
     {
-        _log?.Invoke($"Playing custom sound: '{path}'");
         if (_customPlayer == null || _customPlayerPath != path)
         {
             _customPlayer?.Dispose();
@@ -57,7 +59,7 @@ public sealed class UnlockSoundPlayer : IDisposable
             _customPlayerPath = path;
             _customPlayer.Load();
         }
-        _customPlayer.Play(); // Async (non-blocking)
+        _customPlayer.Play();
     }
 
     private void PlayEmbeddedDefault()
@@ -69,7 +71,7 @@ public sealed class UnlockSoundPlayer : IDisposable
 
             if (stream == null)
             {
-                _log?.Invoke("Embedded default sound not found");
+                _warn?.Invoke("Embedded default sound not found");
                 return;
             }
 
@@ -77,7 +79,7 @@ public sealed class UnlockSoundPlayer : IDisposable
             _defaultPlayer.Load();
         }
 
-        _defaultPlayer.Play(); // Async (non-blocking)
+        _defaultPlayer.Play();
     }
 
     public void Dispose()

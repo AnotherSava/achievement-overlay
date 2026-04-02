@@ -20,12 +20,14 @@ public sealed class AchievementHistory
     private readonly AppConfig _config;
     private readonly GameCache _gameCache;
     private readonly Action<string>? _log;
+    private readonly Action<string>? _warn;
 
-    public AchievementHistory(AppConfig config, GameCache gameCache, Action<string>? log = null)
+    public AchievementHistory(AppConfig config, GameCache gameCache, Action<string>? log = null, Action<string>? warn = null)
     {
         _config = config;
         _gameCache = gameCache;
         _log = log;
+        _warn = warn;
     }
 
     /// <summary>
@@ -55,38 +57,20 @@ public sealed class AchievementHistory
                 {
                     var json = File.ReadAllText(achievementsFile);
                     var states = AchievementMetadata.ParseUnlockStates(json);
-                    var definitions = GameCache.LoadDefinitions(gameInfo);
 
                     foreach (var (achName, state) in states)
                     {
                         if (!state.Earned)
                             continue;
 
-                        var displayName = achName;
-                        var description = "";
-                        string? iconPath = null;
-
-                        if (definitions != null)
-                        {
-                            var def = AchievementMetadata.FindDefinition(definitions, achName);
-                            if (def != null)
-                            {
-                                var language = _config.Language;
-                                var resolved = AchievementMetadata.GetDisplayText(def.DisplayName, language);
-                                if (!string.IsNullOrEmpty(resolved)) displayName = resolved;
-                                description = AchievementMetadata.GetDisplayText(def.Description, language);
-                                var metadataDir = Path.GetDirectoryName(gameInfo.MetadataPath)!;
-                                iconPath = AchievementMetadata.ResolveIconPath(def, metadataDir);
-                            }
-                        }
-
+                        var resolved = AchievementMetadata.Resolve(_gameCache, appId, achName, _config.Language, _warn);
                         entries.Add(new AchievementHistoryEntry
                         {
                             AppId = appId,
                             GameName = gameInfo.GameName,
-                            AchievementName = displayName,
-                            Description = description,
-                            IconPath = iconPath,
+                            AchievementName = resolved?.DisplayName ?? achName,
+                            Description = resolved?.Description ?? "",
+                            IconPath = resolved?.IconPath,
                             EarnedTime = state.EarnedTime
                         });
                     }

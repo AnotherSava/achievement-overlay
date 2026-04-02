@@ -26,6 +26,7 @@ public sealed class NotificationQueue : IDisposable
     private readonly AppConfig _config;
     private readonly UnlockSoundPlayer? _soundPlayer;
     private readonly Action<string>? _log;
+    private readonly Action<string>? _warn;
     private readonly Dispatcher _dispatcher;
 
     private readonly ConcurrentQueue<NotificationItem> _queue = new();
@@ -55,12 +56,14 @@ public sealed class NotificationQueue : IDisposable
         AppConfig config,
         UnlockSoundPlayer? soundPlayer = null,
         Action<string>? log = null,
+        Action<string>? warn = null,
         Dispatcher? dispatcher = null)
     {
         _gameCache = gameCache;
         _config = config;
         _soundPlayer = soundPlayer;
         _log = log;
+        _warn = warn;
         _dispatcher = dispatcher ?? Dispatcher.CurrentDispatcher;
     }
 
@@ -95,34 +98,16 @@ public sealed class NotificationQueue : IDisposable
     /// </summary>
     internal NotificationItem? ResolveMetadata(NewAchievementEventArgs args)
     {
-        var gameInfo = _gameCache.Lookup(args.AppId);
-        if (gameInfo == null)
+        var resolved = AchievementMetadata.Resolve(_gameCache, args.AppId, args.AchievementName, _config.Language, _warn);
+        if (resolved == null)
             return null;
-
-        var definitions = GameCache.LoadDefinitions(gameInfo);
-        if (definitions == null)
-            return null;
-
-        var definition = AchievementMetadata.FindDefinition(definitions, args.AchievementName);
-        if (definition == null)
-            return null;
-
-        var language = _config.Language;
-        var displayName = AchievementMetadata.GetDisplayText(definition.DisplayName, language);
-        var description = AchievementMetadata.GetDisplayText(definition.Description, language);
-
-        if (string.IsNullOrEmpty(displayName))
-            displayName = args.AchievementName;
-
-        var metadataDir = Path.GetDirectoryName(gameInfo.MetadataPath)!;
-        var iconPath = AchievementMetadata.ResolveIconPath(definition, metadataDir);
 
         return new NotificationItem
         {
             AppId = args.AppId,
-            AchievementName = displayName,
-            Description = description,
-            IconPath = iconPath
+            AchievementName = resolved.DisplayName,
+            Description = resolved.Description,
+            IconPath = resolved.IconPath
         };
     }
 

@@ -74,7 +74,7 @@ public static class AchievementMetadata
     /// Resolves display text from a JsonElement that may be a plain string or a
     /// multi-language object. Falls back to english, then first available value.
     /// </summary>
-    public static string GetDisplayText(JsonElement? element, string language)
+    public static string GetDisplayText(JsonElement? element, string language, Action<string>? warn = null)
     {
         if (element == null || element.Value.ValueKind == JsonValueKind.Undefined
                            || element.Value.ValueKind == JsonValueKind.Null)
@@ -91,6 +91,7 @@ public static class AchievementMetadata
                 return langValue.GetString() ?? "";
 
             // Fallback to english
+            warn?.Invoke($"Language '{language}' not available, falling back to english");
             if (language != "english"
                 && element.Value.TryGetProperty("english", out var engValue)
                 && engValue.ValueKind == JsonValueKind.String)
@@ -145,4 +146,48 @@ public static class AchievementMetadata
 
         return null;
     }
+
+    /// <summary>
+    /// Resolves display name, description, and icon path for an achievement.
+    /// Returns null if game or definition not found.
+    /// </summary>
+    public static ResolvedAchievement? Resolve(GameCache gameCache, string appId, string achievementName, string language, Action<string>? warn = null)
+    {
+        var gameInfo = gameCache.Lookup(appId);
+        if (gameInfo == null)
+            return null;
+
+        var definitions = GameCache.LoadDefinitions(gameInfo);
+        if (definitions == null)
+            return null;
+
+        var definition = FindDefinition(definitions, achievementName);
+        if (definition == null)
+            return null;
+
+        var displayName = GetDisplayText(definition.DisplayName, language, warn);
+        var description = GetDisplayText(definition.Description, language);
+
+        if (string.IsNullOrEmpty(displayName))
+            displayName = achievementName;
+
+        var metadataDir = Path.GetDirectoryName(gameInfo.MetadataPath)!;
+        var iconPath = ResolveIconPath(definition, metadataDir);
+
+        return new ResolvedAchievement
+        {
+            GameName = gameInfo.GameName,
+            DisplayName = displayName,
+            Description = description,
+            IconPath = iconPath
+        };
+    }
+}
+
+public sealed class ResolvedAchievement
+{
+    public required string GameName { get; init; }
+    public required string DisplayName { get; init; }
+    public required string Description { get; init; }
+    public string? IconPath { get; init; }
 }

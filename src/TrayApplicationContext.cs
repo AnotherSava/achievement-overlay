@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Reflection;
+using System.Text.Json;
 using System.Windows.Forms;
 
 namespace AchievementOverlay;
@@ -35,23 +37,40 @@ public sealed class TrayApplicationContext : ApplicationContext
         Action<string> log = msg => Log("INFO", msg);
         Action<string> warn = msg => Log("WARN", msg);
 
-        _config = new AppConfig();
-        Log("INFO", $"Config loaded. GSE Saves: '{_config.GseSavesPath}', Games paths: '{string.Join(";", _config.GamesPaths)}'");
+        var infoVersion = typeof(TrayApplicationContext).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0];
+        var versionStr = infoVersion?.Split('+')[0];
+        var versionLabel = versionStr != null && versionStr != "1.0.0" ? $"v{versionStr}" : "dev version";
+        Log("INFO", $"Achievement Overlay: {versionLabel}");
 
-        _gameCache = new GameCache(_config, log);
+        try
+        {
+            _config = new AppConfig();
+        }
+        catch (Exception ex) when (ex is JsonException or IOException)
+        {
+            var configPath = Path.Combine(AppContext.BaseDirectory, "config.json");
+            Log("ERROR", $"Config file is invalid or unreadable: '{configPath}': {ex.Message}");
+            MessageBox.Show($"Config file error:\n{configPath}\n\n{ex.Message}\n\nFix the file and restart.", "Achievement Overlay", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Environment.Exit(1);
+            return;
+        }
+        _config.SetWarnCallback(warn);
+        Log("INFO", $"Config: gseSavesPath='{_config.GseSavesPath}', gamesPaths='{string.Join(";", _config.GamesPaths)}', language={_config.Language}, soundEnabled={_config.SoundEnabled}, soundPath='{_config.SoundPath}', displayDuration={_config.DisplayDuration}, recentAchievementsShortcut={_config.RecentAchievementsShortcut}, recentAchievementsCount={_config.RecentAchievementsCount}");
+
+        _gameCache = new GameCache(_config, log, warn);
         _gameCache.ScanAll();
         foreach (var game in _gameCache.GetAll())
             Log("INFO", $"  {game.GameName}, appid={game.AppId}, path='{game.MetadataPath}'");
 
-        _soundPlayer = new UnlockSoundPlayer(_config, log);
-        _notificationQueue = new NotificationQueue(_gameCache, _config, _soundPlayer, log);
+        _soundPlayer = new UnlockSoundPlayer(_config, warn);
+        _notificationQueue = new NotificationQueue(_gameCache, _config, _soundPlayer, log, warn);
 
         _watcher = new AchievementWatcher(_config.GseSavesPath, log, warn);
         _watcher.NewAchievement += OnNewAchievement;
         _watcher.Start(_gameCache.GetAllAppIds());
 
-        _achievementHistory = new AchievementHistory(_config, _gameCache, log);
-        _recentDisplay = new RecentAchievementsDisplay(_achievementHistory, _config, log);
+        _achievementHistory = new AchievementHistory(_config, _gameCache, log, warn);
+        _recentDisplay = new RecentAchievementsDisplay(_achievementHistory, _config, _soundPlayer, log);
         _hotkey = new GlobalHotkey(1, _config.RecentAchievementsShortcut, () => _recentDisplay.Toggle());
         if (!_hotkey.IsRegistered)
             Log("WARN", $"Could not register hotkey '{_config.RecentAchievementsShortcut}' — use the tray menu instead");
@@ -110,8 +129,9 @@ public sealed class TrayApplicationContext : ApplicationContext
             ContextMenuStrip = new ContextMenuStrip()
         };
 
-        var shortcutText = _config.RecentAchievementsShortcut;
-        var recentItem = new ToolStripMenuItem("Show Recent") { ShortcutKeyDisplayString = shortcutText };
+        var recentItem = new ToolStripMenuItem("Show Recent");
+        if (_hotkey.IsRegistered)
+            recentItem.ShortcutKeyDisplayString = _config.RecentAchievementsShortcut;
         recentItem.Click += (_, _) => _recentDisplay.Toggle();
 
         _trayIcon.ContextMenuStrip.Items.AddRange(new ToolStripItem[]

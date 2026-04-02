@@ -82,7 +82,7 @@ public class GameCacheTests : IDisposable
     public void ScanAll_SkipsNonExistentPaths()
     {
         var fakePath = Path.Combine(_tempDir, "nonexistent");
-        var cache = new GameCache(new[] { fakePath }, Log);
+        var cache = new GameCache(new[] { fakePath }, Log, Log);
         cache.ScanAll();
 
         Assert.Empty(cache.GetAll());
