@@ -23,8 +23,6 @@ public sealed class AchievementWatcher : IDisposable
 {
     private FileSystemWatcher? _watcher;
     private readonly string _gseSavesPath;
-    private readonly Action<string>? _log;
-    private readonly Action<string>? _warn;
 
     // Tracks last-seen earned_time per (appid, achievementName) to avoid duplicate notifications
     private readonly ConcurrentDictionary<string, long> _seenAchievements = new();
@@ -43,15 +41,11 @@ public sealed class AchievementWatcher : IDisposable
 
     public AchievementWatcher(
         string gseSavesPath,
-        Action<string>? log = null,
-        Action<string>? warn = null,
         TimeSpan? debounceDelay = null,
         int maxRetries = 3,
         TimeSpan? retryDelay = null)
     {
         _gseSavesPath = gseSavesPath;
-        _log = log;
-        _warn = warn;
         _debounceDelay = debounceDelay ?? TimeSpan.FromMilliseconds(100);
         _maxRetries = maxRetries;
         _retryDelay = retryDelay ?? TimeSpan.FromMilliseconds(200);
@@ -72,7 +66,7 @@ public sealed class AchievementWatcher : IDisposable
 
         if (!Directory.Exists(_gseSavesPath))
         {
-            _warn?.Invoke($"GSE Saves path does not exist: '{_gseSavesPath}' — check 'gseSavesPath' in config");
+            Logger.Warn($"GSE Saves path does not exist: '{_gseSavesPath}' — check 'gseSavesPath' in config");
             return;
         }
 
@@ -86,10 +80,10 @@ public sealed class AchievementWatcher : IDisposable
 
         _watcher.Changed += OnFileChanged;
         _watcher.Created += OnFileChanged;
-        _watcher.Error += (_, e) => _warn?.Invoke($"FileSystemWatcher error: {e.GetException().Message}");
+        _watcher.Error += (_, e) => Logger.Warn($"FileSystemWatcher error: {e.GetException().Message}");
         _watcher.EnableRaisingEvents = true;
 
-        _log?.Invoke($"Watching for achievements in '{_gseSavesPath}'");
+        Logger.Info($"Watching for achievements in '{_gseSavesPath}'");
     }
 
     /// <summary>
@@ -104,7 +98,7 @@ public sealed class AchievementWatcher : IDisposable
             _watcher = null;
         }
 
-        _log?.Invoke("Achievement watcher stopped.");
+        Logger.Info("Achievement watcher stopped.");
 
         // Cancel and dispose any pending debounce callbacks
         foreach (var cts in _debounceTokens.Values)
@@ -177,14 +171,14 @@ public sealed class AchievementWatcher : IDisposable
         var appId = ExtractAppId(filePath);
         if (appId == null)
         {
-            _log?.Invoke($"Could not extract appid from path: '{filePath}'");
+            Logger.Info($"Could not extract appid from path: '{filePath}'");
             return;
         }
 
         // Check modification time — skip if unchanged
         if (!HasFileChanged(filePath))
         {
-            _log?.Invoke($"File unchanged (mod time), skipping: '{filePath}'");
+            Logger.Info($"File unchanged (mod time), skipping: '{filePath}'");
             return;
         }
 
@@ -201,7 +195,7 @@ public sealed class AchievementWatcher : IDisposable
         }
         catch (JsonException ex)
         {
-            _log?.Invoke($"JSON parse error for '{filePath}': {ex.Message}");
+            Logger.Info($"JSON parse error for '{filePath}': {ex.Message}");
             return;
         }
 
@@ -223,7 +217,7 @@ public sealed class AchievementWatcher : IDisposable
                 _seenAchievements[key] = earnedTime;
             }
 
-            _log?.Invoke($"New achievement unlocked: appid={appId}, name={achName}, time={state.EarnedTime}");
+            Logger.Info($"New achievement unlocked: appid={appId}, name={achName}, time={state.EarnedTime}");
 
             NewAchievement?.Invoke(this, new NewAchievementEventArgs
             {
@@ -276,22 +270,22 @@ public sealed class AchievementWatcher : IDisposable
             }
             catch (IOException) when (attempt < _maxRetries)
             {
-                _log?.Invoke($"File locked, retry {attempt + 1}/{_maxRetries}: '{filePath}'");
+                Logger.Info($"File locked, retry {attempt + 1}/{_maxRetries}: '{filePath}'");
                 await Task.Delay(_retryDelay);
             }
             catch (FileNotFoundException)
             {
-                _log?.Invoke($"File not found (may have been deleted): '{filePath}'");
+                Logger.Info($"File not found (may have been deleted): '{filePath}'");
                 return null;
             }
             catch (Exception ex)
             {
-                _log?.Invoke($"Error reading '{filePath}': {ex.Message}");
+                Logger.Info($"Error reading '{filePath}': {ex.Message}");
                 return null;
             }
         }
 
-        _log?.Invoke($"Failed to read after {_maxRetries} retries: '{filePath}'");
+        Logger.Info($"Failed to read after {_maxRetries} retries: '{filePath}'");
         return null;
     }
 
@@ -320,11 +314,11 @@ public sealed class AchievementWatcher : IDisposable
                 var json = File.ReadAllText(achievementsFile);
                 var states = AchievementMetadata.ParseUnlockStates(json);
                 SeedExistingAchievements(appId, states);
-                _log?.Invoke($"Seeded {states.Count(s => s.Value.Earned)} existing achievement(s) for appid {appId}");
+                Logger.Info($"Seeded {states.Count(s => s.Value.Earned)} existing achievement(s) for appid {appId}");
             }
             catch (Exception ex)
             {
-                _log?.Invoke($"Error seeding achievements for appid {appId}: {ex.Message}");
+                Logger.Info($"Error seeding achievements for appid {appId}: {ex.Message}");
             }
         }
     }

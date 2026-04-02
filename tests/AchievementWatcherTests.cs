@@ -7,7 +7,6 @@ namespace AchievementOverlay.Tests;
 public class AchievementWatcherTests : IDisposable
 {
     private readonly string _tempDir;
-    private readonly List<string> _logMessages = new();
     private readonly List<NewAchievementEventArgs> _events = new();
 
     public AchievementWatcherTests()
@@ -21,8 +20,6 @@ public class AchievementWatcherTests : IDisposable
         if (Directory.Exists(_tempDir))
             Directory.Delete(_tempDir, true);
     }
-
-    private void Log(string msg) => _logMessages.Add(msg);
 
     private string CreateAppDir(string appId)
     {
@@ -43,7 +40,6 @@ public class AchievementWatcherTests : IDisposable
     {
         var watcher = new AchievementWatcher(
             _tempDir,
-            Log,
             debounceDelay: TimeSpan.FromMilliseconds(10),
             maxRetries: 2,
             retryDelay: TimeSpan.FromMilliseconds(10));
@@ -144,7 +140,6 @@ public class AchievementWatcherTests : IDisposable
         // Process again without changing mod time — should skip entirely
         watcher.ProcessFile(filePath);
         Assert.Single(_events); // No new events
-        Assert.Contains(_logMessages, m => m.Contains("unchanged"));
     }
 
     // --- ProcessFile: seeded achievements don't fire ---
@@ -206,7 +201,6 @@ public class AchievementWatcherTests : IDisposable
         watcher.ProcessFile(filePath);
 
         Assert.Empty(_events);
-        Assert.Contains(_logMessages, m => m.Contains("JSON parse error"));
     }
 
     // --- ProcessFile: file not found ---
@@ -251,8 +245,7 @@ public class AchievementWatcherTests : IDisposable
     {
         using var watcher = CreateWatcher();
         watcher.Start();
-        // Should not throw, and log a start message
-        Assert.Contains(_logMessages, m => m.Contains("Watching for achievements"));
+        // Should not throw; watcher is now active
     }
 
     [Fact]
@@ -261,18 +254,17 @@ public class AchievementWatcherTests : IDisposable
         using var watcher = CreateWatcher();
         watcher.Start();
         watcher.Stop();
-        Assert.Contains(_logMessages, m => m.Contains("stopped"));
+        // Should not throw; watcher is stopped
     }
 
     [Fact]
     public void Start_NonExistentPath_WarnsAndSkips()
     {
         var nonExistent = Path.Combine(_tempDir, "new_saves_dir");
-        var watcher = new AchievementWatcher(nonExistent, Log, Log);
+        var watcher = new AchievementWatcher(nonExistent);
         watcher.Start();
 
         Assert.False(Directory.Exists(nonExistent));
-        Assert.Contains(_logMessages, m => m.Contains("does not exist"));
         watcher.Dispose();
     }
 

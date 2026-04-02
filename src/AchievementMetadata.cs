@@ -74,7 +74,7 @@ public static class AchievementMetadata
     /// Resolves display text from a JsonElement that may be a plain string or a
     /// multi-language object. Falls back to english, then first available value.
     /// </summary>
-    public static string GetDisplayText(JsonElement? element, string language, Action<string>? warn = null)
+    public static string GetDisplayText(JsonElement? element, string language)
     {
         if (element == null || element.Value.ValueKind == JsonValueKind.Undefined
                            || element.Value.ValueKind == JsonValueKind.Null)
@@ -91,7 +91,7 @@ public static class AchievementMetadata
                 return langValue.GetString() ?? "";
 
             // Fallback to english
-            warn?.Invoke($"Language '{language}' not available, falling back to english");
+            Logger.Warn($"Language '{language}' not available, falling back to english");
             if (language != "english"
                 && element.Value.TryGetProperty("english", out var engValue)
                 && engValue.ValueKind == JsonValueKind.String)
@@ -151,7 +151,7 @@ public static class AchievementMetadata
     /// Resolves display name, description, and icon path for an achievement.
     /// Returns null if game or definition not found.
     /// </summary>
-    public static ResolvedAchievement? Resolve(GameCache gameCache, string appId, string achievementName, string language, Action<string>? warn = null)
+    public static ResolvedAchievement? Resolve(GameCache gameCache, string appId, string achievementName, string language)
     {
         var gameInfo = gameCache.Lookup(appId);
         if (gameInfo == null)
@@ -165,7 +165,7 @@ public static class AchievementMetadata
         if (definition == null)
             return null;
 
-        var displayName = GetDisplayText(definition.DisplayName, language, warn);
+        var displayName = GetDisplayText(definition.DisplayName, language);
         var description = GetDisplayText(definition.Description, language);
 
         if (string.IsNullOrEmpty(displayName))

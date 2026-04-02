@@ -25,7 +25,6 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _soundEnabledItem;
     private readonly ToolStripMenuItem _pauseItem;
     private readonly ToolStripMenuItem _startWithWindowsItem;
-    private readonly StreamWriter? _logWriter;
 
     private Icon? _activeIcon;
     private Icon? _pausedIcon;
@@ -33,14 +32,11 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     public TrayApplicationContext()
     {
-        _logWriter = AppUtilities.InitLog();
-        Action<string> log = msg => Log("INFO", msg);
-        Action<string> warn = msg => Log("WARN", msg);
+        Logger.Init();
 
         var infoVersion = typeof(TrayApplicationContext).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0];
-        var versionStr = infoVersion?.Split('+')[0];
-        var versionLabel = versionStr != null && versionStr != "1.0.0" ? $"v{versionStr}" : "dev version";
-        Log("INFO", $"Achievement Overlay: {versionLabel}");
+        var versionLabel = infoVersion != null && infoVersion != "1.0.0" ? $"v{infoVersion}" : "dev version";
+        Logger.Info($"Achievement Overlay: {versionLabel}");
 
         try
         {
@@ -49,31 +45,30 @@ public sealed class TrayApplicationContext : ApplicationContext
         catch (Exception ex) when (ex is JsonException or IOException)
         {
             var configPath = Path.Combine(AppContext.BaseDirectory, "config.json");
-            Log("ERROR", $"Config file is invalid or unreadable: '{configPath}': {ex.Message}");
+            Logger.Error($"Config file is invalid or unreadable: '{configPath}': {ex.Message}");
             MessageBox.Show($"Config file error:\n{configPath}\n\n{ex.Message}\n\nFix the file and restart.", "Achievement Overlay", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Environment.Exit(1);
             return;
         }
-        _config.SetWarnCallback(warn);
-        Log("INFO", $"Config: gseSavesPath='{_config.GseSavesPath}', gamesPaths='{string.Join(";", _config.GamesPaths)}', language={_config.Language}, soundEnabled={_config.SoundEnabled}, soundPath='{_config.SoundPath}', displayDuration={_config.DisplayDuration}, recentAchievementsShortcut={_config.RecentAchievementsShortcut}, recentAchievementsCount={_config.RecentAchievementsCount}");
+        Logger.Info($"Config: gseSavesPath='{_config.GseSavesPath}', gamesPaths='{string.Join(";", _config.GamesPaths)}', language={_config.Language}, soundEnabled={_config.SoundEnabled}, soundPath='{_config.SoundPath}', displayDuration={_config.DisplayDuration}, recentAchievementsShortcut={_config.RecentAchievementsShortcut}, recentAchievementsCount={_config.RecentAchievementsCount}");
 
-        _gameCache = new GameCache(_config, log, warn);
+        _gameCache = new GameCache(_config);
         _gameCache.ScanAll();
         foreach (var game in _gameCache.GetAll())
-            Log("INFO", $"  {game.GameName}, appid={game.AppId}, path='{game.MetadataPath}'");
+            Logger.Info($"  {game.GameName}, appid={game.AppId}, path='{game.MetadataPath}'");
 
-        _soundPlayer = new UnlockSoundPlayer(_config, warn);
-        _notificationQueue = new NotificationQueue(_gameCache, _config, _soundPlayer, log, warn);
+        _soundPlayer = new UnlockSoundPlayer(_config);
+        _notificationQueue = new NotificationQueue(_gameCache, _config, _soundPlayer);
 
-        _watcher = new AchievementWatcher(_config.GseSavesPath, log, warn);
+        _watcher = new AchievementWatcher(_config.GseSavesPath);
         _watcher.NewAchievement += OnNewAchievement;
         _watcher.Start(_gameCache.GetAllAppIds());
 
-        _achievementHistory = new AchievementHistory(_config, _gameCache, log, warn);
-        _recentDisplay = new RecentAchievementsDisplay(_achievementHistory, _config, _soundPlayer, log);
+        _achievementHistory = new AchievementHistory(_config, _gameCache);
+        _recentDisplay = new RecentAchievementsDisplay(_achievementHistory, _config, _soundPlayer);
         _hotkey = new GlobalHotkey(1, _config.RecentAchievementsShortcut, () => _recentDisplay.Toggle());
         if (!_hotkey.IsRegistered)
-            Log("WARN", $"Could not register hotkey '{_config.RecentAchievementsShortcut}' — use the tray menu instead");
+            Logger.Warn($"Could not register hotkey '{_config.RecentAchievementsShortcut}' — use the tray menu instead");
 
         _activeIcon = AppUtilities.LoadOrCreateIcon(false);
         _pausedIcon = AppUtilities.LoadOrCreateIcon(true);
@@ -86,7 +81,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _soundEnabledItem.CheckedChanged += (_, _) =>
         {
             _config.UpdateConfigValue(nameof(SettingsData.SoundEnabled), _soundEnabledItem.Checked);
-            Log("INFO", $"Sound enabled: {_soundEnabledItem.Checked}");
+            Logger.Info($"Sound enabled: {_soundEnabledItem.Checked}");
         };
 
         _pauseItem = new ToolStripMenuItem("Pause Notifications")
@@ -98,7 +93,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             _notificationQueue.IsPaused = _pauseItem.Checked;
             _trayIcon!.Icon = _pauseItem.Checked ? _pausedIcon! : _activeIcon!;
-            Log("INFO", $"Notifications paused: {_pauseItem.Checked}");
+            Logger.Info($"Notifications paused: {_pauseItem.Checked}");
         };
 
         _startWithWindowsItem = new ToolStripMenuItem("Start with Windows")
@@ -147,7 +142,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             exitItem
         });
 
-        Log("INFO", "Achievement Overlay started.");
+        Logger.Info("Achievement Overlay started.");
     }
 
     private void OnStartWithWindowsChanged(object? sender, EventArgs e)
@@ -155,11 +150,11 @@ public sealed class TrayApplicationContext : ApplicationContext
         try
         {
             AppConfig.SetStartWithWindows(_startWithWindowsItem.Checked);
-            Log("INFO", $"Start with Windows: {_startWithWindowsItem.Checked}");
+            Logger.Info($"Start with Windows: {_startWithWindowsItem.Checked}");
         }
         catch (Exception ex)
         {
-            Log("ERROR", $"Failed to set Start with Windows: {ex.Message}");
+            Logger.Error($"Failed to set Start with Windows: {ex.Message}");
             _startWithWindowsItem.CheckedChanged -= OnStartWithWindowsChanged;
             _startWithWindowsItem.Checked = !_startWithWindowsItem.Checked;
             _startWithWindowsItem.CheckedChanged += OnStartWithWindowsChanged;
@@ -173,7 +168,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void ExitApplication()
     {
-        Log("INFO", "Shutting down...");
+        Logger.Info("Shutting down...");
         Dispose();
         Application.Exit();
     }
@@ -195,7 +190,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             _soundPlayer.Dispose();
             _activeIcon?.Dispose();
             _pausedIcon?.Dispose();
-            _logWriter?.Dispose();
+            Logger.Close();
         }
         base.Dispose(disposing);
     }
@@ -210,10 +205,5 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             return false;
         }
-    }
-
-    private void Log(string level, string message)
-    {
-        AppUtilities.Log(_logWriter, level, message);
     }
 }

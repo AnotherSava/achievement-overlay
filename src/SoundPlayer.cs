@@ -9,15 +9,13 @@ namespace AchievementOverlay;
 public sealed class UnlockSoundPlayer : IDisposable
 {
     private readonly AppConfig _config;
-    private readonly Action<string>? _warn;
     private System.Media.SoundPlayer? _defaultPlayer;
     private System.Media.SoundPlayer? _customPlayer;
     private string? _customPlayerPath;
 
-    public UnlockSoundPlayer(AppConfig config, Action<string>? warn = null)
+    public UnlockSoundPlayer(AppConfig config)
     {
         _config = config;
-        _warn = warn;
     }
 
     /// <summary>
@@ -37,7 +35,7 @@ public sealed class UnlockSoundPlayer : IDisposable
                 if (File.Exists(customPath))
                     PlayFile(customPath);
                 else
-                    _warn?.Invoke($"Custom sound file not found: '{customPath}'");
+                    Logger.Warn($"Custom sound file not found: '{customPath}'");
             }
             else
             {
@@ -46,7 +44,7 @@ public sealed class UnlockSoundPlayer : IDisposable
         }
         catch (Exception ex)
         {
-            _warn?.Invoke($"Error playing sound: {ex.Message}");
+            Logger.Warn($"Error playing sound: {ex.Message}");
         }
     }
 
@@ -71,7 +69,7 @@ public sealed class UnlockSoundPlayer : IDisposable
 
             if (stream == null)
             {
-                _warn?.Invoke("Embedded default sound not found");
+                Logger.Warn("Embedded default sound not found");
                 return;
             }
 

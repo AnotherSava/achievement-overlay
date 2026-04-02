@@ -23,24 +23,18 @@ public sealed class GameCache
     private readonly ConcurrentDictionary<string, GameInfo> _cache = new();
     private readonly AppConfig? _config;
     private readonly string[]? _staticGamesPaths;
-    private readonly Action<string>? _log;
-    private readonly Action<string>? _warn;
 
-    public GameCache(AppConfig config, Action<string>? log = null, Action<string>? warn = null)
+    public GameCache(AppConfig config)
     {
         _config = config;
-        _log = log;
-        _warn = warn;
     }
 
     /// <summary>
     /// Constructor for testing — accepts static paths instead of AppConfig.
     /// </summary>
-    internal GameCache(string[] gamesPaths, Action<string>? log = null, Action<string>? warn = null)
+    internal GameCache(string[] gamesPaths)
     {
         _staticGamesPaths = gamesPaths;
-        _log = log;
-        _warn = warn;
     }
 
     private string[] GetGamesPaths() => _config?.GamesPaths ?? _staticGamesPaths ?? Array.Empty<string>();
@@ -50,14 +44,14 @@ public sealed class GameCache
     /// </summary>
     public void ScanAll()
     {
-        _log?.Invoke("Starting game cache scan...");
+        Logger.Info("Starting game cache scan...");
         var count = 0;
 
         foreach (var basePath in GetGamesPaths())
         {
             if (!Directory.Exists(basePath))
             {
-                _warn?.Invoke($"  Game path does not exist, skipping: '{basePath}'");
+                Logger.Warn($"  Game path does not exist, skipping: '{basePath}'");
                 continue;
             }
 
@@ -65,9 +59,9 @@ public sealed class GameCache
         }
 
         if (count > 0)
-            _log?.Invoke($"Game cache scan complete. Found {count} game(s) with achievement metadata:");
+            Logger.Info($"Game cache scan complete. Found {count} game(s) with achievement metadata:");
         else
-            _warn?.Invoke("Game cache scan complete. No games with achievement metadata found — check 'gamesPaths' in config");
+            Logger.Warn("Game cache scan complete. No games with achievement metadata found — check 'gamesPaths' in config");
     }
 
     public IEnumerable<string> GetAllAppIds() => _cache.Keys;
@@ -81,7 +75,7 @@ public sealed class GameCache
             return info;
 
         // Cache miss — re-scan to pick up newly installed games
-        _log?.Invoke($"Cache miss for appid {appId}, re-scanning...");
+        Logger.Info($"Cache miss for appid {appId}, re-scanning...");
         ScanAll();
 
         _cache.TryGetValue(appId, out info);
@@ -110,7 +104,7 @@ public sealed class GameCache
         }
         catch (Exception ex)
         {
-            _log?.Invoke($"  Error scanning '{basePath}': {ex.Message}");
+            Logger.Info($"  Error scanning '{basePath}': {ex.Message}");
             return 0;
         }
 
@@ -127,7 +121,7 @@ public sealed class GameCache
 
                 if (!File.Exists(metadataPath))
                 {
-                    _warn?.Invoke($"  Skipped: appid={appId} at '{gameDir}' (no 'achievements.json')");
+                    Logger.Warn($"  Skipped: appid={appId} at '{gameDir}' (no 'achievements.json')");
                     continue;
                 }
 
@@ -139,12 +133,12 @@ public sealed class GameCache
                 };
 
                 _cache[appId] = info;
-                _log?.Invoke($"  Cached: appid={appId}, game={info.GameName}, path='{metadataPath}'");
+                Logger.Info($"  Cached: appid={appId}, game={info.GameName}, path='{metadataPath}'");
                 count++;
             }
             catch (Exception ex)
             {
-                _log?.Invoke($"  Error processing '{appIdFile}': {ex.Message}");
+                Logger.Info($"  Error processing '{appIdFile}': {ex.Message}");
             }
         }
 

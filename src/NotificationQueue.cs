@@ -25,8 +25,6 @@ public sealed class NotificationQueue : IDisposable
     private readonly GameCache _gameCache;
     private readonly AppConfig _config;
     private readonly UnlockSoundPlayer? _soundPlayer;
-    private readonly Action<string>? _log;
-    private readonly Action<string>? _warn;
     private readonly Dispatcher _dispatcher;
 
     private readonly ConcurrentQueue<NotificationItem> _queue = new();
@@ -55,15 +53,11 @@ public sealed class NotificationQueue : IDisposable
         GameCache gameCache,
         AppConfig config,
         UnlockSoundPlayer? soundPlayer = null,
-        Action<string>? log = null,
-        Action<string>? warn = null,
         Dispatcher? dispatcher = null)
     {
         _gameCache = gameCache;
         _config = config;
         _soundPlayer = soundPlayer;
-        _log = log;
-        _warn = warn;
         _dispatcher = dispatcher ?? Dispatcher.CurrentDispatcher;
     }
 
@@ -79,12 +73,12 @@ public sealed class NotificationQueue : IDisposable
         var item = ResolveMetadata(args);
         if (item == null)
         {
-            _log?.Invoke($"Skipping notification for {args.AppId}/{args.AchievementName} (no game metadata)");
+            Logger.Info($"Skipping notification for {args.AppId}/{args.AchievementName} (no game metadata)");
             return;
         }
 
         _queue.Enqueue(item);
-        _log?.Invoke($"Queued notification: {item.AchievementName} (queue size: {_queue.Count})");
+        Logger.Info($"Queued notification: {item.AchievementName} (queue size: {_queue.Count})");
 
         // Kick off dispatching if not already running (atomic check-and-set)
         if (Interlocked.CompareExchange(ref _isDispatching, 1, 0) == 0)
@@ -98,7 +92,7 @@ public sealed class NotificationQueue : IDisposable
     /// </summary>
     internal NotificationItem? ResolveMetadata(NewAchievementEventArgs args)
     {
-        var resolved = AchievementMetadata.Resolve(_gameCache, args.AppId, args.AchievementName, _config.Language, _warn);
+        var resolved = AchievementMetadata.Resolve(_gameCache, args.AppId, args.AchievementName, _config.Language);
         if (resolved == null)
             return null;
 
@@ -121,7 +115,7 @@ public sealed class NotificationQueue : IDisposable
 
         if (_isPaused)
         {
-            _log?.Invoke("Notifications paused, waiting to dispatch...");
+            Logger.Info("Notifications paused, waiting to dispatch...");
             ScheduleRetry(_pauseTimer ??= CreateTimer(), TimeSpan.FromSeconds(1));
             return;
         }
@@ -140,7 +134,7 @@ public sealed class NotificationQueue : IDisposable
         try
         {
             var gameWindowRect = AppUtilities.GetForegroundWindowRect();
-            _log?.Invoke($"Showing notification: {item.AchievementName} at ({gameWindowRect.Left},{gameWindowRect.Top} {gameWindowRect.Width}x{gameWindowRect.Height})");
+            Logger.Info($"Showing notification: {item.AchievementName} at ({gameWindowRect.Left},{gameWindowRect.Top} {gameWindowRect.Width}x{gameWindowRect.Height})");
 
             _soundPlayer?.Play();
 
@@ -151,7 +145,7 @@ public sealed class NotificationQueue : IDisposable
         }
         catch (Exception ex)
         {
-            _log?.Invoke($"Error dispatching notification: {ex.Message}");
+            Logger.Info($"Error dispatching notification: {ex.Message}");
             ScheduleRetry(_gapTimer ??= CreateTimer(), GapBetweenNotifications);
         }
     }

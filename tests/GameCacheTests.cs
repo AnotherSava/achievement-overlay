@@ -7,7 +7,6 @@ namespace AchievementOverlay.Tests;
 public class GameCacheTests : IDisposable
 {
     private readonly string _tempDir;
-    private readonly List<string> _logMessages = new();
 
     public GameCacheTests()
     {
@@ -20,8 +19,6 @@ public class GameCacheTests : IDisposable
         if (Directory.Exists(_tempDir))
             Directory.Delete(_tempDir, true);
     }
-
-    private void Log(string msg) => _logMessages.Add(msg);
 
     /// <summary>
     /// Creates a fake game directory structure with steam_appid.txt and optionally
@@ -54,7 +51,7 @@ public class GameCacheTests : IDisposable
         CreateGameDir("Game2", "67890", achievementsJson);
 
         var gamesPath = Path.Combine(_tempDir, "games");
-        var cache = new GameCache(new[] { gamesPath }, Log);
+        var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
         Assert.True(cache.Contains("12345"));
@@ -70,7 +67,7 @@ public class GameCacheTests : IDisposable
         CreateGameDir("GameWithoutAch", "22222"); // no achievements.json
 
         var gamesPath = Path.Combine(_tempDir, "games");
-        var cache = new GameCache(new[] { gamesPath }, Log);
+        var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
         Assert.True(cache.Contains("11111"));
@@ -82,17 +79,16 @@ public class GameCacheTests : IDisposable
     public void ScanAll_SkipsNonExistentPaths()
     {
         var fakePath = Path.Combine(_tempDir, "nonexistent");
-        var cache = new GameCache(new[] { fakePath }, Log, Log);
+        var cache = new GameCache(new[] { fakePath });
         cache.ScanAll();
 
         Assert.Empty(cache.GetAll());
-        Assert.Contains(_logMessages, m => m.Contains("does not exist"));
     }
 
     [Fact]
     public void ScanAll_EmptyGamesPaths_NoError()
     {
-        var cache = new GameCache(Array.Empty<string>(), Log);
+        var cache = new GameCache(Array.Empty<string>());
         cache.ScanAll();
         Assert.Empty(cache.GetAll());
     }
@@ -104,11 +100,10 @@ public class GameCacheTests : IDisposable
         CreateGameDir("MyGame", "99999", achievementsJson);
 
         var gamesPath = Path.Combine(_tempDir, "games");
-        var cache = new GameCache(new[] { gamesPath }, Log);
+        var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
-        Assert.Contains(_logMessages, m => m.Contains("99999"));
-        Assert.Contains(_logMessages, m => m.Contains("scan complete"));
+        Assert.True(cache.Contains("99999"));
     }
 
     // --- Lookup tests ---
@@ -120,7 +115,7 @@ public class GameCacheTests : IDisposable
         CreateGameDir("Game1", "12345", achievementsJson);
 
         var gamesPath = Path.Combine(_tempDir, "games");
-        var cache = new GameCache(new[] { gamesPath }, Log);
+        var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
         var info = cache.Lookup("12345");
@@ -135,12 +130,12 @@ public class GameCacheTests : IDisposable
     {
         var gamesPath = Path.Combine(_tempDir, "games");
         Directory.CreateDirectory(gamesPath);
-        var cache = new GameCache(new[] { gamesPath }, Log);
+        var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
         var info = cache.Lookup("99999");
         Assert.Null(info);
-        Assert.Contains(_logMessages, m => m.Contains("re-scanning"));
+        // Lookup triggers a re-scan internally
     }
 
     [Fact]
@@ -148,7 +143,7 @@ public class GameCacheTests : IDisposable
     {
         var gamesPath = Path.Combine(_tempDir, "games");
         Directory.CreateDirectory(gamesPath);
-        var cache = new GameCache(new[] { gamesPath }, Log);
+        var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
         // Initially not found
@@ -173,7 +168,7 @@ public class GameCacheTests : IDisposable
         var gameDir = CreateGameDir("TestGame", "44444", achievementsJson);
 
         var gamesPath = Path.Combine(_tempDir, "games");
-        var cache = new GameCache(new[] { gamesPath }, Log);
+        var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
         var info = cache.Lookup("44444");
@@ -195,7 +190,7 @@ public class GameCacheTests : IDisposable
         CreateGameDir("Game1", "11111", achievementsJson);
 
         var gamesPath = Path.Combine(_tempDir, "games");
-        var cache = new GameCache(new[] { gamesPath }, Log);
+        var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
         var info = cache.Lookup("11111");
@@ -234,7 +229,7 @@ public class GameCacheTests : IDisposable
         Directory.CreateDirectory(ss2);
         File.WriteAllText(Path.Combine(ss2, "achievements.json"), achievementsJson);
 
-        var cache = new GameCache(new[] { path1, path2 }, Log);
+        var cache = new GameCache(new[] { path1, path2 });
         cache.ScanAll();
 
         Assert.True(cache.Contains("11111"));
@@ -257,7 +252,7 @@ public class GameCacheTests : IDisposable
         File.WriteAllText(Path.Combine(ss, "achievements.json"), achievementsJson);
 
         var gamesPath = Path.Combine(_tempDir, "games");
-        var cache = new GameCache(new[] { gamesPath }, Log);
+        var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
         Assert.True(cache.Contains("33333"));

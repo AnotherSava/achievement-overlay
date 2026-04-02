@@ -13,7 +13,6 @@ public sealed class RecentAchievementsDisplay : IDisposable
     private readonly AchievementHistory _history;
     private readonly AppConfig _config;
     private readonly UnlockSoundPlayer? _soundPlayer;
-    private readonly Action<string>? _log;
     private readonly List<NotificationWindow> _windows = new();
     private GlobalHotkey? _escHotkey;
     private const int ESC_HOTKEY_ID = 9999;
@@ -22,17 +21,16 @@ public sealed class RecentAchievementsDisplay : IDisposable
 
     public bool IsVisible => _windows.Count > 0;
 
-    public RecentAchievementsDisplay(AchievementHistory history, AppConfig config, UnlockSoundPlayer? soundPlayer = null, Action<string>? log = null)
+    public RecentAchievementsDisplay(AchievementHistory history, AppConfig config, UnlockSoundPlayer? soundPlayer = null)
     {
         _history = history;
         _config = config;
         _soundPlayer = soundPlayer;
-        _log = log;
     }
 
     public void Toggle()
     {
-        _log?.Invoke($"Toggle called, IsVisible={IsVisible}, window count={_windows.Count}");
+        Logger.Info($"Toggle called, IsVisible={IsVisible}, window count={_windows.Count}");
         if (IsVisible)
         {
             if ((DateTime.UtcNow - _lastShowTime).TotalMilliseconds < 1000)
@@ -55,7 +53,7 @@ public sealed class RecentAchievementsDisplay : IDisposable
             return;
 
         _lastShowTime = DateTime.UtcNow;
-        _log?.Invoke($"Showing {entries.Count} recent achievement(s)");
+        Logger.Info($"Showing {entries.Count} recent achievement(s)");
 
         var gameWindowRect = AppUtilities.GetForegroundWindowRect();
         var shortcut = _config.RecentAchievementsShortcut;
@@ -157,7 +155,7 @@ public sealed class RecentAchievementsDisplay : IDisposable
             _escHotkey = new GlobalHotkey(ESC_HOTKEY_ID, "Escape", () => Dismiss());
             if (!_escHotkey.IsRegistered)
             {
-                _log?.Invoke("Could not register Esc hotkey for dismiss");
+                Logger.Info("Could not register Esc hotkey for dismiss");
                 _escHotkey.Dispose();
                 _escHotkey = null;
             }
@@ -170,7 +168,7 @@ public sealed class RecentAchievementsDisplay : IDisposable
 
     public void Dismiss()
     {
-        _log?.Invoke("Dismissing recent achievements display");
+        Logger.Info("Dismissing recent achievements display");
 
         _escHotkey?.Dispose();
         _escHotkey = null;

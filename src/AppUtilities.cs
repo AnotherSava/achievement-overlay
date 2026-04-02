@@ -9,31 +9,10 @@ using System.Windows.Forms;
 namespace AchievementOverlay;
 
 /// <summary>
-/// Shared utilities: logging, icon management, screen geometry.
+/// Shared utilities: icon management, screen geometry.
 /// </summary>
 public static class AppUtilities
 {
-    // --- Logging ---
-
-    public static StreamWriter? InitLog()
-    {
-        try
-        {
-            var logPath = Path.Combine(AppContext.BaseDirectory, "achievement-overlay.log");
-            return new StreamWriter(logPath, append: false) { AutoFlush = true };
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    public static void Log(StreamWriter? writer, string level, string message)
-    {
-        var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{level}] {message}";
-        writer?.WriteLine(line);
-    }
-
     // --- Icon management ---
 
     public static Icon LoadOrCreateIcon(bool grayscale)

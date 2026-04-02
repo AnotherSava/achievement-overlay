@@ -19,15 +19,11 @@ public sealed class AchievementHistory
 {
     private readonly AppConfig _config;
     private readonly GameCache _gameCache;
-    private readonly Action<string>? _log;
-    private readonly Action<string>? _warn;
 
-    public AchievementHistory(AppConfig config, GameCache gameCache, Action<string>? log = null, Action<string>? warn = null)
+    public AchievementHistory(AppConfig config, GameCache gameCache)
     {
         _config = config;
         _gameCache = gameCache;
-        _log = log;
-        _warn = warn;
     }
 
     /// <summary>
@@ -63,7 +59,7 @@ public sealed class AchievementHistory
                         if (!state.Earned)
                             continue;
 
-                        var resolved = AchievementMetadata.Resolve(_gameCache, appId, achName, _config.Language, _warn);
+                        var resolved = AchievementMetadata.Resolve(_gameCache, appId, achName, _config.Language);
                         entries.Add(new AchievementHistoryEntry
                         {
                             AppId = appId,
@@ -77,7 +73,7 @@ public sealed class AchievementHistory
                 }
                 catch (Exception ex)
                 {
-                    _log?.Invoke($"Error reading achievements for appid {appId}: {ex.Message}");
+                    Logger.Info($"Error reading achievements for appid {appId}: {ex.Message}");
                 }
             }
         }
