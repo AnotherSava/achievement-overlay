@@ -15,3 +15,6 @@ config.json
 
 # Local deploy config (machine-specific install path)
 config/deploy.env
+
+# Dev scripts
+scripts/

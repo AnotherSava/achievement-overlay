@@ -1,0 +1,95 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: [v*]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/ -c Release --no-restore
+
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Publish self-contained
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: >
+          dotnet publish src/ -c Release -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=${{ env.VERSION }}
+          -o publish/self-contained
+
+      - name: Publish framework-dependent
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: >
+          dotnet publish src/ -c Release -r win-x64
+          --self-contained false
+          -p:Version=${{ env.VERSION }}
+          -o publish/framework-dependent
+
+      - name: Package zips
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          Compress-Archive -Path publish/self-contained/AchievementOverlay.exe `
+            -DestinationPath "publish/AchievementOverlay-$version-self-contained-win-x64.zip"
+          Compress-Archive -Path publish/framework-dependent/AchievementOverlay.exe,
+            publish/framework-dependent/AchievementOverlay.dll,
+            publish/framework-dependent/AchievementOverlay.deps.json,
+            publish/framework-dependent/AchievementOverlay.runtimeconfig.json `
+            -DestinationPath "publish/AchievementOverlay-$version-framework-dependent-win-x64.zip"
+
+      - name: Upload artifacts
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-zips
+          path: publish/*.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-zips
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: >
+          gh release create "${{ github.ref_name }}"
+          --title "${{ github.ref_name }}"
+          --generate-notes
+          *.zip
