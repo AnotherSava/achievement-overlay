@@ -16,6 +16,9 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly AchievementWatcher _watcher;
     private readonly NotificationQueue _notificationQueue;
     private readonly UnlockSoundPlayer _soundPlayer;
+    private readonly AchievementHistory _achievementHistory;
+    private readonly RecentAchievementsDisplay _recentDisplay;
+    private readonly GlobalHotkey _hotkey;
     private readonly NotifyIcon _trayIcon;
     private readonly ToolStripMenuItem _soundEnabledItem;
     private readonly ToolStripMenuItem _pauseItem;
@@ -46,6 +49,12 @@ public sealed class TrayApplicationContext : ApplicationContext
         _watcher = new AchievementWatcher(_config.GseSavesPath, log, warn);
         _watcher.NewAchievement += OnNewAchievement;
         _watcher.Start(_gameCache.GetAllAppIds());
+
+        _achievementHistory = new AchievementHistory(_config, _gameCache, log);
+        _recentDisplay = new RecentAchievementsDisplay(_achievementHistory, _config, log);
+        _hotkey = new GlobalHotkey(1, _config.RecentAchievementsShortcut, () => _recentDisplay.Toggle());
+        if (!_hotkey.IsRegistered)
+            Log("WARN", $"Could not register hotkey '{_config.RecentAchievementsShortcut}' — use the tray menu instead");
 
         _activeIcon = AppUtilities.LoadOrCreateIcon(false);
         _pausedIcon = AppUtilities.LoadOrCreateIcon(true);
@@ -101,8 +110,14 @@ public sealed class TrayApplicationContext : ApplicationContext
             ContextMenuStrip = new ContextMenuStrip()
         };
 
+        var shortcutText = _config.RecentAchievementsShortcut;
+        var recentItem = new ToolStripMenuItem("Show Recent") { ShortcutKeyDisplayString = shortcutText };
+        recentItem.Click += (_, _) => _recentDisplay.Toggle();
+
         _trayIcon.ContextMenuStrip.Items.AddRange(new ToolStripItem[]
         {
+            recentItem,
+            new ToolStripSeparator(),
             _soundEnabledItem,
             _pauseItem,
             new ToolStripSeparator(),
@@ -153,6 +168,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
+            _hotkey.Dispose();
+            _recentDisplay.Dispose();
             _watcher.Dispose();
             _notificationQueue.Dispose();
             _soundPlayer.Dispose();

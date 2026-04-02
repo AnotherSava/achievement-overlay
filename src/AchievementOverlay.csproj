@@ -24,6 +24,7 @@
     <EmbeddedResource Include="..\config\default.json" LogicalName="AchievementOverlay.default.json" />
     <EmbeddedResource Include="Assets\achievement_sound.wav" LogicalName="AchievementOverlay.achievement_sound.wav" />
     <EmbeddedResource Include="Assets\icon.ico" LogicalName="AchievementOverlay.icon.ico" />
+    <EmbeddedResource Include="Assets\connoisseur.jpg" LogicalName="AchievementOverlay.connoisseur.jpg" />
   </ItemGroup>
 
 

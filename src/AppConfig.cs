@@ -43,6 +43,8 @@ public sealed class AppConfig
     public bool SoundEnabled { get { Reload(); return _settings.SoundEnabled; } }
     public string SoundPath { get { Reload(); return _settings.SoundPath; } }
     public int DisplayDuration { get { Reload(); return _settings.DisplayDuration; } }
+    public string RecentAchievementsShortcut { get { Reload(); return _settings.RecentAchievementsShortcut; } }
+    public int RecentAchievementsCount { get { Reload(); return _settings.RecentAchievementsCount; } }
 
     private string? _gseSavesPathExpanded;
     private string[]? _gamesPaths;
@@ -192,6 +194,8 @@ public sealed class AppConfig
         if (string.IsNullOrEmpty(result.GseSavesPath)) result.GseSavesPath = defaults.GseSavesPath;
         if (string.IsNullOrEmpty(result.Language)) result.Language = defaults.Language;
         if (result.DisplayDuration <= 0) result.DisplayDuration = defaults.DisplayDuration;
+        if (string.IsNullOrEmpty(result.RecentAchievementsShortcut)) result.RecentAchievementsShortcut = defaults.RecentAchievementsShortcut;
+        if (result.RecentAchievementsCount <= 0) result.RecentAchievementsCount = defaults.RecentAchievementsCount;
         return result;
     }
 
@@ -283,4 +287,10 @@ public sealed class SettingsData
 
     [JsonPropertyName("displayDuration")]
     public int DisplayDuration { get; set; }
+
+    [JsonPropertyName("recentAchievementsShortcut")]
+    public string RecentAchievementsShortcut { get; set; } = "";
+
+    [JsonPropertyName("recentAchievementsCount")]
+    public int RecentAchievementsCount { get; set; }
 }

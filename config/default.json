@@ -4,5 +4,7 @@
   "language": "english",
   "soundEnabled": true,
   "soundPath": "",
-  "displayDuration": 7
+  "displayDuration": 7,
+  "recentAchievementsShortcut": "Ctrl+Shift+H",
+  "recentAchievementsCount": 5
 }

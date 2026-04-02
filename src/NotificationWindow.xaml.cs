@@ -18,6 +18,7 @@ public partial class NotificationWindow : Window
     private static readonly Duration FadeDuration = new(TimeSpan.FromMilliseconds(500));
     private readonly DispatcherTimer _holdTimer;
     private double _slideDistance;
+    private bool _recentMode;
 
     public NotificationWindow(int displayDurationSeconds = 10)
     {
@@ -56,6 +57,71 @@ public partial class NotificationWindow : Window
         SizeAndPosition(gameWindowRect);
         Show();
         StartSlideIn();
+    }
+
+    /// <summary>
+    /// Shows as a footer info bar — no icon, no title, just text. No auto-dismiss.
+    /// </summary>
+    public void ShowFooter(string text, Rect gameWindowRect, double customTop, double slideUpDistance)
+    {
+        AchievementIcon.Visibility = Visibility.Collapsed;
+        AchievementName.Text = text;
+        AchievementName.FontWeight = FontWeights.Normal;
+        AchievementName.FontSize = 11;
+        AchievementName.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF));
+        AchievementName.TextAlignment = TextAlignment.Center;
+        AchievementDescription.Visibility = Visibility.Collapsed;
+
+        var notificationWidth = Math.Max(250, gameWindowRect.Width * WindowWidthFraction);
+        MaxWidth = notificationWidth;
+        MinWidth = notificationWidth;
+        var margin = Math.Min(gameWindowRect.Width, gameWindowRect.Height) * MarginFraction;
+        Left = gameWindowRect.Right - notificationWidth - margin;
+        Top = customTop;
+        _slideDistance = slideUpDistance;
+        _recentMode = true;
+
+        Show();
+        StartSlideIn();
+    }
+
+    /// <summary>
+    /// Shows as a "recent" notification — custom slide distance, extra text lines, no auto-dismiss.
+    /// </summary>
+    public void ShowRecent(string achievementName, string description, string? iconPath, Rect gameWindowRect, double customTop, double slideUpDistance, string? gameInfoLine)
+    {
+        AchievementName.Text = achievementName;
+        AchievementDescription.Text = description;
+        AchievementDescription.Visibility = string.IsNullOrEmpty(description) ? Visibility.Collapsed : Visibility.Visible;
+
+        if (!string.IsNullOrEmpty(gameInfoLine))
+        {
+            GameInfoText.Text = gameInfoLine;
+            GameInfoText.Visibility = Visibility.Visible;
+        }
+
+        LoadIcon(iconPath, gameWindowRect.Width);
+
+        var notificationWidth = Math.Max(250, gameWindowRect.Width * WindowWidthFraction);
+        MaxWidth = notificationWidth;
+        MinWidth = notificationWidth;
+        var margin = Math.Min(gameWindowRect.Width, gameWindowRect.Height) * MarginFraction;
+        Left = gameWindowRect.Right - notificationWidth - margin;
+        Top = customTop;
+        _slideDistance = slideUpDistance;
+        _recentMode = true;
+
+        Show();
+        StartSlideIn();
+    }
+
+    /// <summary>
+    /// Triggers fade-out animation then closes the window.
+    /// </summary>
+    public void DismissImmediately()
+    {
+        _holdTimer.Stop();
+        StartFadeOut();
     }
 
     private void LoadIcon(string? iconPath, double gameWindowWidth)
@@ -151,7 +217,7 @@ public partial class NotificationWindow : Window
 
         // Fade in
         var fadeInAnim = new DoubleAnimation(0, 1, SlideDuration);
-        fadeInAnim.Completed += (_, _) => _holdTimer.Start();
+        fadeInAnim.Completed += (_, _) => { if (!_recentMode) _holdTimer.Start(); };
         BeginAnimation(OpacityProperty, fadeInAnim);
     }
 

@@ -9,14 +9,15 @@ Achievement Overlay runs in the system tray and monitors `%appdata%/GSE Saves/` 
 ## Features
 
 - **Transparent overlay popup** — dark rounded rectangle with achievement icon, name, and description, positioned over the game window
+- **Recent achievements display** — press `Ctrl+Shift+H` (configurable) to see the N most recent achievements stacked vertically with a cascade slide-in animation, with game name and timestamp for each. Press again or Esc to dismiss
 - **Automatic game detection** — scans configured directories for `steam_appid.txt` and caches app ID to metadata mappings
 - **Notification queue** — multiple simultaneous unlocks display one at a time with a short gap
+- **Multi-monitor support** — notifications appear on the monitor with the foreground window, with correct DPI scaling across mixed-DPI setups
 - **Configurable** via `config.json` (auto-generated on first run)
 - **Unlock sound** — plays a default sound on unlock, or a custom `.wav` file
 - **Pause notifications** from the tray menu — temporarily suppresses popups without exiting
-- **Open config location** from the tray menu — opens Explorer with the config file selected
 - **Start with Windows** option in the tray menu
-- **Hot-reload** — edit `config.json` while running and changes take effect immediately
+- **Single instance** — only one copy of the app can run at a time
 
 ## Building from source
 
@@ -31,7 +32,7 @@ The built executable will be in `src/bin/Debug/net10.0-windows/`.
 
 ## Configuration
 
-On first run, a `config.json` file is created next to the executable with sensible defaults. `soundEnabled` and `soundPath` are picked up automatically on change. Changing `gseSavesPath` or `gamesPaths` requires a restart.
+On first run, a `config.json` file is created next to the executable with sensible defaults. `soundEnabled`, `soundPath`, and `displayDuration` are picked up automatically on change. Changing `gseSavesPath` or `gamesPaths` requires a restart.
 
 ### Settings
 
@@ -42,7 +43,9 @@ On first run, a `config.json` file is created next to the executable with sensib
 | `language` | Preferred language for achievement display text. Falls back to english. | `english` |
 | `soundEnabled` | Play a sound on achievement unlock. | `true` |
 | `soundPath` | Custom `.wav` sound file path. Empty uses the built-in default. | (empty) |
-| `displayDuration` | How long the notification stays on screen, in seconds. | `7` |
+| `displayDuration` | How long the unlock notification stays on screen, in seconds. | `7` |
+| `recentAchievementsShortcut` | Global keyboard shortcut to show/hide recent achievements. | `Ctrl+Shift+H` |
+| `recentAchievementsCount` | Number of recent achievements to display. | `5` |
 
 ### Example config
 
@@ -53,7 +56,9 @@ On first run, a `config.json` file is created next to the executable with sensib
   "language": "english",
   "soundEnabled": true,
   "soundPath": "",
-  "displayDuration": 7
+  "displayDuration": 7,
+  "recentAchievementsShortcut": "Ctrl+Shift+H",
+  "recentAchievementsCount": 5
 }
 ```
 
@@ -61,6 +66,7 @@ On first run, a `config.json` file is created next to the executable with sensib
 
 Right-click the tray icon for these options:
 
+- **Show Recent Ctrl+Shift+H** — display the N most recent achievements stacked vertically with game name and timestamp. Press again or Esc to dismiss.
 - **Sound Enabled** — toggle notification sound (persists to `config.json`)
 - **Pause Notifications** — suppress popups while checked (resets on restart)
 - **Start with Windows** — add/remove from Windows startup via registry

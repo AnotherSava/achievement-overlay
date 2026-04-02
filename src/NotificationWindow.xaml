@@ -24,26 +24,30 @@
             <Image x:Name="AchievementIcon"
                    Grid.Column="0"
                    Stretch="UniformToFill"
-                   VerticalAlignment="Center"
+                   VerticalAlignment="Top"
                    Margin="0,0,12,0" />
-            <StackPanel Grid.Column="1"
-                        VerticalAlignment="Center">
-                <TextBlock x:Name="TitleText"
-                           Text="Achievement Unlocked"
-                           Foreground="#AAFFFFFF"
-                           FontSize="11"
-                           Margin="0,0,0,2" />
-                <TextBlock x:Name="AchievementName"
-                           Foreground="White"
-                           FontWeight="Bold"
-                           FontSize="14"
-                           TextWrapping="Wrap" />
-                <TextBlock x:Name="AchievementDescription"
-                           Foreground="#CCAAAAAA"
-                           FontSize="12"
-                           TextWrapping="Wrap"
-                           Margin="0,2,0,0" />
-            </StackPanel>
+            <DockPanel Grid.Column="1"
+                       VerticalAlignment="Stretch">
+                <TextBlock x:Name="GameInfoText"
+                           DockPanel.Dock="Bottom"
+                           Foreground="#99AAAAAA"
+                           FontSize="10"
+                           Margin="0,4,0,0"
+                           Visibility="Collapsed" />
+                <StackPanel DockPanel.Dock="Top"
+                            VerticalAlignment="Top">
+                    <TextBlock x:Name="AchievementName"
+                               Foreground="White"
+                               FontWeight="Bold"
+                               FontSize="14"
+                               TextWrapping="Wrap" />
+                    <TextBlock x:Name="AchievementDescription"
+                               Foreground="#CCAAAAAA"
+                               FontSize="12"
+                               TextWrapping="Wrap"
+                               Margin="0,2,0,0" />
+                </StackPanel>
+            </DockPanel>
         </Grid>
     </Border>
 </Window>
