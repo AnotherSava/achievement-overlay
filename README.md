@@ -1,34 +1,47 @@
 # Achievement Overlay
 
-A Windows background app that displays Steam-like achievement popup notifications for games configured with the GBE/GSE Steam emulator.
+[![Build](https://github.com/AnotherSava/achievement-overlay/actions/workflows/build.yml/badge.svg)](https://github.com/AnotherSava/achievement-overlay/actions/workflows/build.yml)
+
+A Windows background app that displays Steam-like achievement popup notifications for games running in [Goldberg Steam Emulator](https://github.com/Detanup01/gbe_fork).
+
+<img src="docs/screenshots/sample-notification.png" alt="Achievement notification">
 
 ## How it works
 
-Achievement Overlay runs in the system tray and monitors `%appdata%/GSE Saves/` for achievement unlocks. When a game writes a new achievement to `achievements.json`, the app looks up the display name, description, and icon from the game's `steam_settings/achievements.json` metadata and shows a transparent overlay notification at the bottom-right of the foreground window — no game process interaction, purely filesystem-based.
+The Steam emulator stores achievement data in JSON files and updates them as soon as the next one gets unlocked. Achievement Overlay monitors these files and notifies the user with Steam-style pop-up notifications.
 
 ## Features
 
-- **Transparent overlay popup** — dark rounded rectangle with achievement icon, name, and description, positioned over the game window
-- **Recent achievements display** — press `Ctrl+Shift+H` (configurable) to see the N most recent achievements stacked vertically with a cascade slide-in animation, with game name and timestamp for each. Press again or Esc to dismiss
-- **Automatic game detection** — scans configured directories for `steam_appid.txt` and caches app ID to metadata mappings
-- **Notification queue** — multiple simultaneous unlocks display one at a time with a short gap
+- **Steam-style notifications** — achievement icon, name, and description slide in at the bottom-right of the game window
+- **Non-invasive** — works even with particularly sensitive games like Red Dead Redemption
+- **Recent achievements** — press Ctrl+Shift+H (shortcut is configurable) to review recent achievements. Also the easiest way to test that the overlay is working. Press again or Esc to dismiss
+- **Automatic game detection** — scans configured directories for games with achievement metadata
 - **Multi-monitor support** — notifications appear on the monitor with the foreground window, with correct DPI scaling across mixed-DPI setups
+- **Unlock sound** — plays a default or user-defined sound on achievement unlock
 - **Configurable** via `config.json` (auto-generated on first run)
-- **Unlock sound** — plays a default sound on unlock, or a custom `.wav` file
-- **Pause notifications** from the tray menu — temporarily suppresses popups without exiting
 - **Start with Windows** option in the tray menu
-- **Single instance** — only one copy of the app can run at a time
 
-## Building from source
+## Installation
 
-**Prerequisites:** Windows 10+, [.NET 10 SDK](https://dotnet.microsoft.com/download)
+Download the latest release from [GitHub Releases](https://github.com/AnotherSava/achievement-overlay/releases). Choose one of the two options:
 
-```
-dotnet build src/AchievementOverlay.csproj
-dotnet test tests/AchievementOverlay.Tests.csproj
-```
+- **Self-contained** — single exe, just unzip and run (no dependencies, larger size)
+- **Framework-dependent** — smaller download, requires [.NET Desktop Runtime 10](https://dotnet.microsoft.com/download/dotnet/10.0)
 
-The built executable will be in `src/bin/Debug/net10.0-windows/`.
+You can also build the most recent (and potentially less stable) version [from source](#building-from-source).
+
+## System tray menu
+
+<img src="docs/screenshots/tray-menu.png" alt="System tray menu">
+
+Right-click the tray icon for these options:
+
+- **Show Recent** *(keyboard shortcut)* — display recent achievements. Press again or Esc to dismiss.
+- **Sound Enabled** — toggle notification sound
+- **Pause Notifications** — suppress popups while checked (resets on restart)
+- **Start with Windows** — add/remove from Windows startup via registry
+- **Open Config Location** — opens Explorer with `config.json` selected
+- **Exit** — stops watching and exits the app
 
 ## Configuration
 
@@ -62,16 +75,64 @@ On first run, a `config.json` file is created next to the executable with sensib
 }
 ```
 
-## System tray menu
+## Troubleshooting
 
-Right-click the tray icon for these options:
+The app writes a log file (`achievement-overlay.log`) next to the config file (use the tray context menu to find it). Check it for diagnostic information. Look for `[WARN]` and `[ERROR]` entries.
 
-- **Show Recent Ctrl+Shift+H** — display the N most recent achievements stacked vertically with game name and timestamp. Press again or Esc to dismiss.
-- **Sound Enabled** — toggle notification sound (persists to `config.json`)
-- **Pause Notifications** — suppress popups while checked (resets on restart)
-- **Start with Windows** — add/remove from Windows startup via registry
-- **Open Config Location** — opens Explorer with `config.json` selected
-- **Exit** — stops watching and exits the app
+### App won't start
+
+If the app exits immediately with a config file reading error, make sure that you have a valid `config.json` file in the same folder as the app. Use the [example config](#example-config) above as a reference, or delete `config.json` and it will get restored to default values upon the next launch.
+
+### Game is not found
+
+If the log shows `[WARN] Game path does not exist`, check that `gamesPaths` in `config.json` points to valid directories.
+
+If the game doesn't appear in the log at all, make sure its directory is under one of the paths listed in `gamesPaths` and that it has a `steam_appid.txt` file.
+
+If the log shows `[WARN] Skipped: appid=... (no 'achievements.json')`, the game is detected but has no achievement metadata. Generate it using [generate_emu_config](https://github.com/Detanup01/gbe_fork_tools/tree/main/generate_emu_config_old) and restart the app.
+
+If no games are found at all, the log shows `[WARN] No games with achievement metadata found` — check `gamesPaths` in config.
+
+### Achievement unlocked but no notification
+
+Check logs for `[WARN] GSE Saves path does not exist` — check that `gseSavesPath` in `config.json` points to the correct directory (default: `%appdata%\GSE Saves`).
+
+### Notification shows default icon instead of achievement icon
+
+The icon path in the game's `steam_settings/achievements.json` doesn't match an actual file. Check that the `icon` field (e.g. `"img/abc123.jpg"`) points to an existing file relative to the `steam_settings/` directory.
+
+### Wrong language
+
+The log shows `[WARN] Language '...' not available, falling back to english`. Check that the `language` value in `config.json` matches a language available in the game's achievement metadata.
+
+### Hotkey not working
+
+The log shows `[WARN] Could not register hotkey`. The configured shortcut is either invalid or already in use by another application. Change `recentAchievementsShortcut` in `config.json` to a different key combination. The tray menu item still works as a fallback.
+
+### No sound
+
+Check that `soundEnabled` is `true` in `config.json`. If using a custom sound path and seeing `[WARN] Custom sound file not found`, check the file path. If seeing `[WARN] Error playing sound`, the file is not a valid `.wav` file. In both cases, no sound plays — clear `soundPath` to use the built-in default.
+
+### Settings not saving
+
+If toggling "Sound Enabled" in the tray menu doesn't persist, the log shows `[WARN] Config file is malformed, could not update` or `[WARN] Could not write config`. Fix the JSON syntax in `config.json` or check file permissions.
+
+### Still can't make it work?
+
+[Create a GitHub issue](https://github.com/AnotherSava/achievement-overlay/issues/new) with a description of the problem and attach your log file. I'll be happy to update misleading parts of the documentation or fix bugs.
+
+This is a hobby project I built to work around Red Dead Redemption's incompatibility with gbe_fork's built-in overlay. It may not work in every situation, but if it helps you as much as it helped me, it was definitely worth the effort.
+
+## Building from source
+
+**Prerequisites:** Windows 10+, [.NET 10 SDK](https://dotnet.microsoft.com/download)
+
+```
+dotnet build src/AchievementOverlay.csproj
+dotnet test tests/AchievementOverlay.Tests.csproj
+```
+
+The built executable will be in `src/bin/Debug/net10.0-windows/`.
 
 ## License
 

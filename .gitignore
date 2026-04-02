@@ -9,6 +9,7 @@ publish/
 # Local docs — ignore all except plans
 docs/*
 !docs/plans/
+!docs/screenshots/
 
 # Runtime config (generated on first run)
 config.json
