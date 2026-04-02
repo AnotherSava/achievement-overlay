@@ -56,12 +56,14 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}"
-          Compress-Archive -Path publish/self-contained/AchievementOverlay.exe `
+          Compress-Archive -Path publish/self-contained/AchievementOverlay.exe,
+            publish/self-contained/config.json `
             -DestinationPath "publish/AchievementOverlay-$version-self-contained-win-x64.zip"
           Compress-Archive -Path publish/framework-dependent/AchievementOverlay.exe,
             publish/framework-dependent/AchievementOverlay.dll,
             publish/framework-dependent/AchievementOverlay.deps.json,
-            publish/framework-dependent/AchievementOverlay.runtimeconfig.json `
+            publish/framework-dependent/AchievementOverlay.runtimeconfig.json,
+            publish/framework-dependent/config.json `
             -DestinationPath "publish/AchievementOverlay-$version-framework-dependent-win-x64.zip"
 
       - name: Upload artifacts
