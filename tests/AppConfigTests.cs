@@ -31,7 +31,7 @@ public class AppConfigTests : IDisposable
     {
         var defaultJson = $$"""
         {
-          "gseSavesPath": "{{_gseSavesDir.Replace("\\", "\\\\")}}",
+          "gseSavesPaths": "{{_gseSavesDir.Replace("\\", "\\\\")}}",
           "gamesPaths": "C:\\Games",
           "language": "english",
           "soundEnabled": true,
@@ -45,7 +45,7 @@ public class AppConfigTests : IDisposable
         var config = new AppConfig(_settingsPath);
         var settings = config.GetCurrent();
 
-        Assert.Equal(_gseSavesDir, settings.GseSavesPath);
+        Assert.Equal(_gseSavesDir, settings.GseSavesPaths);
         Assert.Equal(@"C:\Games", settings.GamesPaths);
         Assert.Equal("english", settings.Language);
         Assert.True(settings.SoundEnabled);
@@ -60,7 +60,7 @@ public class AppConfigTests : IDisposable
     {
         var data = new
         {
-            gseSavesPath = _gseSavesDir,
+            gseSavesPaths = _gseSavesDir,
             gamesPaths = @"C:\Games;D:\MoreGames",
             language = "german",
             soundEnabled = false,
@@ -74,7 +74,7 @@ public class AppConfigTests : IDisposable
         var config = new AppConfig(_settingsPath);
         var settings = config.GetCurrent();
 
-        Assert.Equal(_gseSavesDir, settings.GseSavesPath);
+        Assert.Equal(_gseSavesDir, settings.GseSavesPaths);
         Assert.Equal(@"C:\Games;D:\MoreGames", settings.GamesPaths);
         Assert.Equal("german", settings.Language);
         Assert.False(settings.SoundEnabled);
@@ -161,7 +161,7 @@ public class AppConfigTests : IDisposable
     [Fact]
     public void HotReload_DetectsFileChanges()
     {
-        var initialData = new { gseSavesPath = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 };
+        var initialData = new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 };
         File.WriteAllText(_settingsPath, JsonSerializer.Serialize(initialData));
 
         var config = new AppConfig(_settingsPath);
@@ -171,7 +171,7 @@ public class AppConfigTests : IDisposable
         Thread.Sleep(50);
 
         // Modify the file externally
-        var updatedData = new { gseSavesPath = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = false, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 };
+        var updatedData = new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = false, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 };
         File.WriteAllText(_settingsPath, JsonSerializer.Serialize(updatedData));
 
         // Force a different write time
@@ -184,7 +184,7 @@ public class AppConfigTests : IDisposable
     [Fact]
     public void UpdateConfigValue_UpdatesSingleProperty()
     {
-        var initialData = new { gseSavesPath = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 };
+        var initialData = new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 };
         File.WriteAllText(_settingsPath, JsonSerializer.Serialize(initialData));
 
         var config = new AppConfig(_settingsPath);
@@ -201,7 +201,7 @@ public class AppConfigTests : IDisposable
     [Fact]
     public void UpdateConfigValue_PreservesOtherProperties()
     {
-        var initialData = new { gseSavesPath = _gseSavesDir, gamesPaths = @"C:\Games", language = "german", soundEnabled = true, soundPath = @"C:\beep.wav", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 };
+        var initialData = new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "german", soundEnabled = true, soundPath = @"C:\beep.wav", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 };
         File.WriteAllText(_settingsPath, JsonSerializer.Serialize(initialData));
 
         var config = new AppConfig(_settingsPath);
@@ -209,7 +209,7 @@ public class AppConfigTests : IDisposable
 
         var settings = config.GetCurrent();
         Assert.Equal("french", settings.Language);
-        Assert.Equal(_gseSavesDir, settings.GseSavesPath);
+        Assert.Equal(_gseSavesDir, settings.GseSavesPaths);
         Assert.Equal(@"C:\Games", settings.GamesPaths);
         Assert.True(settings.SoundEnabled);
         Assert.Equal(@"C:\beep.wav", settings.SoundPath);
@@ -218,7 +218,7 @@ public class AppConfigTests : IDisposable
     [Fact]
     public void UpdateConfigValue_WritesValidJson()
     {
-        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(new { gseSavesPath = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 }));
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 }));
 
         var config = new AppConfig(_settingsPath);
         config.UpdateConfigValue("SoundEnabled", false, _settingsPath);
@@ -231,18 +231,18 @@ public class AppConfigTests : IDisposable
     }
 
     [Fact]
-    public void GseSavesPath_ExpandsEnvironmentVariables()
+    public void GseSavesPaths_ExpandsEnvironmentVariables()
     {
-        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(new { gseSavesPath = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 }));
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 }));
 
         var config = new AppConfig(_settingsPath);
-        Assert.Equal(_gseSavesDir, config.GseSavesPath);
+        Assert.Equal(_gseSavesDir, config.GseSavesPaths[0]);
     }
 
     [Fact]
     public void GamesPaths_ParsesSemicolonSeparated()
     {
-        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(new { gseSavesPath = _gseSavesDir, gamesPaths = @"C:\Games;D:\More", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 }));
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games;D:\More", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 }));
 
         var config = new AppConfig(_settingsPath);
         Assert.Equal(2, config.GamesPaths.Length);

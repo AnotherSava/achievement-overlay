@@ -31,7 +31,7 @@ public class AchievementHistoryTests : IDisposable
         var configPath = Path.Combine(_tempDir, "config.json");
         var config = new
         {
-            gseSavesPath = _gseSavesDir,
+            gseSavesPaths = _gseSavesDir,
             gamesPaths = _gamesDir,
             language = "english",
             soundEnabled = true,

@@ -47,14 +47,14 @@ Right-click the tray icon for these options:
 
 ## Configuration
 
-A `config.json` file ships next to the executable with sensible defaults. Edit it before or after the first run. `soundEnabled`, `soundPath`, and `displayDuration` are picked up automatically on change. Changing `gseSavesPath` or `gamesPaths` requires a restart.
+A `config.json` file ships next to the executable with sensible defaults. Edit it before or after the first run. `soundEnabled`, `soundPath`, and `displayDuration` are picked up automatically on change. Changing `gseSavesPaths` or `gamesPaths` requires a restart.
 
 ### Settings
 
 | Setting | Description | Default |
 |---|---|---|
 | `gamesPaths` | Semicolon-separated list of directories to scan for games with `steam_appid.txt`. | `C:\Games` |
-| `gseSavesPath` | Path to GSE Saves directory. Supports `%appdata%` and other env vars. | `%appdata%\GSE Saves` |
+| `gseSavesPaths` | Semicolon-separated list of GSE Saves directories. Supports `%appdata%` and other env vars. | `%appdata%\GSE Saves` |
 | `language` | Preferred language for achievement display text. Falls back to english. | `english` |
 | `soundEnabled` | Play a sound on achievement unlock. | `true` |
 | `soundPath` | Custom `.wav` sound file path. Empty uses the built-in default. | (empty) |
@@ -67,7 +67,7 @@ A `config.json` file ships next to the executable with sensible defaults. Edit i
 ```json
 {
   "gamesPaths": "C:\\Games;D:\\Games",
-  "gseSavesPath": "%appdata%\\GSE Saves",
+  "gseSavesPaths": "%appdata%\\GSE Saves",
   "language": "english",
   "soundEnabled": true,
   "soundPath": "",
@@ -87,8 +87,8 @@ The app shows an error dialog on startup if the config is missing, has invalid J
 
 - **Config file not found** — make sure `config.json` is in the same folder as the executable. Re-extract it from the release archive if needed.
 - **Invalid JSON** — fix the syntax in `config.json`. Use the [example config](#example-config) above as a reference.
-- **Invalid settings** — required fields like `gseSavesPath`, `gamesPaths`, `displayDuration`, or `recentAchievementsCount` may be missing or have invalid values.
-- **GSE Saves directory does not exist** — check that `gseSavesPath` points to a valid directory (default: `%appdata%\GSE Saves`).
+- **Invalid settings** — required fields like `gseSavesPaths`, `gamesPaths`, `displayDuration`, or `recentAchievementsCount` may be missing or have invalid values.
+- **GSE Saves directory does not exist** — check that `gseSavesPaths` points to valid directories (default: `%appdata%\GSE Saves`). Non-existent paths are logged as warnings and skipped; the app exits only if none are valid.
 - **No games with achievement metadata found** — check that `gamesPaths` points to directories containing games with `steam_appid.txt` and `steam_settings/achievements.json`. Generate metadata using [generate_emu_config](https://github.com/Detanup01/gbe_fork_tools/tree/main/generate_emu_config_old) if needed.
 
 ### Game is not found
@@ -137,6 +137,14 @@ dotnet test tests/AchievementOverlay.Tests.csproj
 ```
 
 The built executable will be in `src/bin/Debug/net10.0-windows/`.
+
+## Code signing policy
+
+This project is planning to apply for free code signing through [SignPath Foundation](https://signpath.org) once community adoption requirements are met. Until then, Windows will show a SmartScreen warning when you run the executable.
+
+**You can help!** Star the repo, fork it, or contribute — growing the community brings us closer to getting a trusted code signing certificate.
+
+**Privacy:** This program will not transfer any information to other networked systems.
 
 ## License
 

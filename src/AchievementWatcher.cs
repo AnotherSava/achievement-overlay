@@ -21,8 +21,8 @@ public sealed class NewAchievementEventArgs : EventArgs
 /// </summary>
 public sealed class AchievementWatcher : IDisposable
 {
-    private FileSystemWatcher? _watcher;
-    private readonly string _gseSavesPath;
+    private readonly List<FileSystemWatcher> _watchers = new();
+    private readonly string[] _gseSavesPaths;
 
     // Tracks last-seen earned_time per (appid, achievementName) to avoid duplicate notifications
     private readonly ConcurrentDictionary<string, long> _seenAchievements = new();
@@ -40,18 +40,16 @@ public sealed class AchievementWatcher : IDisposable
     public event EventHandler<NewAchievementEventArgs>? NewAchievement;
 
     public AchievementWatcher(
-        string gseSavesPath,
+        string[] gseSavesPaths,
         TimeSpan? debounceDelay = null,
         int maxRetries = 3,
         TimeSpan? retryDelay = null)
     {
-        _gseSavesPath = gseSavesPath;
+        _gseSavesPaths = gseSavesPaths;
         _debounceDelay = debounceDelay ?? TimeSpan.FromMilliseconds(100);
         _maxRetries = maxRetries;
         _retryDelay = retryDelay ?? TimeSpan.FromMilliseconds(200);
     }
-
-    public string GseSavesPath => _gseSavesPath;
 
     /// <summary>
     /// Starts watching the GSE Saves directory for achievement changes.
@@ -59,25 +57,29 @@ public sealed class AchievementWatcher : IDisposable
     /// </summary>
     public void Start(IEnumerable<string>? knownAppIds = null)
     {
-        if (_watcher != null)
+        if (_watchers.Count > 0)
             return;
 
-        SeedExistingAchievementsFromDirectory(_gseSavesPath, knownAppIds);
-
-        _watcher = new FileSystemWatcher(_gseSavesPath)
+        foreach (var path in _gseSavesPaths)
         {
-            Filter = "achievements.json",
-            IncludeSubdirectories = true,
-            InternalBufferSize = 32768,
-            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.CreationTime | NotifyFilters.FileName
-        };
+            SeedExistingAchievementsFromDirectory(path, knownAppIds);
 
-        _watcher.Changed += OnFileChanged;
-        _watcher.Created += OnFileChanged;
-        _watcher.Error += (_, e) => Logger.Warn($"FileSystemWatcher error: {e.GetException().Message}");
-        _watcher.EnableRaisingEvents = true;
+            var watcher = new FileSystemWatcher(path)
+            {
+                Filter = "achievements.json",
+                IncludeSubdirectories = true,
+                InternalBufferSize = 32768,
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.CreationTime | NotifyFilters.FileName
+            };
 
-        Logger.Info($"Watching for achievements in '{_gseSavesPath}'");
+            watcher.Changed += OnFileChanged;
+            watcher.Created += OnFileChanged;
+            watcher.Error += (_, e) => Logger.Warn($"FileSystemWatcher error: {e.GetException().Message}");
+            watcher.EnableRaisingEvents = true;
+            _watchers.Add(watcher);
+
+            Logger.Info($"Watching for achievements in '{path}'");
+        }
     }
 
     /// <summary>
@@ -85,12 +87,12 @@ public sealed class AchievementWatcher : IDisposable
     /// </summary>
     public void Stop()
     {
-        if (_watcher != null)
+        foreach (var watcher in _watchers)
         {
-            _watcher.EnableRaisingEvents = false;
-            _watcher.Dispose();
-            _watcher = null;
+            watcher.EnableRaisingEvents = false;
+            watcher.Dispose();
         }
+        _watchers.Clear();
 
         Logger.Info("Achievement watcher stopped.");
 

@@ -31,7 +31,7 @@ public class NotificationQueueTests : IDisposable
         _settingsPath = Path.Combine(_tempDir, "config.json");
         var settings = new
         {
-            gseSavesPath = Path.Combine(_tempDir, "GSE Saves"),
+            gseSavesPaths = Path.Combine(_tempDir, "GSE Saves"),
             gamesPaths = _gamesDir,
             language = "english",
             soundEnabled = true,

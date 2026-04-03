@@ -57,7 +57,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             ShowConfigError(heading, detail);
             return;
         }
-        Logger.Info($"Config: gamesPaths='{string.Join(";", _config.GamesPaths)}', gseSavesPath='{_config.GseSavesPath}', language={_config.Language}, soundEnabled={_config.SoundEnabled}, soundPath='{_config.SoundPath}', displayDuration={_config.DisplayDuration}, recentAchievementsShortcut={_config.RecentAchievementsShortcut}, recentAchievementsCount={_config.RecentAchievementsCount}");
+        Logger.Info($"Config: gamesPaths='{string.Join(";", _config.GamesPaths)}', gseSavesPaths='{string.Join(";", _config.GseSavesPaths)}', language={_config.Language}, soundEnabled={_config.SoundEnabled}, soundPath='{_config.SoundPath}', displayDuration={_config.DisplayDuration}, recentAchievementsShortcut={_config.RecentAchievementsShortcut}, recentAchievementsCount={_config.RecentAchievementsCount}");
 
         _gameCache = new GameCache(_config);
         _gameCache.ScanAll();
@@ -72,7 +72,14 @@ public sealed class TrayApplicationContext : ApplicationContext
         _soundPlayer = new UnlockSoundPlayer(_config);
         _notificationQueue = new NotificationQueue(_gameCache, _config, _soundPlayer);
 
-        _watcher = new AchievementWatcher(_config.GseSavesPath);
+        var validSavesPaths = _config.GseSavesPaths.Where(p => { if (Directory.Exists(p)) return true; Logger.Warn($"GSE Saves path does not exist: '{p}'"); return false; }).ToArray();
+        if (validSavesPaths.Length == 0)
+        {
+            ShowConfigError("Config file is invalid", "No valid 'gseSavesPaths' directories found.");
+            return;
+        }
+
+        _watcher = new AchievementWatcher(validSavesPaths);
         _watcher.NewAchievement += OnNewAchievement;
         _watcher.Start(_gameCache.GetAllAppIds());
 

@@ -1,6 +1,6 @@
 {
   "gamesPaths": "C:\\Games",
-  "gseSavesPath": "%appdata%\\GSE Saves",
+  "gseSavesPaths": "%appdata%\\GSE Saves",
   "language": "english",
   "soundEnabled": true,
   "soundPath": "",

@@ -39,7 +39,7 @@ public class AchievementWatcherTests : IDisposable
     private AchievementWatcher CreateWatcher()
     {
         var watcher = new AchievementWatcher(
-            _tempDir,
+            new[] { _tempDir },
             debounceDelay: TimeSpan.FromMilliseconds(10),
             maxRetries: 2,
             retryDelay: TimeSpan.FromMilliseconds(10));
@@ -261,7 +261,7 @@ public class AchievementWatcherTests : IDisposable
     public void Start_NonExistentPath_Throws()
     {
         var nonExistent = Path.Combine(_tempDir, "new_saves_dir");
-        var watcher = new AchievementWatcher(nonExistent);
+        var watcher = new AchievementWatcher(new[] { nonExistent });
         Assert.Throws<ArgumentException>(() => watcher.Start());
         watcher.Dispose();
     }

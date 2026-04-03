@@ -38,7 +38,7 @@ public sealed class AppConfig
     }
 
     public string[] GamesPaths { get { Reload(); return _gamesPaths ??= ParseGamesPaths(_settings.GamesPaths); } }
-    public string GseSavesPath { get { Reload(); return ExpandAndCache(ref _gseSavesPathExpanded, _settings.GseSavesPath); } }
+    public string[] GseSavesPaths { get { Reload(); return _gseSavesPaths ??= ParseGamesPaths(_settings.GseSavesPaths); } }
     public string Language { get { Reload(); return _settings.Language; } }
     public bool SoundEnabled { get { Reload(); return _settings.SoundEnabled; } }
     public string SoundPath { get { Reload(); return _settings.SoundPath; } }
@@ -46,7 +46,7 @@ public sealed class AppConfig
     public string RecentAchievementsShortcut { get { Reload(); return _settings.RecentAchievementsShortcut; } }
     public int RecentAchievementsCount { get { Reload(); return _settings.RecentAchievementsCount; } }
 
-    private string? _gseSavesPathExpanded;
+    private string[]? _gseSavesPaths;
     private string[]? _gamesPaths;
 
     public SettingsData GetCurrent()
@@ -164,7 +164,7 @@ public sealed class AppConfig
 
     private void InvalidateCaches()
     {
-        _gseSavesPathExpanded = null;
+        _gseSavesPaths = null;
         _gamesPaths = null;
     }
 
@@ -178,10 +178,8 @@ public sealed class AppConfig
     private static void Validate(SettingsData settings)
     {
         var errors = new List<string>();
-        if (string.IsNullOrWhiteSpace(settings.GseSavesPath))
-            errors.Add("'gseSavesPath' is missing or empty");
-        else if (!Directory.Exists(ExpandEnvironmentVariables(settings.GseSavesPath)))
-            errors.Add("'gseSavesPath' directory does not exist");
+        if (string.IsNullOrWhiteSpace(settings.GseSavesPaths))
+            errors.Add("'gseSavesPaths' is missing or empty");
         if (string.IsNullOrWhiteSpace(settings.GamesPaths)) errors.Add("'gamesPaths' is missing or empty");
         if (settings.DisplayDuration <= 0) errors.Add("'displayDuration' is missing or invalid");
         if (settings.RecentAchievementsCount <= 0) errors.Add("'recentAchievementsCount' is missing or invalid");
@@ -250,8 +248,8 @@ public sealed class SettingsData
     [JsonPropertyName("gamesPaths")]
     public string GamesPaths { get; set; } = "";
 
-    [JsonPropertyName("gseSavesPath")]
-    public string GseSavesPath { get; set; } = "";
+    [JsonPropertyName("gseSavesPaths")]
+    public string GseSavesPaths { get; set; } = "";
 
     [JsonPropertyName("language")]
     public string Language { get; set; } = "";

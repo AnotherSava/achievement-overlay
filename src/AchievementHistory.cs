@@ -35,9 +35,11 @@ public sealed class AchievementHistory
     {
         var entries = new List<AchievementHistoryEntry>();
 
-        var gseSavesPath = _config.GseSavesPath;
-        if (Directory.Exists(gseSavesPath))
+        foreach (var gseSavesPath in _config.GseSavesPaths)
         {
+            if (!Directory.Exists(gseSavesPath))
+                continue;
+
             foreach (var dir in Directory.GetDirectories(gseSavesPath))
             {
                 var appId = Path.GetFileName(dir);
