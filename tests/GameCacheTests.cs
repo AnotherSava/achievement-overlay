@@ -237,6 +237,51 @@ public class GameCacheTests : IDisposable
         Assert.Equal(2, cache.GetAll().Count);
     }
 
+    // --- generate_emu_config placement: steam_appid.txt inside steam_settings/ ---
+
+    [Fact]
+    public void ScanAll_AppIdInsideSteamSettings_CachesGameRoot()
+    {
+        var achievementsJson = """[{"name": "ACH01", "displayName": "Test"}]""";
+        var gameDir = Path.Combine(_tempDir, "games", "EmuConfigGame");
+        var settingsDir = Path.Combine(gameDir, "steam_settings");
+        Directory.CreateDirectory(settingsDir);
+        File.WriteAllText(Path.Combine(settingsDir, "steam_appid.txt"), "77777");
+        File.WriteAllText(Path.Combine(settingsDir, "achievements.json"), achievementsJson);
+
+        var gamesPath = Path.Combine(_tempDir, "games");
+        var cache = new GameCache(new[] { gamesPath });
+        cache.ScanAll();
+
+        var info = cache.Lookup("77777");
+        Assert.NotNull(info);
+        Assert.Equal(gameDir, info!.GameDir);
+        Assert.Equal("EmuConfigGame", info.GameName);
+        Assert.Equal(Path.Combine(settingsDir, "achievements.json"), info.MetadataPath);
+    }
+
+    [Fact]
+    public void ScanAll_AppIdInBothLocations_SingleCacheEntry()
+    {
+        var achievementsJson = """[{"name": "ACH01", "displayName": "Test"}]""";
+        var gameDir = Path.Combine(_tempDir, "games", "BothGame");
+        var settingsDir = Path.Combine(gameDir, "steam_settings");
+        Directory.CreateDirectory(settingsDir);
+        File.WriteAllText(Path.Combine(gameDir, "steam_appid.txt"), "88888");
+        File.WriteAllText(Path.Combine(settingsDir, "steam_appid.txt"), "88888");
+        File.WriteAllText(Path.Combine(settingsDir, "achievements.json"), achievementsJson);
+
+        var gamesPath = Path.Combine(_tempDir, "games");
+        var cache = new GameCache(new[] { gamesPath });
+        cache.ScanAll();
+
+        Assert.True(cache.Contains("88888"));
+        Assert.Single(cache.GetAll());
+        var info = cache.Lookup("88888");
+        Assert.NotNull(info);
+        Assert.Equal(gameDir, info!.GameDir);
+    }
+
     // --- Edge case: whitespace/newline in steam_appid.txt ---
 
     [Fact]

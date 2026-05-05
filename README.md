@@ -36,11 +36,11 @@ You can also build the most recent (and potentially less stable) version [from s
 
 Right-click the tray icon for these options:
 
-- **Show Recent** *(keyboard shortcut)* — display recent achievements. Press again or Esc to dismiss.
-- **Sound Enabled** — toggle notification sound
-- **Pause Notifications** — suppress popups while checked (resets on restart)
+- **Show recent** *(keyboard shortcut)* — display recent achievements. Press again or Esc to dismiss.
+- **Sound enabled** — toggle notification sound
+- **Pause notifications** — suppress popups while checked (resets on restart)
 - **Start with Windows** — add/remove from Windows startup via registry
-- **Open Config Location** — opens Explorer with `config.json` selected
+- **Open config/logs location** — opens Explorer with `config.json` selected (`overlay.log` is in the same folder)
 - **Exit** — stops watching and exits the app
 
 <img src="docs/screenshots/tray-menu.png" alt="System tray menu">
@@ -53,7 +53,7 @@ A `config.json` file ships next to the executable with sensible defaults. Edit i
 
 | Setting | Description | Default |
 |---|---|---|
-| `gamesPaths` | Semicolon-separated list of directories to scan for games with `steam_appid.txt`. | `C:\Games` |
+| `gamesPaths` | Semicolon-separated list of directories to scan for games with `steam_appid.txt` (in the game root or inside `steam_settings/`). | `C:\Games` |
 | `gseSavesPaths` | Semicolon-separated list of GSE Saves directories. Supports `%appdata%` and other env vars. | `%appdata%\GSE Saves` |
 | `language` | Preferred language for achievement display text. Falls back to english. | `english` |
 | `soundEnabled` | Play a sound on achievement unlock. | `true` |
@@ -95,7 +95,7 @@ The app shows an error dialog on startup if the config is missing, has invalid J
 
 If the log shows `[WARN] Game path does not exist`, check that `gamesPaths` in `config.json` points to valid directories.
 
-If the game doesn't appear in the log at all, make sure its directory is under one of the paths listed in `gamesPaths` and that it has a `steam_appid.txt` file.
+If the game doesn't appear in the log at all, make sure its directory is under one of the paths listed in `gamesPaths` and that it has a `steam_appid.txt` file (either in the game root or inside `steam_settings/`).
 
 If the log shows `[WARN] Skipped: appid=... (no 'achievements.json')`, the game is detected but has no achievement metadata. Generate it using [generate_emu_config](https://github.com/Detanup01/gbe_fork_tools/tree/main/generate_emu_config_old) and restart the app.
 
@@ -119,7 +119,7 @@ Check that `soundEnabled` is `true` in `config.json`. If using a custom sound pa
 
 ### Settings not saving
 
-If toggling "Sound Enabled" in the tray menu doesn't persist, the log shows `[WARN] Config file is malformed, could not update` or `[WARN] Could not write config`. Fix the JSON syntax in `config.json` or check file permissions.
+If toggling "Sound enabled" in the tray menu doesn't persist, the log shows `[WARN] Config file is malformed, could not update` or `[WARN] Could not write config`. Fix the JSON syntax in `config.json` or check file permissions.
 
 ### Still can't make it work?
 

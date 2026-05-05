@@ -15,8 +15,9 @@ public sealed class GameInfo
 }
 
 /// <summary>
-/// Scans configured game paths for steam_appid.txt files, reads appids,
-/// and caches the mapping from appid to achievement metadata path.
+/// Scans configured game paths for steam_appid.txt files (in either the game root
+/// or inside steam_settings/), reads appids, and caches the mapping from appid to
+/// achievement metadata path.
 /// </summary>
 public sealed class GameCache
 {
@@ -114,6 +115,9 @@ public sealed class GameCache
                     continue;
 
                 var gameDir = Path.GetDirectoryName(appIdFile)!;
+                // generate_emu_config places steam_appid.txt inside steam_settings/ — collapse to game root
+                if (string.Equals(Path.GetFileName(gameDir), "steam_settings", StringComparison.OrdinalIgnoreCase))
+                    gameDir = Path.GetDirectoryName(gameDir)!;
                 var metadataPath = Path.Combine(gameDir, "steam_settings", "achievements.json");
 
                 if (!File.Exists(metadataPath))
