@@ -92,7 +92,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _activeIcon = AppUtilities.LoadOrCreateIcon(false);
         _pausedIcon = AppUtilities.LoadOrCreateIcon(true);
 
-        _soundEnabledItem = new ToolStripMenuItem("Sound Enabled")
+        _soundEnabledItem = new ToolStripMenuItem("Sound enabled")
         {
             CheckOnClick = true,
             Checked = _config.SoundEnabled
@@ -103,7 +103,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             Logger.Info($"Sound enabled: {_soundEnabledItem.Checked}");
         };
 
-        _pauseItem = new ToolStripMenuItem("Pause Notifications")
+        _pauseItem = new ToolStripMenuItem("Pause notifications")
         {
             CheckOnClick = true,
             Checked = false
@@ -122,7 +122,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         };
         _startWithWindowsItem.CheckedChanged += OnStartWithWindowsChanged;
 
-        var openConfigItem = new ToolStripMenuItem("Open Config Location");
+        var openConfigItem = new ToolStripMenuItem("Open config/logs location");
         openConfigItem.Click += (_, _) =>
         {
             var settingsPath = Path.Combine(AppContext.BaseDirectory, "config.json");
@@ -143,7 +143,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             ContextMenuStrip = new ContextMenuStrip()
         };
 
-        var recentItem = new ToolStripMenuItem("Show Recent");
+        var recentItem = new ToolStripMenuItem("Show recent");
         if (_hotkey.IsRegistered)
             recentItem.ShortcutKeyDisplayString = _config.RecentAchievementsShortcut;
         recentItem.Click += (_, _) => _recentDisplay.Toggle();
