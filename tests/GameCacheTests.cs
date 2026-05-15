@@ -255,8 +255,7 @@ public class GameCacheTests : IDisposable
 
         var info = cache.Lookup("77777");
         Assert.NotNull(info);
-        Assert.Equal(gameDir, info!.GameDir);
-        Assert.Equal("EmuConfigGame", info.GameName);
+        Assert.Equal("EmuConfigGame", info!.GameName);
         Assert.Equal(Path.Combine(settingsDir, "achievements.json"), info.MetadataPath);
     }
 
@@ -279,7 +278,30 @@ public class GameCacheTests : IDisposable
         Assert.Single(cache.GetAll());
         var info = cache.Lookup("88888");
         Assert.NotNull(info);
-        Assert.Equal(gameDir, info!.GameDir);
+        Assert.Equal(Path.Combine(settingsDir, "achievements.json"), info!.MetadataPath);
+    }
+
+    // --- GameName: derived from first-level subfolder of basePath ---
+
+    [Fact]
+    public void ScanAll_DeeplyNestedAppId_GameNameIsFirstLevelSubfolder()
+    {
+        // Mirrors the Aphelion case: steam_appid.txt is buried deep under the game root,
+        // but GameName should be the first-level folder under the configured games path.
+        var achievementsJson = """[{"name": "ACH01", "displayName": "Test"}]""";
+        var gamesPath = Path.Combine(_tempDir, "games");
+        var deepDir = Path.Combine(gamesPath, "Aphelion", "Aphelion", "Engine", "Binaries", "ThirdParty", "Steamworks", "Steamv157", "Win64");
+        var settingsDir = Path.Combine(deepDir, "steam_settings");
+        Directory.CreateDirectory(settingsDir);
+        File.WriteAllText(Path.Combine(settingsDir, "steam_appid.txt"), "1966410");
+        File.WriteAllText(Path.Combine(settingsDir, "achievements.json"), achievementsJson);
+
+        var cache = new GameCache(new[] { gamesPath });
+        cache.ScanAll();
+
+        var info = cache.Lookup("1966410");
+        Assert.NotNull(info);
+        Assert.Equal("Aphelion", info!.GameName);
     }
 
     // --- Edge case: whitespace/newline in steam_appid.txt ---

@@ -9,9 +9,8 @@ namespace AchievementOverlay;
 public sealed class GameInfo
 {
     public required string AppId { get; init; }
-    public required string GameDir { get; init; }
     public required string MetadataPath { get; init; }
-    public string GameName => Path.GetFileName(GameDir);
+    public required string GameName { get; init; }
 }
 
 /// <summary>
@@ -129,8 +128,8 @@ public sealed class GameCache
                 var info = new GameInfo
                 {
                     AppId = appId,
-                    GameDir = gameDir,
-                    MetadataPath = metadataPath
+                    MetadataPath = metadataPath,
+                    GameName = ExtractGameName(basePath, gameDir)
                 };
 
                 _cache[appId] = info;
@@ -144,6 +143,18 @@ public sealed class GameCache
         }
 
         return count;
+    }
+
+    /// <summary>
+    /// Extracts the first-level subfolder name of <paramref name="gameDir"/> relative to <paramref name="basePath"/>.
+    /// E.g. basePath=C:\Games, gameDir=C:\Games\Aphelion\...\Win64 → "Aphelion".
+    /// </summary>
+    private static string ExtractGameName(string basePath, string gameDir)
+    {
+        var baseFull = Path.TrimEndingDirectorySeparator(Path.GetFullPath(basePath));
+        var gameFull = Path.GetFullPath(gameDir);
+        var relative = Path.GetRelativePath(baseFull, gameFull);
+        return relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
     }
 
     private static string ReadAppId(string appIdFilePath)
@@ -164,8 +175,9 @@ public sealed class GameCache
             var json = File.ReadAllText(gameInfo.MetadataPath);
             return AchievementMetadata.ParseDefinitions(json);
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.Warn($"Failed to load achievement definitions for appid {gameInfo.AppId} from '{gameInfo.MetadataPath}': {ex.Message}");
             return null;
         }
     }

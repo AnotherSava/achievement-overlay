@@ -81,8 +81,6 @@ public class AchievementMetadataTests : IDisposable
         Assert.Equal(2, defs.Count);
         Assert.Equal("ACH01", defs[0].Name);
         Assert.Equal("ACH02", defs[1].Name);
-        Assert.Equal(0, defs[0].Hidden);
-        Assert.Equal(1, defs[1].Hidden);
     }
 
     [Fact]
@@ -90,6 +88,24 @@ public class AchievementMetadataTests : IDisposable
     {
         var defs = AchievementMetadata.ParseDefinitions("[]");
         Assert.Empty(defs);
+    }
+
+    [Fact]
+    public void ParseDefinitions_AphelionStyleStringQuotedHidden_DoesNotThrow()
+    {
+        // Aphelion ships achievements.json with `"hidden": "1"` (string) instead of integer.
+        // We don't consume the field, but earlier versions declared it as int and threw on parse.
+        var json = """
+        [
+            {"name": "ACH01", "displayName": "Augmented Reality", "hidden": "1", "icon": "ach.jpg"}
+        ]
+        """;
+
+        var defs = AchievementMetadata.ParseDefinitions(json);
+
+        Assert.Single(defs);
+        Assert.Equal("ACH01", defs[0].Name);
+        Assert.Equal("ach.jpg", defs[0].Icon);
     }
 
     // --- GetDisplayText tests ---

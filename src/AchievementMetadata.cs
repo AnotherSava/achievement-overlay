@@ -35,12 +35,6 @@ public sealed class AchievementDefinition
 
     [JsonPropertyName("icon")]
     public string? Icon { get; set; }
-
-    [JsonPropertyName("icon_gray")]
-    public string? IconGray { get; set; }
-
-    [JsonPropertyName("hidden")]
-    public int Hidden { get; set; }
 }
 
 public static class AchievementMetadata
