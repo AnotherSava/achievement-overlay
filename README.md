@@ -37,6 +37,7 @@ You can also build the most recent (and potentially less stable) version [from s
 Right-click the tray icon for these options:
 
 - **Show recent** *(keyboard shortcut)* — display recent achievements. Press again or Esc to dismiss.
+- **Add game…** — open the [Add game](#adding-a-game) dialog to generate achievement metadata for a game and start tracking it
 - **Sound enabled** — toggle notification sound
 - **Pause notifications** — suppress popups while checked (resets on restart)
 - **Start with Windows** — add/remove from Windows startup via registry
@@ -61,6 +62,8 @@ A `config.json` file ships next to the executable with sensible defaults. Edit i
 | `displayDuration` | How long the unlock notification stays on screen, in seconds. | `7` |
 | `recentAchievementsShortcut` | Global keyboard shortcut to show/hide recent achievements. | `Ctrl+Shift+H` |
 | `recentAchievementsCount` | Number of recent achievements to display. | `5` |
+| `steamWebApiKey` | Steam Web API key used by [Add game…](#adding-a-game). Set via the dialog; you rarely edit it by hand. | (none) |
+| `firecrawlApiKey` | Optional [Firecrawl](https://firecrawl.dev) API key, used to fetch hidden-achievement descriptions from SteamDB. | (none) |
 
 ### Example config
 
@@ -77,6 +80,27 @@ A `config.json` file ships next to the executable with sensible defaults. Edit i
 }
 ```
 
+## Adding a game
+
+For the overlay to show anything, each game needs a `steam_settings/achievements.json` next to its `steam_api64.dll`. The app can generate this for you — right-click the tray icon and choose **Add game…** to launch a short wizard. It's a self-contained replacement for the unmaintained `generate_emu_config` tool.
+
+The wizard only asks for what it can't work out on its own:
+
+1. **Game folder** — pick the game's install folder. The wizard finds the Steam DLL below it (even nested deep in an Unreal Engine layout) and tries to detect the AppID.
+2. **Steam AppID** — shown only if the AppID couldn't be detected from the game folder. If a Steam store search guessed one, it's pre-filled for you to verify.
+3. **Steam Web API key** — shown only the first time (it's saved to `config.json` and reused afterwards). Required for the achievement schema; get one at [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey). The key is stored unencrypted; if that's a concern, you can revoke it right after the game is added — it's only needed while adding a game, and you'll just enter a fresh key next time you add one.
+4. **Hidden achievements** — shown only if the game actually has hidden achievements and you haven't already saved a Firecrawl API key. Steam blanks out the descriptions of secret achievements; the real text lives on SteamDB (behind Cloudflare), so the tool fetches it through [Firecrawl](https://firecrawl.dev), a hosted scraper. Paste a free Firecrawl API key, or leave it blank to skip (those descriptions stay as placeholders).
+5. **Ready** — review the summary and options (back up the original DLL, and an **Advanced** section for the GBE release folder), then click **Add game**.
+
+It then fetches the achievement icons from Steam, downloads the matching GBE release, backs up and replaces the Steam DLL, and writes a `steam_settings/` folder with GBE's own overlay disabled (this app replaces it) — showing live progress on the final page. When it finishes, the game's folder is added to `gamesPaths` if needed and the overlay starts tracking it immediately — no restart.
+
+If a configuration already exists for the game, the wizard shows its location and asks before overwriting it.
+
+Notes:
+
+- **Denuvo games** — these won't load `steam_api64.dll`. If Denuvo is detected with no crack present, the tool stops before changing anything.
+- **Windows Defender** — current GBE releases sometimes trigger a false positive on download. If that happens, the wizard offers to add the needed Defender exclusions (with a UAC prompt) and retries automatically. Alternatively, point the Advanced **GBE release folder** at an already-extracted release and uncheck "Download the latest GBE release".
+
 ## Troubleshooting
 
 The app writes a log file (`overlay.log`) next to the config file (use the tray context menu to find it). Check it for diagnostic information. Look for `[WARN]` and `[ERROR]` entries.
@@ -89,7 +113,7 @@ The app shows an error dialog on startup if the config is missing, has invalid J
 - **Invalid JSON** — fix the syntax in `config.json`. Use the [example config](#example-config) above as a reference.
 - **Invalid settings** — required fields like `gseSavesPaths`, `gamesPaths`, `displayDuration`, or `recentAchievementsCount` may be missing or have invalid values.
 - **GSE Saves directory does not exist** — check that `gseSavesPaths` points to valid directories (default: `%appdata%\GSE Saves`). Non-existent paths are logged as warnings and skipped; the app exits only if none are valid.
-- **No games with achievement metadata found** — check that `gamesPaths` points to directories containing games with `steam_appid.txt` and `steam_settings/achievements.json`. Generate metadata using [generate_emu_config](https://github.com/Detanup01/gbe_fork_tools/tree/main/generate_emu_config_old) if needed.
+- **No games with achievement metadata found** — check that `gamesPaths` points to directories containing games with `steam_appid.txt` and `steam_settings/achievements.json`. Generate metadata with the tray [Add game…](#adding-a-game) dialog if needed.
 
 ### Game is not found
 
@@ -97,7 +121,7 @@ If the log shows `[WARN] Game path does not exist`, check that `gamesPaths` in `
 
 If the game doesn't appear in the log at all, make sure its directory is under one of the paths listed in `gamesPaths` and that it has a `steam_appid.txt` file (either in the game root or inside `steam_settings/`).
 
-If the log shows `[WARN] Skipped: appid=... (no 'achievements.json')`, the game is detected but has no achievement metadata. Generate it using [generate_emu_config](https://github.com/Detanup01/gbe_fork_tools/tree/main/generate_emu_config_old) and restart the app.
+If the log shows `[WARN] Skipped: appid=... (no 'achievements.json')`, the game is detected but has no achievement metadata. Generate it with the tray [Add game…](#adding-a-game) dialog.
 
 If no games are found at all, the app exits with an error dialog — check `gamesPaths` in config.
 
@@ -144,7 +168,7 @@ This project is planning to apply for free code signing through [SignPath Founda
 
 **You can help!** Star the repo, fork it, or contribute — growing the community brings us closer to getting a trusted code signing certificate.
 
-**Privacy:** This program will not transfer any information to other networked systems.
+**Privacy:** The overlay's normal operation (watching for unlocks and showing notifications) transfers no information to other networked systems. The optional **Add game** feature does make outbound requests — to the Steam Web API, the Steam store, Firecrawl (which scrapes SteamDB), and GitHub — solely to fetch achievement metadata, icons, hidden-achievement descriptions, and GBE binaries.
 
 ## License
 

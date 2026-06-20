@@ -83,6 +83,17 @@ public sealed class AchievementWatcher : IDisposable
     }
 
     /// <summary>
+    /// Re-seeds already-earned achievements for the given appids from disk, so a
+    /// newly added game's existing unlocks don't replay as notifications. Idempotent.
+    /// </summary>
+    public void ReseedKnownAppIds(IEnumerable<string> appIds)
+    {
+        var ids = appIds.ToArray();
+        foreach (var path in _gseSavesPaths)
+            SeedExistingAchievementsFromDirectory(path, ids);
+    }
+
+    /// <summary>
     /// Stops watching.
     /// </summary>
     public void Stop()

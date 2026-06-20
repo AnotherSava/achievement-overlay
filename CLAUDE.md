@@ -6,6 +6,24 @@ C# WPF app — Steam-like achievement overlay notifications for GBE-configured g
 
 Stack: .NET 10, WinForms tray + WPF overlay window.
 
+## Config generator (Add game dialog)
+
+The tray menu's **Add game…** item opens `AddGameForm` — a wizard (despite the legacy class name) that is a self-contained replacement for the unmaintained `generate_emu_config`. It walks through pages (game folder → AppID, shown only if not auto-detected → API key, shown only if not already saved → hidden-achievements/Firecrawl-key, shown only if the fetched schema has hidden achievements and no Firecrawl key is saved → ready/options → progress). Detection happens when leaving the folder page; the achievement schema is fetched when leaving the last input page (to validate the AppID/key and decide the hidden step) and reused by the generator via the `prefetchedSchema` ctor arg. It produces a GBE-compatible `steam_settings/` folder: locates the Steam DLL, resolves the AppID, fetches the achievement schema + icons from the Steam Web API, fills in hidden descriptions by scraping SteamDB through the Firecrawl API (`SteamDbScraper`; SteamDB is behind Cloudflare so a plain HttpClient can't reach it), downloads the GBE release (`SharpCompress` for 7z), backs up and replaces the DLL, and writes `steam_interfaces.txt` via GBE's bundled tool.
+
+The engine lives under `src/GbeConfig/`. Modules keep parsing logic in pure static methods (unit-tested in `tests/GbeConfig/`) separate from the network/IO/subprocess work in `GbeConfigGenerator`, which is front-end agnostic — it reports progress through `IConfigProgress` (the dialog implements it to drive its checklist + log) and takes a `ConfigRequest`. The Steam Web API key and optional Firecrawl API key are stored as optional fields in the app's own `config.json` (via `SettingsData`/`AppConfig`).
+
+After a run, `TrayApplicationContext.RegisterNewGame` ensures the game's folder is covered by `gamesPaths` (using `GamesPathPlanner`), rescans `GameCache`, and re-seeds the watcher so the game is tracked without a restart.
+
+The original plan for this feature (written for a CLI; the front-end was later changed to the dialog) is at `docs/plans/completed/2026-06-18-gbe-config-generator.md`.
+
+## Config files
+
+`config/default.json` is the committed config that ships as `config.json` next to the exe. For local
+builds/deploys, a gitignored `config/local.json` takes precedence (the csproj links whichever exists,
+preferring local) — use it to keep your personal `steamWebApiKey` / `firecrawlApiKey` out of git. On
+CI/release builds `local.json` doesn't exist, so `default.json` is used. `config/local.json` is
+created from the committed defaults plus credential placeholders; fill them in after first checkout.
+
 ## Build & Test
 
 ```

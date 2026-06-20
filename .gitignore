@@ -17,5 +17,8 @@ config.json
 # Local deploy config (machine-specific install path)
 config/deploy.env
 
+# Local development config (overrides default.json; holds personal Steam Web API key / Firecrawl API key)
+config/local.json
+
 # Dev scripts
 scripts/

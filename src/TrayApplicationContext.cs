@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Text.Json;
 using System.Windows.Forms;
+using AchievementOverlay.GbeConfig;
 
 namespace AchievementOverlay;
 
@@ -28,6 +29,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private Icon? _activeIcon;
     private Icon? _pausedIcon;
+    private AddGameForm? _addGameForm;
     private bool _disposed;
 
     public TrayApplicationContext()
@@ -148,9 +150,13 @@ public sealed class TrayApplicationContext : ApplicationContext
             recentItem.ShortcutKeyDisplayString = _config.RecentAchievementsShortcut;
         recentItem.Click += (_, _) => _recentDisplay.Toggle();
 
+        var addGameItem = new ToolStripMenuItem("Add game…");
+        addGameItem.Click += (_, _) => OpenAddGameDialog();
+
         _trayIcon.ContextMenuStrip.Items.AddRange(new ToolStripItem[]
         {
             recentItem,
+            addGameItem,
             new ToolStripSeparator(),
             _soundEnabledItem,
             _pauseItem,
@@ -183,6 +189,46 @@ public sealed class TrayApplicationContext : ApplicationContext
     private void OnNewAchievement(object? sender, NewAchievementEventArgs e)
     {
         _notificationQueue.Enqueue(e);
+    }
+
+    private void OpenAddGameDialog()
+    {
+        if (_addGameForm != null)
+        {
+            _addGameForm.Activate();
+            return;
+        }
+
+        _addGameForm = new AddGameForm(_config, RegisterNewGame);
+        try
+        {
+            _addGameForm.ShowDialog();
+        }
+        finally
+        {
+            _addGameForm.Dispose();
+            _addGameForm = null;
+        }
+    }
+
+    /// <summary>
+    /// Called after a game is configured: ensures its folder is covered by gamesPaths,
+    /// then rescans so the overlay tracks it without a restart.
+    /// </summary>
+    private void RegisterNewGame(string gameDir)
+    {
+        var rootToAdd = GamesPathPlanner.PlanRootToAdd(_config.GamesPaths, gameDir);
+        if (rootToAdd != null)
+        {
+            var raw = _config.GetCurrent().GamesPaths;
+            var newRaw = string.IsNullOrWhiteSpace(raw) ? rootToAdd : raw.TrimEnd(';') + ";" + rootToAdd;
+            _config.UpdateConfigValue(nameof(SettingsData.GamesPaths), newRaw);
+            Logger.Info($"Added games path '{rootToAdd}' to config.");
+        }
+
+        _gameCache.ScanAll();
+        _watcher.ReseedKnownAppIds(_gameCache.GetAllAppIds());
+        Logger.Info($"Game cache now has {_gameCache.GetAll().Count} game(s) after Add game.");
     }
 
     private void ExitApplication()

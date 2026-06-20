@@ -45,6 +45,8 @@ public sealed class AppConfig
     public int DisplayDuration { get { Reload(); return _settings.DisplayDuration; } }
     public string RecentAchievementsShortcut { get { Reload(); return _settings.RecentAchievementsShortcut; } }
     public int RecentAchievementsCount { get { Reload(); return _settings.RecentAchievementsCount; } }
+    public string? SteamWebApiKey { get { Reload(); return _settings.SteamWebApiKey; } }
+    public string? FirecrawlApiKey { get { Reload(); return _settings.FirecrawlApiKey; } }
 
     private string[]? _gseSavesPaths;
     private string[]? _gamesPaths;
@@ -268,4 +270,12 @@ public sealed class SettingsData
 
     [JsonPropertyName("recentAchievementsCount")]
     public int RecentAchievementsCount { get; set; }
+
+    // --- Config generator settings (optional; used by the Add-game dialog) ---
+
+    [JsonPropertyName("steamWebApiKey")]
+    public string? SteamWebApiKey { get; set; }
+
+    [JsonPropertyName("firecrawlApiKey")]
+    public string? FirecrawlApiKey { get; set; }
 }

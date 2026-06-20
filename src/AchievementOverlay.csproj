@@ -17,6 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="SharpCompress" Version="0.*" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Remove="System.Drawing" />
   </ItemGroup>
 
@@ -26,7 +30,15 @@
     <EmbeddedResource Include="Assets\connoisseur.jpg" LogicalName="AchievementOverlay.connoisseur.jpg" />
   </ItemGroup>
 
-  <ItemGroup>
+  <!--
+    config.json shipped next to the exe. For local builds/deploys, a gitignored config\local.json
+    (with your real Steam Web API key / Firecrawl API key) takes precedence; otherwise the committed
+    config\default.json is used (e.g. on CI / release builds, where local.json doesn't exist).
+  -->
+  <ItemGroup Condition="Exists('..\config\local.json')">
+    <None Include="..\config\local.json" Link="config.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup Condition="!Exists('..\config\local.json')">
     <None Include="..\config\default.json" Link="config.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 

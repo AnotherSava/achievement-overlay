@@ -13,7 +13,7 @@ static class Program
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Application.SetHighDpiMode(HighDpiMode.SystemAware);
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
 
         // Initialize WPF application for dispatcher support
         // (needed for WPF overlay windows within WinForms lifecycle)
