@@ -233,6 +233,53 @@ public class AchievementMetadataTests : IDisposable
     }
 
     [Fact]
+    public void ResolveIconPath_BareFilename_FallsBackToAchievementImagesDir()
+    {
+        // Configs from other tools (generate_emu_config, Aphelion) store a bare filename
+        // with no subfolder. GBE resolves these against achievement_images/ — so must we.
+        var imgDir = Path.Combine(_tempDir, "achievement_images");
+        Directory.CreateDirectory(imgDir);
+        var iconPath = Path.Combine(imgDir, "ach01.jpg");
+        File.WriteAllText(iconPath, "fake image");
+
+        var def = new AchievementDefinition { Name = "ACH01", Icon = "ach01.jpg" };
+        var result = AchievementMetadata.ResolveIconPath(def, _tempDir);
+
+        Assert.Equal(iconPath, result);
+    }
+
+    [Fact]
+    public void ResolveIconPath_BareFilenameWithoutExtension_FallsBackToAchievementImagesDir()
+    {
+        var imgDir = Path.Combine(_tempDir, "achievement_images");
+        Directory.CreateDirectory(imgDir);
+        var iconPath = Path.Combine(imgDir, "ach01.png");
+        File.WriteAllText(iconPath, "fake image");
+
+        var def = new AchievementDefinition { Name = "ACH01", Icon = "ach01" };
+        var result = AchievementMetadata.ResolveIconPath(def, _tempDir);
+
+        Assert.Equal(iconPath, result);
+    }
+
+    [Fact]
+    public void ResolveIconPath_VerbatimPathPreferredOverFallback()
+    {
+        // A file that exists at the literal path must win over the achievement_images/ fallback.
+        var iconPath = Path.Combine(_tempDir, "ach01.jpg");
+        File.WriteAllText(iconPath, "verbatim");
+
+        var imgDir = Path.Combine(_tempDir, "achievement_images");
+        Directory.CreateDirectory(imgDir);
+        File.WriteAllText(Path.Combine(imgDir, "ach01.jpg"), "fallback");
+
+        var def = new AchievementDefinition { Name = "ACH01", Icon = "ach01.jpg" };
+        var result = AchievementMetadata.ResolveIconPath(def, _tempDir);
+
+        Assert.Equal(iconPath, result);
+    }
+
+    [Fact]
     public void ResolveIconPath_FileNotFound_ReturnsNull()
     {
         var def = new AchievementDefinition { Name = "ACH01", Icon = "img/ach01.png" };

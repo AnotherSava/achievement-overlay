@@ -113,8 +113,16 @@ public static class AchievementMetadata
     }
 
     /// <summary>
-    /// Resolves the icon file path for an achievement. Looks for the icon filename
-    /// in the game's steam_settings/images/ directory relative to the metadata path.
+    /// Default subfolder GBE falls back to when an icon path is not found verbatim.
+    /// </summary>
+    private const string DefaultImageDir = "achievement_images";
+
+    /// <summary>
+    /// Resolves the icon file path for an achievement, relative to the game's
+    /// steam_settings/ directory. Mirrors GBE's lookup (steam_user_stats_achievements.cpp):
+    /// try the icon path verbatim first, then fall back to the achievement_images/ subfolder.
+    /// Configs from other tools often store a bare filename ("ACH01.jpg") that only
+    /// resolves via the fallback.
     /// </summary>
     public static string? ResolveIconPath(AchievementDefinition definition, string metadataDir)
     {
@@ -126,14 +134,25 @@ public static class AchievementMetadata
         var metaDirFull = Path.GetFullPath(metadataDir) + Path.DirectorySeparatorChar;
 
         // Icon paths in the schema are relative to steam_settings/ (e.g. "img/abc123.jpg")
-        var exactPath = Path.GetFullPath(Path.Combine(metadataDir, iconName));
-        if (exactPath.StartsWith(metaDirFull, StringComparison.OrdinalIgnoreCase) && File.Exists(exactPath))
-            return exactPath;
+        return TryResolve(Path.Combine(metadataDir, iconName), metaDirFull)
+               // Fall back to the achievement_images/ subfolder, as GBE does
+               ?? TryResolve(Path.Combine(metadataDir, DefaultImageDir, iconName), metaDirFull);
+    }
+
+    /// <summary>
+    /// Returns <paramref name="candidate"/> (or a variant with a common image extension)
+    /// if it exists and stays within <paramref name="metaDirFull"/>; otherwise null.
+    /// </summary>
+    private static string? TryResolve(string candidate, string metaDirFull)
+    {
+        var fullPath = Path.GetFullPath(candidate);
+        if (fullPath.StartsWith(metaDirFull, StringComparison.OrdinalIgnoreCase) && File.Exists(fullPath))
+            return fullPath;
 
         // Try with common extensions
         foreach (var ext in new[] { ".jpg", ".png", ".bmp", ".ico" })
         {
-            var withExt = exactPath + ext;
+            var withExt = fullPath + ext;
             if (withExt.StartsWith(metaDirFull, StringComparison.OrdinalIgnoreCase) && File.Exists(withExt))
                 return withExt;
         }
