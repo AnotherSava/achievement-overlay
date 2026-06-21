@@ -16,6 +16,11 @@
             Background="#DD1A1A2E"
             CornerRadius="8"
             Padding="12">
+        <!-- The whole popup is laid out at a fixed design size and scaled uniformly so the
+             font, icon, spacing and text-wrap width always keep the same proportions. -->
+        <Border.LayoutTransform>
+            <ScaleTransform x:Name="RootScale" ScaleX="1" ScaleY="1" />
+        </Border.LayoutTransform>
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -23,6 +28,8 @@
             </Grid.ColumnDefinitions>
             <Image x:Name="AchievementIcon"
                    Grid.Column="0"
+                   Width="56"
+                   Height="56"
                    Stretch="UniformToFill"
                    VerticalAlignment="Top"
                    Margin="0,0,12,0" />
@@ -32,6 +39,8 @@
                            DockPanel.Dock="Bottom"
                            Foreground="#99AAAAAA"
                            FontSize="10"
+                           Width="230"
+                           TextWrapping="Wrap"
                            Margin="0,4,0,0"
                            Visibility="Collapsed" />
                 <StackPanel DockPanel.Dock="Top"
@@ -40,10 +49,12 @@
                                Foreground="White"
                                FontWeight="Bold"
                                FontSize="14"
+                               Width="230"
                                TextWrapping="Wrap" />
                     <TextBlock x:Name="AchievementDescription"
                                Foreground="#CCAAAAAA"
                                FontSize="12"
+                               Width="230"
                                TextWrapping="Wrap"
                                Margin="0,2,0,0" />
                 </StackPanel>

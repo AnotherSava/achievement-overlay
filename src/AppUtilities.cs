@@ -99,10 +99,11 @@ public static class AppUtilities
             {
                 var screen = Screen.FromHandle(hwnd);
                 var wa = screen.WorkingArea;
-                var primaryDpiScale = SystemParameters.PrimaryScreenHeight > 0
-                    ? Screen.PrimaryScreen!.Bounds.Height / SystemParameters.PrimaryScreenHeight
-                    : 1.0;
-                return new Rect(wa.Left / primaryDpiScale, wa.Top / primaryDpiScale, wa.Width / primaryDpiScale, wa.Height / primaryDpiScale);
+                // Convert physical pixels using THIS monitor's own DPI — that's the coordinate space
+                // WPF uses for Window.Left/Top (the window's own monitor), so placement is correct
+                // on every display regardless of the primary monitor's scale.
+                var scale = GetMonitorScale(hwnd);
+                return new Rect(wa.Left / scale, wa.Top / scale, wa.Width / scale, wa.Height / scale);
             }
         }
         catch
@@ -114,6 +115,51 @@ public static class AppUtilities
         return new Rect(0, 0, area.Width, area.Height);
     }
 
+    /// <summary>
+    /// Width of the foreground window's monitor work area in that monitor's OWN logical units
+    /// (physical pixels ÷ that monitor's DPI scale). Used to size the popup proportionally to the
+    /// display it actually appears on, independent of the primary monitor's DPI/zoom.
+    /// </summary>
+    public static double GetForegroundLogicalWidth()
+    {
+        try
+        {
+            var hwnd = GetForegroundWindow();
+            if (hwnd != IntPtr.Zero)
+            {
+                var screen = Screen.FromHandle(hwnd);
+                return screen.WorkingArea.Width / GetMonitorScale(hwnd);
+            }
+        }
+        catch
+        {
+            // Fall through to default
+        }
+
+        return SystemParameters.WorkArea.Width;
+    }
+
+    /// <summary>
+    /// Effective DPI scale (1.0 = 100%) of the monitor containing the given window, queried per-monitor
+    /// so it reflects that display's actual zoom regardless of any process's DPI awareness.
+    /// </summary>
+    private static double GetMonitorScale(IntPtr hwnd)
+    {
+        var hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        if (hmon != IntPtr.Zero && GetDpiForMonitor(hmon, MDT_EFFECTIVE_DPI, out var dpiX, out _) == 0 && dpiX > 0)
+            return dpiX / 96.0;
+        return 1.0;
+    }
+
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
+    private const int MDT_EFFECTIVE_DPI = 0;
+
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 }

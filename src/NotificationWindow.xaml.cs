@@ -10,9 +10,14 @@ namespace AchievementOverlay;
 public partial class NotificationWindow : Window
 {
     private const double WindowWidthFraction = 0.15;
-    private const double IconSizeFraction = 0.25;
     private const double MarginFraction = 0.02;
     private const double SlideDistanceFraction = 0.015;
+    // Fixed design width (DIU) at scale 1: padding 24 + icon 56 + icon margin 12 + text 230.
+    // Every popup is this width (× scale), so notifications never vary in width.
+    private const double BaseOuterWidth = 322;
+    private const double IconBaseSize = 56;      // matches AchievementIcon Width/Height in XAML
+    private const double MinScale = 0.75;
+    private const double MaxScale = 2.5;
 
     private static readonly Duration SlideDuration = new(TimeSpan.FromMilliseconds(300));
     private static readonly Duration FadeDuration = new(TimeSpan.FromMilliseconds(500));
@@ -45,10 +50,26 @@ public partial class NotificationWindow : Window
         AchievementDescription.Text = description;
         AchievementDescription.Visibility = string.IsNullOrEmpty(description) ? Visibility.Collapsed : Visibility.Visible;
 
-        LoadIcon(iconPath, gameWindowRect.Width);
+        var scale = ApplyScale();
+        LoadIcon(iconPath, scale);
         SizeAndPosition(gameWindowRect);
         Show();
         StartSlideIn();
+    }
+
+    /// <summary>
+    /// Computes a uniform scale from the foreground display's logical width and applies it to the
+    /// whole popup, so font, icon, padding and text-wrap width always keep the same proportions.
+    /// Uses the foreground monitor's own DPI (not the primary's), so the popup is sized for the
+    /// display it appears on.
+    /// </summary>
+    private double ApplyScale()
+    {
+        var targetWidth = Math.Max(250, AppUtilities.GetForegroundLogicalWidth() * WindowWidthFraction);
+        var scale = Math.Clamp(targetWidth / BaseOuterWidth, MinScale, MaxScale);
+        RootScale.ScaleX = scale;
+        RootScale.ScaleY = scale;
+        return scale;
     }
 
     /// <summary>
@@ -62,19 +83,31 @@ public partial class NotificationWindow : Window
         AchievementName.FontSize = 11;
         AchievementName.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF));
         AchievementName.TextAlignment = TextAlignment.Center;
+        // Span the full popup width (no icon column) so the footer matches the achievement windows.
+        AchievementName.MaxWidth = BaseOuterWidth;
+        AchievementName.Width = BaseOuterWidth - 24; // minus RootBorder padding (12 each side)
         AchievementDescription.Visibility = Visibility.Collapsed;
 
-        var notificationWidth = Math.Max(250, gameWindowRect.Width * WindowWidthFraction);
-        MaxWidth = notificationWidth;
-        MinWidth = notificationWidth;
-        var margin = Math.Min(gameWindowRect.Width, gameWindowRect.Height) * MarginFraction;
-        Left = gameWindowRect.Right - notificationWidth - margin;
-        Top = customTop;
-        _slideDistance = slideUpDistance;
-        _recentMode = true;
+        var scale = ApplyScale();
+        PlaceRightAligned(gameWindowRect, scale, customTop, slideUpDistance);
 
         Show();
         StartSlideIn();
+    }
+
+    /// <summary>
+    /// Measures the (already-scaled) content and places the window right-aligned to the game window
+    /// at the given top, in recent/footer mode (no auto-dismiss).
+    /// </summary>
+    private void PlaceRightAligned(Rect gameWindowRect, double scale, double customTop, double slideUpDistance)
+    {
+        var margin = Math.Min(gameWindowRect.Width, gameWindowRect.Height) * MarginFraction;
+        Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var width = DesiredSize.Width > 0 ? DesiredSize.Width : BaseOuterWidth * scale;
+        Left = gameWindowRect.Right - width - margin;
+        Top = customTop;
+        _slideDistance = slideUpDistance;
+        _recentMode = true;
     }
 
     /// <summary>
@@ -92,16 +125,9 @@ public partial class NotificationWindow : Window
             GameInfoText.Visibility = Visibility.Visible;
         }
 
-        LoadIcon(iconPath, gameWindowRect.Width);
-
-        var notificationWidth = Math.Max(250, gameWindowRect.Width * WindowWidthFraction);
-        MaxWidth = notificationWidth;
-        MinWidth = notificationWidth;
-        var margin = Math.Min(gameWindowRect.Width, gameWindowRect.Height) * MarginFraction;
-        Left = gameWindowRect.Right - notificationWidth - margin;
-        Top = customTop;
-        _slideDistance = slideUpDistance;
-        _recentMode = true;
+        var scale = ApplyScale();
+        LoadIcon(iconPath, scale);
+        PlaceRightAligned(gameWindowRect, scale, customTop, slideUpDistance);
 
         Show();
         StartSlideIn();
@@ -116,11 +142,11 @@ public partial class NotificationWindow : Window
         StartFadeOut();
     }
 
-    private void LoadIcon(string? iconPath, double gameWindowWidth)
+    private void LoadIcon(string? iconPath, double scale)
     {
-        var iconSize = Math.Max(32, gameWindowWidth * WindowWidthFraction * IconSizeFraction);
-        AchievementIcon.Width = iconSize;
-        AchievementIcon.Height = iconSize;
+        // The icon box is a fixed design size (scaled by the root transform); decode/render the
+        // source at the on-screen pixel size for crispness when scaled up.
+        var renderSize = IconBaseSize * Math.Max(1.0, scale);
 
         if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
         {
@@ -130,7 +156,7 @@ public partial class NotificationWindow : Window
                 bitmap.BeginInit();
                 bitmap.UriSource = new Uri(iconPath, UriKind.Absolute);
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.DecodePixelWidth = (int)iconSize;
+                bitmap.DecodePixelWidth = (int)renderSize;
                 bitmap.EndInit();
                 bitmap.Freeze();
                 AchievementIcon.Source = bitmap;
@@ -143,7 +169,7 @@ public partial class NotificationWindow : Window
         }
 
         // Default trophy-like icon: a simple gold circle
-        AchievementIcon.Source = CreateDefaultIcon(iconSize);
+        AchievementIcon.Source = CreateDefaultIcon(renderSize);
     }
 
     private static BitmapSource CreateDefaultIcon(double size)
@@ -182,18 +208,17 @@ public partial class NotificationWindow : Window
 
     private void SizeAndPosition(Rect gameWindowRect)
     {
-        var notificationWidth = Math.Max(250, gameWindowRect.Width * WindowWidthFraction);
         var margin = Math.Min(gameWindowRect.Width, gameWindowRect.Height) * MarginFraction;
         _slideDistance = gameWindowRect.Height * SlideDistanceFraction;
-        MaxWidth = notificationWidth;
-        MinWidth = notificationWidth;
 
-        // Measure to get actual height
-        Measure(new Size(notificationWidth, double.PositiveInfinity));
-        var actualHeight = DesiredSize.Height > 0 ? DesiredSize.Height : 80;
+        // The window auto-sizes to the scaled content; measure to get its size for placement.
+        // gameWindowRect and DesiredSize are both in the target monitor's DIPs, so no conversion.
+        Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var width = DesiredSize.Width > 0 ? DesiredSize.Width : BaseOuterWidth;
+        var height = DesiredSize.Height > 0 ? DesiredSize.Height : 80;
 
-        Left = gameWindowRect.Right - notificationWidth - margin;
-        Top = gameWindowRect.Bottom - actualHeight - margin - _slideDistance;
+        Left = gameWindowRect.Right - width - margin;
+        Top = gameWindowRect.Bottom - height - margin - _slideDistance;
     }
 
     private void StartSlideIn()
