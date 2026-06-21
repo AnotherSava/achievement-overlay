@@ -77,6 +77,30 @@ public sealed class NotificationQueue : IDisposable
             return;
         }
 
+        EnqueueItem(item);
+    }
+
+    /// <summary>
+    /// Enqueues a synthetic notification with pre-resolved display data, bypassing the
+    /// game-schema lookup. Used for app-generated notifications (e.g. "tracking configured")
+    /// whose achievement name is not present in any game's achievements.json.
+    /// </summary>
+    public void EnqueueSynthetic(string appId, string title, string description, string? iconPath)
+    {
+        if (_disposed)
+            return;
+
+        EnqueueItem(new NotificationItem
+        {
+            AppId = appId,
+            AchievementName = title,
+            Description = description,
+            IconPath = iconPath
+        });
+    }
+
+    private void EnqueueItem(NotificationItem item)
+    {
         _queue.Enqueue(item);
         Logger.Info($"Queued notification: {item.AchievementName} (queue size: {_queue.Count})");
 

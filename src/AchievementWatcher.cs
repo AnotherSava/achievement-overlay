@@ -15,6 +15,15 @@ public sealed class NewAchievementEventArgs : EventArgs
 }
 
 /// <summary>
+/// Event data for a newly created per-game folder under a GSE Saves path
+/// (e.g. GSE Saves/1601580/), signalling that the emulator ran for that appid.
+/// </summary>
+public sealed class GameFolderCreatedEventArgs : EventArgs
+{
+    public required string AppId { get; init; }
+}
+
+/// <summary>
 /// Watches the GSE Saves directory for achievements.json changes.
 /// Detects new achievement unlocks by diffing against cached state
 /// and raises NewAchievement events.
@@ -38,6 +47,12 @@ public sealed class AchievementWatcher : IDisposable
     private readonly TimeSpan _retryDelay;
 
     public event EventHandler<NewAchievementEventArgs>? NewAchievement;
+
+    /// <summary>
+    /// Raised when a new top-level per-game folder appears under a GSE Saves path,
+    /// i.e. the emulator created GSE Saves/&lt;appid&gt;/ on first run.
+    /// </summary>
+    public event EventHandler<GameFolderCreatedEventArgs>? GameFolderCreated;
 
     public AchievementWatcher(
         string[] gseSavesPaths,
@@ -78,7 +93,35 @@ public sealed class AchievementWatcher : IDisposable
             watcher.EnableRaisingEvents = true;
             _watchers.Add(watcher);
 
+            // The achievements.json filter above does not fire on bare folder creation, so a second
+            // watcher tracks new top-level appid folders (the emulator's first-run signal).
+            var dirWatcher = new FileSystemWatcher(path)
+            {
+                IncludeSubdirectories = false,
+                NotifyFilter = NotifyFilters.DirectoryName
+            };
+            dirWatcher.Created += OnDirectoryCreated;
+            dirWatcher.Error += (_, e) => Logger.Warn($"FileSystemWatcher (dir) error: {e.GetException().Message}");
+            dirWatcher.EnableRaisingEvents = true;
+            _watchers.Add(dirWatcher);
+
             Logger.Info($"Watching for achievements in '{path}'");
+        }
+    }
+
+    /// <summary>
+    /// Returns the appid (folder names) of every top-level subdirectory across all watched
+    /// GSE Saves paths. Used to detect already-existing game folders at startup.
+    /// </summary>
+    public IEnumerable<string> GetExistingAppIdFolders()
+    {
+        foreach (var path in _gseSavesPaths)
+        {
+            if (!Directory.Exists(path))
+                continue;
+
+            foreach (var dir in Directory.GetDirectories(path))
+                yield return Path.GetFileName(dir);
         }
     }
 
@@ -117,6 +160,16 @@ public sealed class AchievementWatcher : IDisposable
     }
 
     public void Dispose() => Stop();
+
+    private void OnDirectoryCreated(object sender, FileSystemEventArgs e)
+    {
+        var appId = Path.GetFileName(e.FullPath);
+        if (string.IsNullOrEmpty(appId))
+            return;
+
+        Logger.Info($"New GSE Saves folder detected: appid={appId}");
+        GameFolderCreated?.Invoke(this, new GameFolderCreatedEventArgs { AppId = appId });
+    }
 
     private void OnFileChanged(object sender, FileSystemEventArgs e)
     {

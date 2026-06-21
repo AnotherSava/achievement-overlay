@@ -32,6 +32,10 @@ public sealed class TrayApplicationContext : ApplicationContext
     private AddGameForm? _addGameForm;
     private bool _disposed;
 
+    // Appids already evaluated for the synthetic "tracking configured" notification this session,
+    // guarding against a double-fire from the startup scan and a live folder-creation event.
+    private readonly HashSet<string> _trackingNotified = new();
+
     public TrayApplicationContext()
     {
         Logger.Init();
@@ -83,7 +87,13 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         _watcher = new AchievementWatcher(validSavesPaths);
         _watcher.NewAchievement += OnNewAchievement;
+        _watcher.GameFolderCreated += OnGameFolderCreated;
         _watcher.Start(_gameCache.GetAllAppIds());
+
+        // Fire the synthetic "tracking configured" notification for already-existing eligible folders
+        // (e.g. games configured and run before this app started).
+        foreach (var appId in _watcher.GetExistingAppIdFolders())
+            TryNotifyTrackingConfigured(appId);
 
         _achievementHistory = new AchievementHistory(_config, _gameCache);
         _recentDisplay = new RecentAchievementsDisplay(_achievementHistory, _config, _soundPlayer);
@@ -189,6 +199,80 @@ public sealed class TrayApplicationContext : ApplicationContext
     private void OnNewAchievement(object? sender, NewAchievementEventArgs e)
     {
         _notificationQueue.Enqueue(e);
+    }
+
+    private void OnGameFolderCreated(object? sender, GameFolderCreatedEventArgs e)
+    {
+        TryNotifyTrackingConfigured(e.AppId);
+    }
+
+    /// <summary>
+    /// Shows the synthetic "Achievement tracking configured" notification for a game the first time
+    /// its GSE Saves folder is seen — once per game (persisted), and only while it has zero earned
+    /// achievements (so it never competes with a real first unlock).
+    /// </summary>
+    private void TryNotifyTrackingConfigured(string appId)
+    {
+        if (string.IsNullOrEmpty(appId))
+            return;
+
+        lock (_trackingNotified)
+        {
+            if (_trackingNotified.Contains(appId))
+                return;
+
+            var shown = _config.GetCurrent().TrackingConfigured ?? new Dictionary<string, long>();
+            if (shown.ContainsKey(appId))
+            {
+                _trackingNotified.Add(appId);
+                return;
+            }
+
+            // Only known/configured games qualify; leave unknown folders unguarded so they can be
+            // re-evaluated if the game becomes configured later this session.
+            var game = _gameCache.Contains(appId) ? _gameCache.Lookup(appId) : null;
+            if (game == null)
+                return;
+
+            var earnedCount = CountEarnedAchievements(appId);
+            if (!TrackingConfirmation.ShouldNotify(gameKnown: true, alreadyShown: false, earnedCount))
+                return;
+
+            _trackingNotified.Add(appId);
+            _notificationQueue.EnqueueSynthetic(
+                appId,
+                "Gearhead",
+                $"Configure achievement tracking for\n{game.GameName}",
+                EmbeddedAssets.GetTrackingConfiguredIconPath());
+            var updated = new Dictionary<string, long>(shown) { [appId] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
+            _config.UpdateConfigValue(nameof(SettingsData.TrackingConfigured), updated);
+            Logger.Info($"Showed 'tracking configured' for appid {appId} ({game.GameName}).");
+        }
+    }
+
+    /// <summary>
+    /// Counts earned achievements for a game by reading its GSE Saves achievements.json.
+    /// Returns 0 if the file does not exist yet (the common case at folder-creation time).
+    /// </summary>
+    private int CountEarnedAchievements(string appId)
+    {
+        foreach (var gseSavesPath in _config.GseSavesPaths)
+        {
+            var file = Path.Combine(gseSavesPath, appId, "achievements.json");
+            if (!File.Exists(file))
+                continue;
+
+            try
+            {
+                var states = AchievementMetadata.ParseUnlockStates(File.ReadAllText(file));
+                return states.Values.Count(s => s.Earned);
+            }
+            catch (Exception ex)
+            {
+                Logger.Info($"Could not read achievements for appid {appId}: {ex.Message}");
+            }
+        }
+        return 0;
     }
 
     private void OpenAddGameDialog()

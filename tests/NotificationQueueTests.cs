@@ -197,6 +197,18 @@ public class NotificationQueueTests : IDisposable
     }
 
     [Fact]
+    public void EnqueueSynthetic_QueuesItem_WithoutSchema()
+    {
+        var queue = new NotificationQueue(_gameCache, _config);
+
+        // An appid/title absent from any game schema — the normal Enqueue path would skip it.
+        queue.EnqueueSynthetic("99999", "Achievement tracking configured", "TestGame is set up.", iconPath: null);
+
+        // No Dispatcher pump runs in tests, so the item stays queued (cf. Dispose_ClearsQueue).
+        Assert.Equal(1, queue.Count);
+    }
+
+    [Fact]
     public void IsPaused_DefaultFalse()
     {
         var queue = new NotificationQueue(_gameCache, _config);

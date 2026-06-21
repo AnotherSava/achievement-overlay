@@ -278,4 +278,14 @@ public sealed class SettingsData
 
     [JsonPropertyName("firecrawlApiKey")]
     public string? FirecrawlApiKey { get; set; }
+
+    // --- App-managed state (not user-facing) ---
+
+    /// <summary>
+    /// Maps appid → unix time (seconds) when the synthetic "Achievement tracking configured"
+    /// notification first fired for that game. Presence means it has been shown (so it never
+    /// fires again); the value is used to timestamp the Recent-achievements entry. Updated at runtime.
+    /// </summary>
+    [JsonPropertyName("trackingConfigured")]
+    public Dictionary<string, long>? TrackingConfigured { get; set; }
 }

@@ -6,5 +6,6 @@
   "soundPath": "",
   "displayDuration": 7,
   "recentAchievementsShortcut": "Ctrl+Shift+H",
-  "recentAchievementsCount": 5
+  "recentAchievementsCount": 5,
+  "trackingConfigured": {}
 }

@@ -34,6 +34,7 @@ public sealed class AchievementHistory
     public List<AchievementHistoryEntry> GetRecent(int count)
     {
         var entries = new List<AchievementHistoryEntry>();
+        var trackingConfigured = _config.GetCurrent().TrackingConfigured ?? new Dictionary<string, long>();
 
         foreach (var gseSavesPath in _config.GseSavesPaths)
         {
@@ -46,6 +47,21 @@ public sealed class AchievementHistory
                 var gameInfo = _gameCache.Contains(appId) ? _gameCache.Lookup(appId) : null;
                 if (gameInfo == null)
                     continue;
+
+                // Synthetic "tracking configured" milestone, timestamped by when the notification
+                // first fired. Added even before any real unlock exists.
+                if (trackingConfigured.TryGetValue(appId, out var configuredTime))
+                {
+                    entries.Add(new AchievementHistoryEntry
+                    {
+                        AppId = appId,
+                        GameName = gameInfo.GameName,
+                        AchievementName = "Gearhead",
+                        Description = $"Configure achievement tracking for\n{gameInfo.GameName}",
+                        IconPath = EmbeddedAssets.GetTrackingConfiguredIconPath(),
+                        EarnedTime = configuredTime
+                    });
+                }
 
                 var achievementsFile = Path.Combine(dir, "achievements.json");
                 if (!File.Exists(achievementsFile))
@@ -89,29 +105,10 @@ public sealed class AchievementHistory
             GameName = "Achievement Overlay",
             AchievementName = "Achievement Connoisseur",
             Description = "Install and configure Achievement Overlay",
-            IconPath = GetSyntheticIconPath(),
+            IconPath = EmbeddedAssets.GetConnoisseurIconPath(),
             EarnedTime = installedTime
         });
 
         return entries.OrderByDescending(e => e.EarnedTime).Take(count).ToList();
-    }
-
-    private static string? _syntheticIconPath;
-
-    private static string? GetSyntheticIconPath()
-    {
-        if (_syntheticIconPath != null && File.Exists(_syntheticIconPath))
-            return _syntheticIconPath;
-
-        var stream = typeof(AchievementHistory).Assembly.GetManifestResourceStream("AchievementOverlay.connoisseur.jpg");
-        if (stream == null)
-            return null;
-
-        var tempPath = Path.Combine(Path.GetTempPath(), "AchievementOverlay_connoisseur.jpg");
-        using (var file = File.Create(tempPath))
-            stream.CopyTo(file);
-
-        _syntheticIconPath = tempPath;
-        return tempPath;
     }
 }
