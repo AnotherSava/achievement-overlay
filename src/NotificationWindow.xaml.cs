@@ -52,7 +52,7 @@ public partial class NotificationWindow : Window
 
         var scale = ApplyScale();
         LoadIcon(iconPath, scale);
-        SizeAndPosition(gameWindowRect);
+        SizeAndPosition(gameWindowRect, scale);
         Show();
         StartSlideIn();
     }
@@ -101,13 +101,22 @@ public partial class NotificationWindow : Window
     /// </summary>
     private void PlaceRightAligned(Rect gameWindowRect, double scale, double customTop, double slideUpDistance)
     {
-        var margin = Math.Min(gameWindowRect.Width, gameWindowRect.Height) * MarginFraction;
-        Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var width = DesiredSize.Width > 0 ? DesiredSize.Width : BaseOuterWidth * scale;
-        Left = gameWindowRect.Right - width - margin;
+        Left = RightAlignedLeft(gameWindowRect, scale, out _);
         Top = customTop;
         _slideDistance = slideUpDistance;
         _recentMode = true;
+    }
+
+    /// <summary>
+    /// Left coordinate that right-aligns the popup within the game rect at the given scale, plus the
+    /// edge margin used. Width is deterministic (BaseOuterWidth × scale): a pre-Show Measure on a
+    /// Window returns 0, and the content is all fixed-width, so the rendered width is exactly this.
+    /// Shared by the unlock popup and the recent cascade so their placement can never drift.
+    /// </summary>
+    private double RightAlignedLeft(Rect gameWindowRect, double scale, out double margin)
+    {
+        margin = Math.Min(gameWindowRect.Width, gameWindowRect.Height) * MarginFraction;
+        return gameWindowRect.Right - BaseOuterWidth * scale - margin;
     }
 
     /// <summary>
@@ -206,18 +215,15 @@ public partial class NotificationWindow : Window
         return renderTarget;
     }
 
-    private void SizeAndPosition(Rect gameWindowRect)
+    private void SizeAndPosition(Rect gameWindowRect, double scale)
     {
-        var margin = Math.Min(gameWindowRect.Width, gameWindowRect.Height) * MarginFraction;
         _slideDistance = gameWindowRect.Height * SlideDistanceFraction;
+        Left = RightAlignedLeft(gameWindowRect, scale, out var margin);
 
-        // The window auto-sizes to the scaled content; measure to get its size for placement.
-        // gameWindowRect and DesiredSize are both in the target monitor's DIPs, so no conversion.
-        Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var width = DesiredSize.Width > 0 ? DesiredSize.Width : BaseOuterWidth;
-        var height = DesiredSize.Height > 0 ? DesiredSize.Height : 80;
-
-        Left = gameWindowRect.Right - width - margin;
+        // Bottom-anchor: measure the content (RootBorder), not the Window — a pre-Show Window Measure
+        // returns 0. RootBorder.DesiredSize includes the scale transform, matching the rect's DIPs.
+        RootBorder.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var height = RootBorder.DesiredSize.Height > 0 ? RootBorder.DesiredSize.Height : 80 * scale;
         Top = gameWindowRect.Bottom - height - margin - _slideDistance;
     }
 
