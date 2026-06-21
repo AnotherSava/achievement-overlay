@@ -1,5 +1,4 @@
 using System.IO;
-using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Win32;
@@ -231,8 +230,9 @@ public sealed class AppConfig
 
         if (enabled)
         {
-            var exePath = Environment.ProcessPath ?? Assembly.GetExecutingAssembly().Location;
-            key.SetValue(AppName, $"\"{exePath}\"");
+            var exePath = Environment.ProcessPath;
+            if (exePath != null)
+                key.SetValue(AppName, $"\"{exePath}\"");
         }
         else
         {

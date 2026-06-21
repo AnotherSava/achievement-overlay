@@ -97,8 +97,8 @@ public sealed class AchievementHistory
         }
 
         // Synthetic entry with exe modified date
-        var exePath = Environment.ProcessPath ?? typeof(AchievementHistory).Assembly.Location;
-        var installedTime = File.Exists(exePath) ? new DateTimeOffset(File.GetLastWriteTimeUtc(exePath), TimeSpan.Zero).ToUnixTimeSeconds() : DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var exePath = Environment.ProcessPath;
+        var installedTime = exePath != null && File.Exists(exePath) ? new DateTimeOffset(File.GetLastWriteTimeUtc(exePath), TimeSpan.Zero).ToUnixTimeSeconds() : DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         entries.Add(new AchievementHistoryEntry
         {
             AppId = "",
