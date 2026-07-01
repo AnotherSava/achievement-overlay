@@ -516,10 +516,18 @@ public sealed class AddGameForm : Form, IConfigProgress
         foreach (var label in _wrapLabels)
             label.MaximumSize = new Size(wrap, 0);
 
-        // Lay out at the current width, then read the grid's actual height. (Its PreferredSize
-        // under-measures stacked wrapped labels, but the realized layout height is correct.)
+        // Lay out at the current width, then size the dialog so the page's grid fits exactly.
+        // (The grid's PreferredSize under-measures stacked wrapped labels, but its realized
+        // height is correct.) Measure the fixed chrome around the content — form padding plus the
+        // button-bar row, including its margin — from the realized layout rather than adding it up
+        // by hand: the content panel and the grid both dock-fill/dock-top the same width, so the
+        // client height that makes the content exactly as tall as the grid is grid.Height plus
+        // whatever the client currently spends on non-content. A hand-summed constant used to
+        // under-count this by a few px, clipping the last line of a label that had just wrapped
+        // (e.g. the two-line "no Steam library found" status on the folder page).
         PerformLayout();
-        var desired = Padding.Vertical + grid.Height + _buttonBar.Height + 8;
+        var nonContentHeight = ClientSize.Height - _content.Height;
+        var desired = grid.Height + nonContentHeight;
         var chrome = Height - ClientSize.Height;
         var maxClient = Screen.FromControl(this).WorkingArea.Height - chrome - 16;
 
