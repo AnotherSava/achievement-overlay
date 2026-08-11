@@ -21,4 +21,4 @@ config/deploy.env
 config/local.json
 
 # Dev scripts
-scripts/
+/scripts/
