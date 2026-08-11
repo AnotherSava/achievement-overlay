@@ -255,7 +255,7 @@ public sealed class AchievementWatcher : IDisposable
         }
         catch (JsonException ex)
         {
-            Logger.Info($"JSON parse error for '{filePath}': {ex.Message}");
+            Logger.Warn($"JSON parse error for '{filePath}': {ex.Message}");
             return;
         }
 
@@ -345,7 +345,7 @@ public sealed class AchievementWatcher : IDisposable
             }
         }
 
-        Logger.Info($"Failed to read after {_maxRetries} retries: '{filePath}'");
+        Logger.Warn($"Failed to read after {_maxRetries} retries: '{filePath}'");
         return null;
     }
 
@@ -378,7 +378,7 @@ public sealed class AchievementWatcher : IDisposable
             }
             catch (Exception ex)
             {
-                Logger.Info($"Error seeding achievements for appid {appId}: {ex.Message}");
+                Logger.Warn($"Error seeding achievements for appid {appId}: {ex.Message}");
             }
         }
     }
@@ -386,6 +386,8 @@ public sealed class AchievementWatcher : IDisposable
     /// <summary>
     /// Seeds the cache with already-earned achievements so they don't fire as new.
     /// Call this after initial scan to avoid replaying old unlocks.
+    /// Records only achievements not already observed — a re-seed running concurrently with a
+    /// live unlock must not overwrite (and thereby swallow) what the watcher has just seen.
     /// </summary>
     public void SeedExistingAchievements(string appId, Dictionary<string, AchievementUnlockState> states)
     {
@@ -394,7 +396,7 @@ public sealed class AchievementWatcher : IDisposable
             if (state.Earned)
             {
                 var key = $"{appId}|{achName}";
-                _seenAchievements[key] = state.EarnedTime;
+                _seenAchievements.TryAdd(key, state.EarnedTime);
             }
         }
     }

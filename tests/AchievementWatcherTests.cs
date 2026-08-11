@@ -188,6 +188,31 @@ public class AchievementWatcherTests : IDisposable
         Assert.Equal("ACH02", _events[0].AchievementName);
     }
 
+    // --- Seeding never overwrites an already-observed unlock ---
+
+    [Fact]
+    public void SeedExistingAchievements_DoesNotOverwriteObservedUnlock()
+    {
+        var json = """{"ACH01": {"earned": true, "earned_time": 1700000000}}""";
+        var filePath = WriteAchievementsJson("12345", json);
+
+        using var watcher = CreateWatcher();
+        watcher.ProcessFile(filePath);
+        Assert.Single(_events);
+
+        // A re-seed (e.g. after Add game) racing a fresh unlock must not record the new
+        // earned_time as "already seen" — that would swallow the notification silently.
+        var reEarned = """{"ACH01": {"earned": true, "earned_time": 1700000999}}""";
+        watcher.SeedExistingAchievements("12345", AchievementMetadata.ParseUnlockStates(reEarned));
+
+        Thread.Sleep(50);
+        File.WriteAllText(filePath, reEarned);
+        watcher.ProcessFile(filePath);
+
+        Assert.Equal(2, _events.Count);
+        Assert.Equal(1700000999L, _events[1].EarnedTime);
+    }
+
     // --- ProcessFile: JSON parse error ---
 
     [Fact]
