@@ -54,8 +54,8 @@ public class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
-        Assert.True(cache.Contains("12345"));
-        Assert.True(cache.Contains("67890"));
+        Assert.True((cache.LookupCached("12345") != null));
+        Assert.True((cache.LookupCached("67890") != null));
         Assert.Equal(2, cache.GetAll().Count);
     }
 
@@ -70,8 +70,8 @@ public class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
-        Assert.True(cache.Contains("11111"));
-        Assert.False(cache.Contains("22222"));
+        Assert.True((cache.LookupCached("11111") != null));
+        Assert.False((cache.LookupCached("22222") != null));
         Assert.Single(cache.GetAll());
     }
 
@@ -103,7 +103,7 @@ public class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
-        Assert.True(cache.Contains("99999"));
+        Assert.True((cache.LookupCached("99999") != null));
     }
 
     // --- Lookup tests ---
@@ -147,7 +147,7 @@ public class GameCacheTests : IDisposable
         cache.ScanAll();
 
         // Initially not found
-        Assert.False(cache.Contains("55555"));
+        Assert.False((cache.LookupCached("55555") != null));
 
         // Now add a game
         var achievementsJson = """[{"name": "ACH01", "displayName": "Test"}]""";
@@ -232,8 +232,8 @@ public class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { path1, path2 });
         cache.ScanAll();
 
-        Assert.True(cache.Contains("11111"));
-        Assert.True(cache.Contains("22222"));
+        Assert.True((cache.LookupCached("11111") != null));
+        Assert.True((cache.LookupCached("22222") != null));
         Assert.Equal(2, cache.GetAll().Count);
     }
 
@@ -274,7 +274,7 @@ public class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
-        Assert.True(cache.Contains("88888"));
+        Assert.True((cache.LookupCached("88888") != null));
         Assert.Single(cache.GetAll());
         var info = cache.Lookup("88888");
         Assert.NotNull(info);
@@ -322,6 +322,6 @@ public class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
-        Assert.True(cache.Contains("33333"));
+        Assert.True((cache.LookupCached("33333") != null));
     }
 }

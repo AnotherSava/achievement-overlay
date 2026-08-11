@@ -12,15 +12,28 @@ public sealed class NewAchievementEventArgs : EventArgs
     public required string AppId { get; init; }
     public required string AchievementName { get; init; }
     public required long EarnedTime { get; init; }
+
+    /// <summary>
+    /// The raw unlock entry, so a consumer can read display text a self-describing writer inlined
+    /// there instead of looking it up in a steam_settings/ schema.
+    /// </summary>
+    public AchievementUnlockState? UnlockState { get; init; }
 }
 
 /// <summary>
-/// Event data for a newly created per-game folder under a GSE Saves path
-/// (e.g. GSE Saves/1601580/), signalling that the emulator ran for that appid.
+/// Event data for a per-game folder observed under a GSE Saves path (e.g. GSE Saves/1601580/),
+/// signalling that an emulator ran for that appid.
 /// </summary>
-public sealed class GameFolderCreatedEventArgs : EventArgs
+public sealed class GameFolderObservedEventArgs : EventArgs
 {
     public required string AppId { get; init; }
+
+    /// <summary>
+    /// Parsed unlock states when the folder was observed via its achievements.json, null when it
+    /// was observed as a bare folder. Carried so the handler need not re-read a file the emulator
+    /// may still hold open.
+    /// </summary>
+    public Dictionary<string, AchievementUnlockState>? States { get; init; }
 }
 
 /// <summary>
@@ -36,11 +49,22 @@ public sealed class AchievementWatcher : IDisposable
     // Tracks last-seen earned_time per (appid, achievementName) to avoid duplicate notifications
     private readonly ConcurrentDictionary<string, long> _seenAchievements = new();
 
-    // Tracks last modification time per file to skip unchanged files
-    private readonly ConcurrentDictionary<string, DateTime> _lastModTimes = new();
+    // Tracks last (write-time, length) per file to skip unchanged files
+    private readonly ConcurrentDictionary<string, (DateTime Time, long Length)> _lastModTimes = new();
 
     // Debounce: tracks pending file change callbacks
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _debounceTokens = new();
+
+    // Appids already covered by a seeding pass. An appid absent from this set has a folder that
+    // appeared after Start(), so its existing unlocks must be seeded rather than replayed.
+    private readonly ConcurrentDictionary<string, byte> _seededAppIds = new();
+
+    // Appids already announced via GameFolderObserved, so the per-file path raises at most once
+    // per session. Concurrent because ProcessFileAsync runs on fire-and-forget tasks.
+    private readonly ConcurrentDictionary<string, byte> _observedAppIds = new();
+
+    // Unix time the watcher started; unlocks older than this were earned before we were watching.
+    private long _startedAtUnix;
 
     private readonly TimeSpan _debounceDelay;
     private readonly int _maxRetries;
@@ -49,10 +73,12 @@ public sealed class AchievementWatcher : IDisposable
     public event EventHandler<NewAchievementEventArgs>? NewAchievement;
 
     /// <summary>
-    /// Raised when a new top-level per-game folder appears under a GSE Saves path,
-    /// i.e. the emulator created GSE Saves/&lt;appid&gt;/ on first run.
+    /// Raised the first time each appid is observed under a GSE Saves path — either as a newly
+    /// created folder, or on the first successful read of its achievements.json. The second path
+    /// matters because an emulator creates the folder before writing the file, so the folder
+    /// event alone fires while there is nothing yet to judge the game by.
     /// </summary>
-    public event EventHandler<GameFolderCreatedEventArgs>? GameFolderCreated;
+    public event EventHandler<GameFolderObservedEventArgs>? GameFolderObserved;
 
     public AchievementWatcher(
         string[] gseSavesPaths,
@@ -68,16 +94,20 @@ public sealed class AchievementWatcher : IDisposable
 
     /// <summary>
     /// Starts watching the GSE Saves directory for achievement changes.
-    /// Seeds existing achievements for the given appids to avoid replaying old unlocks.
+    /// Seeds every existing appid's achievements so they don't replay as new. Seeding is no longer
+    /// filtered by the configured games: an appid that becomes resolvable later (a self-describing
+    /// unlock file needs no configuration) would otherwise replay its whole backlog at once.
     /// </summary>
-    public void Start(IEnumerable<string>? knownAppIds = null)
+    public void Start()
     {
         if (_watchers.Count > 0)
             return;
 
+        _startedAtUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
         foreach (var path in _gseSavesPaths)
         {
-            SeedExistingAchievementsFromDirectory(path, knownAppIds);
+            SeedExistingAchievementsFromDirectory(path);
 
             var watcher = new FileSystemWatcher(path)
             {
@@ -89,6 +119,9 @@ public sealed class AchievementWatcher : IDisposable
 
             watcher.Changed += OnFileChanged;
             watcher.Created += OnFileChanged;
+            // A writer that saves via temp-file-plus-rename raises Renamed, which neither of the
+            // above covers — without this such an emulator's unlocks are missed silently.
+            watcher.Renamed += OnFileChanged;
             watcher.Error += (_, e) => Logger.Warn($"FileSystemWatcher error: {e.GetException().Message}");
             watcher.EnableRaisingEvents = true;
             _watchers.Add(watcher);
@@ -126,14 +159,13 @@ public sealed class AchievementWatcher : IDisposable
     }
 
     /// <summary>
-    /// Re-seeds already-earned achievements for the given appids from disk, so a
-    /// newly added game's existing unlocks don't replay as notifications. Idempotent.
+    /// Re-seeds already-earned achievements from disk, so a newly added game's existing unlocks
+    /// don't replay as notifications. Idempotent.
     /// </summary>
-    public void ReseedKnownAppIds(IEnumerable<string> appIds)
+    public void ReseedAll()
     {
-        var ids = appIds.ToArray();
         foreach (var path in _gseSavesPaths)
-            SeedExistingAchievementsFromDirectory(path, ids);
+            SeedExistingAchievementsFromDirectory(path);
     }
 
     /// <summary>
@@ -168,7 +200,11 @@ public sealed class AchievementWatcher : IDisposable
             return;
 
         Logger.Info($"New GSE Saves folder detected: appid={appId}");
-        GameFolderCreated?.Invoke(this, new GameFolderCreatedEventArgs { AppId = appId });
+
+        // Deliberately not guarded by _observedAppIds: a folder is created once, and at this point
+        // there is usually no achievements.json yet, so the handler cannot judge the game. Burning
+        // the guard here would suppress the file-based raise that finally carries the data.
+        GameFolderObserved?.Invoke(this, new GameFolderObservedEventArgs { AppId = appId, States = null });
     }
 
     private void OnFileChanged(object sender, FileSystemEventArgs e)
@@ -259,6 +295,27 @@ public sealed class AchievementWatcher : IDisposable
             return;
         }
 
+        // Announce the folder now that there is something to judge the game by — before the
+        // unlock diff, so a setup confirmation is queued ahead of any real unlock.
+        if (_observedAppIds.TryAdd(appId, 0))
+            GameFolderObserved?.Invoke(this, new GameFolderObservedEventArgs { AppId = appId, States = states });
+
+        // A folder that appeared after Start() was never seeded. Its pre-existing unlocks must be
+        // recorded, not replayed — otherwise moving save files in mid-session (or a cloud sync
+        // dropping a folder) fires one popup per achievement, seconds apart.
+        if (_seededAppIds.TryAdd(appId, 0))
+        {
+            var backlog = states
+                .Where(s => s.Value.Earned && s.Value.EarnedTime < _startedAtUnix)
+                .ToDictionary(s => s.Key, s => s.Value);
+
+            if (backlog.Count > 0)
+            {
+                SeedExistingAchievements(appId, backlog);
+                Logger.Info($"Seeded {backlog.Count} pre-existing achievement(s) for newly seen appid {appId}");
+            }
+        }
+
         // Diff against cached state to find new unlocks
         foreach (var (achName, state) in states)
         {
@@ -283,7 +340,8 @@ public sealed class AchievementWatcher : IDisposable
             {
                 AppId = appId,
                 AchievementName = achName,
-                EarnedTime = state.EarnedTime
+                EarnedTime = state.EarnedTime,
+                UnlockState = state
             });
         }
     }
@@ -300,22 +358,28 @@ public sealed class AchievementWatcher : IDisposable
         return Path.GetFileName(dir);
     }
 
+    /// <summary>
+    /// True when the file looks different from the last time it was processed. Compares length as
+    /// well as last-write-time: Windows can defer the timestamp update for a file a writer still
+    /// holds open, and this check hard-skips the file, so a stale timestamp would silently cost
+    /// every unlock in it.
+    /// </summary>
     private bool HasFileChanged(string filePath)
     {
         try
         {
-            var modTime = File.GetLastWriteTimeUtc(filePath);
-            var key = filePath;
+            var info = new FileInfo(filePath);
+            var stamp = (info.LastWriteTimeUtc, info.Length);
 
-            if (_lastModTimes.TryGetValue(key, out var lastMod) && modTime == lastMod)
+            if (_lastModTimes.TryGetValue(filePath, out var last) && stamp == last)
                 return false;
 
-            _lastModTimes[key] = modTime;
+            _lastModTimes[filePath] = stamp;
             return true;
         }
         catch
         {
-            // If we can't check mod time, assume changed
+            // If we can't check, assume changed
             return true;
         }
     }
@@ -353,22 +417,20 @@ public sealed class AchievementWatcher : IDisposable
     /// Scans all appid subdirectories under the GSE Saves path and seeds existing
     /// achievements so they don't replay as new notifications.
     /// </summary>
-    private void SeedExistingAchievementsFromDirectory(string gseSavesPath, IEnumerable<string>? knownAppIds)
+    private void SeedExistingAchievementsFromDirectory(string gseSavesPath)
     {
         if (!Directory.Exists(gseSavesPath))
             return;
 
-        var filter = knownAppIds != null ? new HashSet<string>(knownAppIds) : null;
-
         foreach (var dir in Directory.GetDirectories(gseSavesPath))
         {
+            var appId = Path.GetFileName(dir);
+            _seededAppIds.TryAdd(appId, 0);
+
             var achievementsFile = Path.Combine(dir, "achievements.json");
             if (!File.Exists(achievementsFile))
                 continue;
 
-            var appId = Path.GetFileName(dir);
-            if (filter != null && !filter.Contains(appId))
-                continue;
             try
             {
                 var json = File.ReadAllText(achievementsFile);

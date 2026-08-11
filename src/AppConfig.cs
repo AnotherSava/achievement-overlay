@@ -188,7 +188,9 @@ public sealed class AppConfig
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(settings.GseSavesPaths))
             errors.Add("'gseSavesPaths' is missing or empty");
-        if (string.IsNullOrWhiteSpace(settings.GamesPaths)) errors.Add("'gamesPaths' is missing or empty");
+        // Absent, not empty: a user with only self-describing games has no Steam game roots and
+        // must not be forced to invent one. A missing key still errors, so a typo is still loud.
+        if (settings.GamesPaths == null) errors.Add("'gamesPaths' is missing");
         if (settings.DisplayDuration <= 0) errors.Add("'displayDuration' is missing or invalid");
         if (settings.RecentAchievementsCount <= 0) errors.Add("'recentAchievementsCount' is missing or invalid");
         if (errors.Count > 0)
@@ -254,8 +256,12 @@ public sealed class AppConfig
 /// </summary>
 public sealed class SettingsData
 {
+    /// <summary>
+    /// Null means the key is absent (a config error); an empty string is a valid choice for a user
+    /// whose games all describe their own achievements in the unlock file.
+    /// </summary>
     [JsonPropertyName("gamesPaths")]
-    public string GamesPaths { get; set; } = "";
+    public string? GamesPaths { get; set; }
 
     [JsonPropertyName("gseSavesPaths")]
     public string GseSavesPaths { get; set; } = "";

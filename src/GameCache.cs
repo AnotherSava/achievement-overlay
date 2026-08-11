@@ -64,6 +64,12 @@ public sealed class GameCache
     public IEnumerable<string> GetAllAppIds() => _cache.Keys;
 
     /// <summary>
+    /// Looks up a game by appid without rescanning. Use this on paths that run per achievement or
+    /// per GSE Saves folder, where a rescan miss would be paid over and over.
+    /// </summary>
+    public GameInfo? LookupCached(string appId) => _cache.TryGetValue(appId, out var info) ? info : null;
+
+    /// <summary>
     /// Looks up a game by appid. If not found, triggers a re-scan and tries again.
     /// </summary>
     public GameInfo? Lookup(string appId)
@@ -83,11 +89,6 @@ public sealed class GameCache
     /// Gets all cached game entries (for diagnostics/logging).
     /// </summary>
     public IReadOnlyCollection<GameInfo> GetAll() => _cache.Values.ToList().AsReadOnly();
-
-    /// <summary>
-    /// Checks if an appid is in the cache without triggering a re-scan.
-    /// </summary>
-    public bool Contains(string appId) => _cache.ContainsKey(appId);
 
     private int ScanDirectory(string basePath)
     {

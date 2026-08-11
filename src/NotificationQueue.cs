@@ -73,7 +73,7 @@ public sealed class NotificationQueue : IDisposable
         var item = ResolveMetadata(args);
         if (item == null)
         {
-            Logger.Warn($"Skipping notification for {args.AppId}/{args.AchievementName} (no game metadata)");
+            Logger.Warn($"Skipping notification for {args.AppId}/{args.AchievementName} — no metadata (game not found under 'gamesPaths', and the unlock file carries no displayName)");
             return;
         }
 
@@ -116,7 +116,8 @@ public sealed class NotificationQueue : IDisposable
     /// </summary>
     internal NotificationItem? ResolveMetadata(NewAchievementEventArgs args)
     {
-        var resolved = AchievementMetadata.Resolve(_gameCache, args.AppId, args.AchievementName, _config.Language);
+        var resolved = AchievementMetadata.Resolve(
+            _gameCache, args.AppId, args.AchievementName, args.UnlockState, _config.Language);
         if (resolved == null)
             return null;
 

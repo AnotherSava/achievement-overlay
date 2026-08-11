@@ -335,4 +335,91 @@ public class AchievementWatcherTests : IDisposable
         Assert.Contains(_events, e => e.AchievementName == "ACH01");
         Assert.Contains(_events, e => e.AchievementName == "ACH02");
     }
+
+    // --- Self-describing unlock files (issue #5) ---
+
+    [Fact]
+    public void ProcessFile_UplayFormat_RaisesEventCarryingUnlockState()
+    {
+        var json = """
+        {
+          "AFOP_Ach_7": {"earned": 0, "displayName": "First Strike", "description": "Complete the quest Becoming."},
+          "AFOP_Ach_8": {"earned": 1, "earned_time": 1785988975, "displayName": "Homecoming", "description": "Reach the Hometree."}
+        }
+        """;
+        var filePath = WriteAchievementsJson("2840770", json);
+
+        using var watcher = CreateWatcher();
+        watcher.ProcessFile(filePath);
+
+        // Only the unlocked one fires, and it carries the inline text for the consumer to resolve.
+        Assert.Single(_events);
+        Assert.Equal("AFOP_Ach_8", _events[0].AchievementName);
+        Assert.Equal(1785988975L, _events[0].EarnedTime);
+        Assert.NotNull(_events[0].UnlockState);
+        Assert.True(AchievementMetadata.HasInlineText(_events[0].UnlockState));
+    }
+
+    [Fact]
+    public void ProcessFile_FolderAppearingAfterStart_SeedsBacklogInsteadOfReplaying()
+    {
+        using var watcher = CreateWatcher();
+        watcher.Start();
+
+        // A folder dropped in mid-session (save migration, cloud sync) full of old unlocks.
+        var json = """
+        {
+          "ACH01": {"earned": 1, "earned_time": 1700000000, "displayName": "One", "description": "d"},
+          "ACH02": {"earned": 1, "earned_time": 1700000001, "displayName": "Two", "description": "d"}
+        }
+        """;
+        var filePath = WriteAchievementsJson("2840770", json);
+        watcher.ProcessFile(filePath);
+
+        Assert.Empty(_events);
+    }
+
+    [Fact]
+    public void ProcessFile_UnlockAfterFolderAppeared_StillNotifies()
+    {
+        using var watcher = CreateWatcher();
+        watcher.Start();
+
+        var filePath = WriteAchievementsJson("2840770",
+            """{"ACH01": {"earned": 1, "earned_time": 1700000000, "displayName": "One", "description": "d"}}""");
+        watcher.ProcessFile(filePath);
+        Assert.Empty(_events);
+
+        // A genuinely new unlock — earned now, not before the watcher started.
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 5;
+        Thread.Sleep(50);
+        File.WriteAllText(filePath,
+            """{"ACH01": {"earned": 1, "earned_time": 1700000000, "displayName": "One", "description": "d"}, "ACH02": {"earned": 1, "earned_time": """
+            + now + """, "displayName": "Two", "description": "d"}}""");
+        watcher.ProcessFile(filePath);
+
+        Assert.Single(_events);
+        Assert.Equal("ACH02", _events[0].AchievementName);
+    }
+
+    [Fact]
+    public void GameFolderObserved_RaisedOnceFromFileRead_CarryingStates()
+    {
+        var observed = new List<GameFolderObservedEventArgs>();
+        var filePath = WriteAchievementsJson("2840770",
+            """{"ACH01": {"earned": 0, "displayName": "One", "description": "d"}}""");
+
+        using var watcher = CreateWatcher();
+        watcher.GameFolderObserved += (_, e) => observed.Add(e);
+
+        watcher.ProcessFile(filePath);
+        Thread.Sleep(50);
+        File.SetLastWriteTimeUtc(filePath, DateTime.UtcNow);
+        watcher.ProcessFile(filePath);
+
+        Assert.Single(observed);
+        Assert.Equal("2840770", observed[0].AppId);
+        Assert.NotNull(observed[0].States);
+        Assert.True(AchievementMetadata.IsSelfDescribing(observed[0].States!));
+    }
 }

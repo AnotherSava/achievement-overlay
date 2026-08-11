@@ -67,11 +67,6 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         _gameCache = new GameCache(_config);
         _gameCache.ScanAll();
-        if (_gameCache.GetAll().Count == 0)
-        {
-            ShowConfigError("No games with achievement metadata found", "Check 'gamesPaths' in config.");
-            return;
-        }
         foreach (var game in _gameCache.GetAll())
             Logger.Info($"  {game.GameName}, appid={game.AppId}, path='{game.MetadataPath}'");
 
@@ -85,10 +80,17 @@ public sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
+        // An empty cache is no longer fatal: a game whose unlock file describes its own
+        // achievements needs no steam_settings/ and no 'gamesPaths' entry, and exiting here would
+        // hit exactly the user who has installed the overlay but not yet run the game — the one
+        // case the folder watcher exists to catch.
+        if (_gameCache.GetAll().Count == 0)
+            Logger.Warn("No games with achievement metadata found under 'gamesPaths' — only games whose unlock file carries its own achievement names will be tracked.");
+
         _watcher = new AchievementWatcher(validSavesPaths);
         _watcher.NewAchievement += OnNewAchievement;
-        _watcher.GameFolderCreated += OnGameFolderCreated;
-        _watcher.Start(_gameCache.GetAllAppIds());
+        _watcher.GameFolderObserved += OnGameFolderObserved;
+        _watcher.Start();
 
         NotifyTrackingConfiguredForExistingFolders();
 
@@ -198,9 +200,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         _notificationQueue.Enqueue(e);
     }
 
-    private void OnGameFolderCreated(object? sender, GameFolderCreatedEventArgs e)
+    private void OnGameFolderObserved(object? sender, GameFolderObservedEventArgs e)
     {
-        TryNotifyTrackingConfigured(e.AppId);
+        TryNotifyTrackingConfigured(e.AppId, e.States);
     }
 
     /// <summary>
@@ -212,15 +214,18 @@ public sealed class TrayApplicationContext : ApplicationContext
     private void NotifyTrackingConfiguredForExistingFolders()
     {
         foreach (var appId in _watcher.GetExistingAppIdFolders())
-            TryNotifyTrackingConfigured(appId);
+            TryNotifyTrackingConfigured(appId, states: null);
     }
 
     /// <summary>
     /// Shows the synthetic "Achievement tracking configured" notification for a game the first time
     /// its GSE Saves folder is seen — once per game (persisted), and only while it has zero earned
     /// achievements (so it never competes with a real first unlock).
+    /// A game qualifies either by being configured under 'gamesPaths' or by having an unlock file
+    /// that describes its own achievements. Pass <paramref name="states"/> when they have already
+    /// been read, so a file the emulator may still hold open is not read twice.
     /// </summary>
-    private void TryNotifyTrackingConfigured(string appId)
+    private void TryNotifyTrackingConfigured(string appId, Dictionary<string, AchievementUnlockState>? states)
     {
         if (string.IsNullOrEmpty(appId))
             return;
@@ -237,37 +242,55 @@ public sealed class TrayApplicationContext : ApplicationContext
                 return;
             }
 
-            // Only known/configured games qualify; leave unknown folders unguarded so they can be
-            // re-evaluated if the game becomes configured later this session.
-            var game = _gameCache.Contains(appId) ? _gameCache.Lookup(appId) : null;
-            if (game == null)
+            states ??= ReadUnlockStates(appId, out _);
+            var game = _gameCache.LookupCached(appId);
+            var gameKnown = game != null || (states != null && AchievementMetadata.IsSelfDescribing(states));
+
+            // Leave unqualified folders unguarded so they can be re-evaluated if the game becomes
+            // configured, or starts describing itself, later this session.
+            if (!gameKnown)
                 return;
 
-            var earnedCount = CountEarnedAchievements(appId);
-            if (!TrackingConfirmation.ShouldNotify(gameKnown: true, alreadyShown: false, earnedCount))
+            if (!TrackingConfirmation.ShouldNotify(gameKnown: true, alreadyShown: false, CountEarnedAchievements(appId, states)))
                 return;
 
+            var gameName = game?.GameName ?? appId;
             _trackingNotified.Add(appId);
             _notificationQueue.EnqueueSynthetic(
                 appId,
-                "Gearhead",
-                $"Configure achievement tracking for\n{game.GameName}",
+                TrackingConfirmation.Title,
+                TrackingConfirmation.Description(gameName),
                 EmbeddedAssets.GetTrackingConfiguredIconPath());
             var updated = new Dictionary<string, long>(shown) { [appId] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
             _config.UpdateConfigValue(nameof(SettingsData.TrackingConfigured), updated);
-            Logger.Info($"Showed 'tracking configured' for appid {appId} ({game.GameName}).");
+            Logger.Info($"Showed 'tracking configured' for appid {appId} ({gameName}).");
         }
     }
 
     /// <summary>
-    /// Counts earned achievements for a game by reading its GSE Saves achievements.json.
-    /// Returns 0 if the file does not exist yet (the common case at folder-creation time), and
-    /// null if every file that does exist could not be read or parsed — a file locked mid-write
-    /// by the emulator must not be reported as "no achievements earned yet".
+    /// Counts earned achievements for a game. Returns 0 if no unlock file exists yet (the common
+    /// case at folder-creation time), and null if a file exists but could not be read or parsed —
+    /// a file locked mid-write by the emulator must not be reported as "no achievements earned yet".
     /// </summary>
-    private int? CountEarnedAchievements(string appId)
+    private int? CountEarnedAchievements(string appId, Dictionary<string, AchievementUnlockState>? states)
     {
-        var unreadable = false;
+        if (states == null)
+        {
+            states = ReadUnlockStates(appId, out var unreadable);
+            if (states == null)
+                return unreadable ? null : 0;
+        }
+
+        return states.Values.Count(s => s.Earned);
+    }
+
+    /// <summary>
+    /// Reads a game's unlock states from the first GSE Saves path that has the file. Returns null
+    /// when no file exists (<paramref name="unreadable"/> false) or none could be read (true).
+    /// </summary>
+    private Dictionary<string, AchievementUnlockState>? ReadUnlockStates(string appId, out bool unreadable)
+    {
+        unreadable = false;
 
         foreach (var gseSavesPath in _config.GseSavesPaths)
         {
@@ -277,8 +300,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
             try
             {
-                var states = AchievementMetadata.ParseUnlockStates(File.ReadAllText(file));
-                return states.Values.Count(s => s.Earned);
+                return AchievementMetadata.ParseUnlockStates(File.ReadAllText(file));
             }
             catch (Exception ex)
             {
@@ -287,7 +309,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             }
         }
 
-        return unreadable ? null : 0;
+        return null;
     }
 
     private void OpenAddGameDialog()
@@ -326,7 +348,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
 
         _gameCache.ScanAll();
-        _watcher.ReseedKnownAppIds(_gameCache.GetAllAppIds());
+        _watcher.ReseedAll();
         Logger.Info($"Game cache now has {_gameCache.GetAll().Count} game(s) after Add game.");
 
         // This is the re-evaluation that TryNotifyTrackingConfigured leaves unguarded games for.

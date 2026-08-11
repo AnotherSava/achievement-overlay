@@ -6,15 +6,84 @@ namespace AchievementOverlay;
 
 /// <summary>
 /// Represents the unlock state of a single achievement from GSE Saves achievements.json.
-/// Format: {"ACH01": {"earned": true, "earned_time": 1774855788}, ...}
+/// GBE writes {"ACH01": {"earned": true, "earned_time": 1774855788}, ...}; the Goldberg Uplay R2
+/// emulator writes the same file with a numeric "earned" (0/1), no "earned_time" until the
+/// achievement unlocks, and the display text inlined per entry — which makes its file
+/// self-describing, so a notification can be built without any steam_settings/ schema.
 /// </summary>
 public sealed class AchievementUnlockState
 {
     [JsonPropertyName("earned")]
+    [JsonConverter(typeof(FlexibleBooleanConverter))]
     public bool Earned { get; set; }
 
     [JsonPropertyName("earned_time")]
+    [JsonConverter(typeof(FlexibleInt64Converter))]
     public long EarnedTime { get; set; }
+
+    /// <summary>Present only in self-describing files (Uplay); null for GBE's.</summary>
+    [JsonPropertyName("displayName")]
+    public JsonElement? DisplayName { get; set; }
+
+    /// <summary>Present only in self-describing files (Uplay); null for GBE's.</summary>
+    [JsonPropertyName("description")]
+    public JsonElement? Description { get; set; }
+}
+
+/// <summary>
+/// Reads a boolean written as a JSON bool, a number (0 = false), or a string ("true"/"1").
+/// Applied per-property rather than through the shared options so it cannot affect any other
+/// bool in the app. Null reads as false — a missing value must cost at most one notification,
+/// never the whole file.
+/// </summary>
+internal sealed class FlexibleBooleanConverter : JsonConverter<bool>
+{
+    public override bool Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.True: return true;
+            case JsonTokenType.False:
+            case JsonTokenType.Null: return false;
+            case JsonTokenType.Number: return reader.TryGetInt64(out var number) ? number != 0 : reader.GetDouble() != 0;
+            case JsonTokenType.String:
+                var text = reader.GetString();
+                if (bool.TryParse(text, out var parsed)) return parsed;
+                if (long.TryParse(text, out var numeric)) return numeric != 0;
+                throw new JsonException($"Cannot convert string '{text}' to a boolean.");
+            default:
+                throw new JsonException($"Cannot convert token {reader.TokenType} to a boolean.");
+        }
+    }
+
+    // Write a real boolean so a file we round-trip stays in GBE's canonical shape.
+    public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions options) => writer.WriteBooleanValue(value);
+}
+
+/// <summary>
+/// Reads an integer written as a JSON number or a quoted string. Null reads as 0.
+/// Insurance against an emulator quoting earned_time the way it already quotes nothing else —
+/// without it, one quoted value costs that achievement its notification.
+/// </summary>
+internal sealed class FlexibleInt64Converter : JsonConverter<long>
+{
+    public override long Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.Null: return 0;
+            case JsonTokenType.Number: return reader.TryGetInt64(out var number) ? number : (long)reader.GetDouble();
+            case JsonTokenType.String:
+                var text = reader.GetString();
+                if (long.TryParse(text, out var parsed)) return parsed;
+                if (double.TryParse(text, out var asDouble)) return (long)asDouble;
+                throw new JsonException($"Cannot convert string '{text}' to an integer.");
+            default:
+                throw new JsonException($"Cannot convert token {reader.TokenType} to an integer.");
+        }
+    }
+
+    public override void Write(Utf8JsonWriter writer, long value, JsonSerializerOptions options) => writer.WriteNumberValue(value);
 }
 
 /// <summary>
@@ -48,11 +117,75 @@ public static class AchievementMetadata
 
     /// <summary>
     /// Parses the GSE Saves achievements.json (dict of name -> unlock state).
+    /// Converts each entry separately so one unreadable value costs that achievement only: the
+    /// file is written by an emulator we don't control, and three of the four call sites swallow
+    /// a parse failure, so a whole-document throw means silence with no notification and no clue.
+    /// A malformed document still throws, as callers rely on.
     /// </summary>
     public static Dictionary<string, AchievementUnlockState> ParseUnlockStates(string json)
     {
-        return JsonSerializer.Deserialize<Dictionary<string, AchievementUnlockState>>(json, JsonOptions)
-               ?? new Dictionary<string, AchievementUnlockState>();
+        var raw = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, JsonOptions);
+        if (raw == null)
+            return new Dictionary<string, AchievementUnlockState>();
+
+        var states = new Dictionary<string, AchievementUnlockState>();
+        var skipped = 0;
+        string? firstError = null;
+
+        foreach (var (name, element) in raw)
+        {
+            try
+            {
+                var state = element.Deserialize<AchievementUnlockState>(JsonOptions);
+                if (state != null)
+                    states[name] = state;
+            }
+            catch (JsonException ex)
+            {
+                skipped++;
+                firstError ??= $"'{name}': {ex.Message}";
+            }
+        }
+
+        // One line per parse, not per entry — a systematically bad field would otherwise flood the
+        // log (and Logger auto-flushes, so every line is a synchronous disk write).
+        if (skipped > 0)
+            Logger.Warn($"Skipped {skipped}/{raw.Count} unreadable achievement entries (first: {firstError})");
+
+        return states;
+    }
+
+    /// <summary>
+    /// True when the unlock state carries its own display text, i.e. it came from a
+    /// self-describing writer (Uplay) rather than GBE.
+    /// </summary>
+    public static bool HasInlineText(AchievementUnlockState? state)
+        => state != null && (IsNonEmpty(state.DisplayName) || IsNonEmpty(state.Description));
+
+    /// <summary>
+    /// True when any entry in an unlock file carries its own display text. Used to decide whether
+    /// a game with no steam_settings/ schema can still be tracked.
+    /// </summary>
+    public static bool IsSelfDescribing(IReadOnlyDictionary<string, AchievementUnlockState> states)
+        => states.Values.Any(HasInlineText);
+
+    /// <summary>
+    /// True when the element holds usable text — a non-empty string, or a multi-language object
+    /// with at least one non-empty value. Deliberately does not go through GetDisplayText, whose
+    /// language-fallback warning would fire once per achievement.
+    /// </summary>
+    private static bool IsNonEmpty(JsonElement? element)
+    {
+        if (element == null)
+            return false;
+
+        return element.Value.ValueKind switch
+        {
+            JsonValueKind.String => !string.IsNullOrEmpty(element.Value.GetString()),
+            JsonValueKind.Object => element.Value.EnumerateObject().Any(
+                p => p.Value.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(p.Value.GetString())),
+            _ => false
+        };
     }
 
     /// <summary>
@@ -164,34 +297,85 @@ public static class AchievementMetadata
     /// Resolves display name, description, and icon path for an achievement.
     /// Returns null if game or definition not found.
     /// </summary>
-    public static ResolvedAchievement? Resolve(GameCache gameCache, string appId, string achievementName, string language)
+    public static ResolvedAchievement? Resolve(
+        GameCache gameCache, string appId, string achievementName, AchievementUnlockState? unlockState, string language)
     {
-        var gameInfo = gameCache.Lookup(appId);
-        if (gameInfo == null)
-            return null;
+        var inline = HasInlineText(unlockState);
+        var game = gameCache.LookupCached(appId);
 
-        var definitions = GameCache.LoadDefinitions(gameInfo);
-        if (definitions == null)
-            return null;
+        // A self-describing file is by construction not GBE's, so a cached schema under the same id
+        // belongs to a different game — Ubisoft and Steam id ranges fully overlap.
+        if (inline && game != null)
+            Logger.Warn($"appid {appId} has both a configured game and a self-describing unlock file — using the file's own text");
 
+        // Rescan only when there is neither a cached game nor inline text to fall back on.
+        if (game == null && !inline)
+            game = gameCache.Lookup(appId);
+
+        // Only load the schema when it will actually be consulted.
+        var definitions = !inline && game != null ? GameCache.LoadDefinitions(game) : null;
+        var metadataDir = game != null ? Path.GetDirectoryName(game.MetadataPath)! : "";
+
+        return ResolvePreferringInline(unlockState, definitions, metadataDir, achievementName, language);
+    }
+
+    /// <summary>
+    /// Resolves against already-loaded definitions, so a caller iterating many achievements loads
+    /// and parses the schema once rather than once per achievement.
+    /// </summary>
+    public static ResolvedAchievement? ResolveFromDefinitions(
+        IEnumerable<AchievementDefinition> definitions, string metadataDir, string achievementName, string language)
+    {
         var definition = FindDefinition(definitions, achievementName);
         if (definition == null)
             return null;
 
         var displayName = GetDisplayText(definition.DisplayName, language);
-        var description = GetDisplayText(definition.Description, language);
-
         if (string.IsNullOrEmpty(displayName))
             displayName = achievementName;
-
-        var metadataDir = Path.GetDirectoryName(gameInfo.MetadataPath)!;
-        var iconPath = ResolveIconPath(definition, metadataDir);
 
         return new ResolvedAchievement
         {
             DisplayName = displayName,
-            Description = description,
-            IconPath = iconPath
+            Description = GetDisplayText(definition.Description, language),
+            IconPath = ResolveIconPath(definition, metadataDir)
+        };
+    }
+
+    /// <summary>
+    /// Chooses the metadata source for one achievement: the unlock entry's own inline text when it
+    /// carries any, otherwise the game's schema. The single place this precedence is decided, so the
+    /// popup and the Recent-achievements panel can never disagree about an achievement's text.
+    /// </summary>
+    public static ResolvedAchievement? ResolvePreferringInline(
+        AchievementUnlockState? state, IEnumerable<AchievementDefinition>? definitions,
+        string metadataDir, string achievementName, string language)
+        => HasInlineText(state)
+            ? ResolveInline(state, achievementName, language)
+            : definitions != null
+                ? ResolveFromDefinitions(definitions, metadataDir, achievementName, language)
+                : null;
+
+    /// <summary>
+    /// Resolves from the unlock state's own inline text, for emulators that write it into the
+    /// GSE Saves file. No icon: such writers ship none, and the GSE Saves folder is never probed
+    /// for images.
+    /// </summary>
+    public static ResolvedAchievement? ResolveInline(
+        AchievementUnlockState? state, string achievementName, string language)
+    {
+        if (!HasInlineText(state))
+            return null;
+
+        var displayName = GetDisplayText(state!.DisplayName, language);
+        if (string.IsNullOrEmpty(displayName))
+            displayName = achievementName;
+
+        return new ResolvedAchievement
+        {
+            DisplayName = displayName,
+            Description = GetDisplayText(state.Description, language),
+            IconPath = null
         };
     }
 }

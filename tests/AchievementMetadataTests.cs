@@ -328,4 +328,163 @@ public class AchievementMetadataTests : IDisposable
         Assert.Equal("Erstes Blut", AchievementMetadata.GetDisplayText(def.DisplayName, "german"));
         Assert.Equal("Get your first kill", AchievementMetadata.GetDisplayText(def.Description, "english"));
     }
+
+    // --- Self-describing unlock files (Goldberg Uplay R2 emulator, issue #5) ---
+
+    /// <summary>The exact payload shape from issue #5, locked and unlocked entries.</summary>
+    private const string UplayJson = """
+    {
+      "AFOP_Ach_7": {
+        "earned": 0,
+        "description": "Complete the quest Becoming.",
+        "displayName": "First Strike"
+      },
+      "AFOP_Ach_8": {
+        "earned": 1,
+        "earned_time": 1785988975,
+        "description": "Reach the Hometree.",
+        "displayName": "Homecoming"
+      }
+    }
+    """;
+
+    [Fact]
+    public void ParseUnlockStates_UplayFormat_ParsesNumericEarned()
+    {
+        var states = AchievementMetadata.ParseUnlockStates(UplayJson);
+
+        Assert.Equal(2, states.Count);
+        Assert.False(states["AFOP_Ach_7"].Earned);
+        Assert.Equal(0, states["AFOP_Ach_7"].EarnedTime);
+        Assert.True(states["AFOP_Ach_8"].Earned);
+        Assert.Equal(1785988975L, states["AFOP_Ach_8"].EarnedTime);
+    }
+
+    [Fact]
+    public void ParseUnlockStates_GbeFormat_StillParses()
+    {
+        var states = AchievementMetadata.ParseUnlockStates(
+            """{"ACH01": {"earned": true, "earned_time": 1774855788}, "ACH02": {"earned": false, "earned_time": 0}}""");
+
+        Assert.True(states["ACH01"].Earned);
+        Assert.Equal(1774855788L, states["ACH01"].EarnedTime);
+        Assert.False(states["ACH02"].Earned);
+    }
+
+    [Fact]
+    public void ParseUnlockStates_MixedBoolAndNumber_ParsesBoth()
+    {
+        var states = AchievementMetadata.ParseUnlockStates(
+            """{"A": {"earned": true, "earned_time": 1}, "B": {"earned": 1, "earned_time": 2}}""");
+
+        Assert.True(states["A"].Earned);
+        Assert.True(states["B"].Earned);
+    }
+
+    [Theory]
+    [InlineData("\"true\"", true)]
+    [InlineData("\"1\"", true)]
+    [InlineData("\"false\"", false)]
+    [InlineData("\"0\"", false)]
+    [InlineData("null", false)]
+    [InlineData("2", true)]
+    public void ParseUnlockStates_TolerantEarnedValues(string earned, bool expected)
+    {
+        var states = AchievementMetadata.ParseUnlockStates("{\"A\": {\"earned\": " + earned + "}}");
+
+        Assert.Equal(expected, states["A"].Earned);
+    }
+
+    [Fact]
+    public void ParseUnlockStates_QuotedEarnedTime_Parses()
+    {
+        var states = AchievementMetadata.ParseUnlockStates(
+            """{"A": {"earned": 1, "earned_time": "1785988975"}}""");
+
+        Assert.Equal(1785988975L, states["A"].EarnedTime);
+    }
+
+    [Fact]
+    public void ParseUnlockStates_OneUnreadableEntry_KeepsTheRest()
+    {
+        var states = AchievementMetadata.ParseUnlockStates(
+            """{"good": {"earned": 1, "earned_time": 5}, "bad": {"earned": "banana"}, "alsoGood": {"earned": 0}}""");
+
+        Assert.Equal(2, states.Count);
+        Assert.True(states["good"].Earned);
+        Assert.False(states["alsoGood"].Earned);
+        Assert.DoesNotContain("bad", states.Keys);
+    }
+
+    [Fact]
+    public void ParseUnlockStates_MalformedDocument_Throws()
+    {
+        Assert.Throws<JsonException>(() => AchievementMetadata.ParseUnlockStates("not valid json {{{"));
+    }
+
+    [Fact]
+    public void IsSelfDescribing_UplayFile_True()
+    {
+        Assert.True(AchievementMetadata.IsSelfDescribing(AchievementMetadata.ParseUnlockStates(UplayJson)));
+    }
+
+    [Fact]
+    public void IsSelfDescribing_GbeFile_False()
+    {
+        var states = AchievementMetadata.ParseUnlockStates("""{"ACH01": {"earned": true, "earned_time": 1}}""");
+
+        Assert.False(AchievementMetadata.IsSelfDescribing(states));
+    }
+
+    [Fact]
+    public void HasInlineText_EmptyStrings_False()
+    {
+        var states = AchievementMetadata.ParseUnlockStates(
+            """{"A": {"earned": 1, "displayName": "", "description": ""}}""");
+
+        Assert.False(AchievementMetadata.HasInlineText(states["A"]));
+    }
+
+    [Fact]
+    public void ResolveInline_UsesInlineText()
+    {
+        var states = AchievementMetadata.ParseUnlockStates(UplayJson);
+
+        var resolved = AchievementMetadata.ResolveInline(states["AFOP_Ach_8"], "AFOP_Ach_8", "english");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("Homecoming", resolved.DisplayName);
+        Assert.Equal("Reach the Hometree.", resolved.Description);
+        Assert.Null(resolved.IconPath);
+    }
+
+    [Fact]
+    public void ResolveInline_DescriptionOnly_FallsBackToAchievementName()
+    {
+        var states = AchievementMetadata.ParseUnlockStates("""{"A": {"earned": 1, "description": "Do the thing"}}""");
+
+        var resolved = AchievementMetadata.ResolveInline(states["A"], "A", "english");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("A", resolved.DisplayName);
+        Assert.Equal("Do the thing", resolved.Description);
+    }
+
+    [Fact]
+    public void ResolveInline_MultiLanguageText_HonoursLanguage()
+    {
+        var states = AchievementMetadata.ParseUnlockStates(
+            """{"A": {"earned": 1, "displayName": {"english": "First Strike", "german": "Erstschlag"}}}""");
+
+        Assert.Equal("Erstschlag", AchievementMetadata.ResolveInline(states["A"], "A", "german")!.DisplayName);
+    }
+
+    [Fact]
+    public void ResolveInline_NoInlineText_ReturnsNull()
+    {
+        var states = AchievementMetadata.ParseUnlockStates("""{"A": {"earned": true, "earned_time": 1}}""");
+
+        Assert.Null(AchievementMetadata.ResolveInline(states["A"], "A", "english"));
+        Assert.Null(AchievementMetadata.ResolveInline(null, "A", "english"));
+    }
 }

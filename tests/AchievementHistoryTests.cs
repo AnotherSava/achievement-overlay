@@ -178,4 +178,26 @@ public class AchievementHistoryTests : IDisposable
 
         Assert.Equal("Install and configure Achievement Overlay", synthetic.Description);
     }
+
+    // --- Self-describing unlock files (issue #5) ---
+
+    [Fact]
+    public void GetRecent_SelfDescribingUnknownAppId_IsIncluded()
+    {
+        CreateSaveFile("2840770",
+            """{"AFOP_Ach_8": {"earned": 1, "earned_time": 1785988975, "displayName": "Homecoming", "description": "Reach the Hometree."}}""");
+
+        var config = CreateConfig();
+        var gameCache = new GameCache(new[] { _gamesDir });
+        gameCache.ScanAll();
+
+        var recent = new AchievementHistory(config, gameCache).GetRecent(10);
+
+        var entry = Assert.Single(recent, e => e.AppId == "2840770");
+        Assert.Equal("Homecoming", entry.AchievementName);
+        Assert.Equal("Reach the Hometree.", entry.Description);
+        // Nothing in the unlock file names the game, so the appid stands in.
+        Assert.Equal("2840770", entry.GameName);
+        Assert.Null(entry.IconPath);
+    }
 }

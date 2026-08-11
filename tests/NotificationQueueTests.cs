@@ -272,4 +272,68 @@ public class NotificationQueueTests : IDisposable
         }
         catch { }
     }
+
+    // --- Self-describing unlock files (issue #5) ---
+
+    private static AchievementUnlockState UplayState(string name, string json)
+        => AchievementMetadata.ParseUnlockStates(json)[name];
+
+    [Fact]
+    public void ResolveMetadata_UnknownGameWithInlineText_ResolvesFromUnlockState()
+    {
+        var queue = new NotificationQueue(_gameCache, _config);
+
+        var item = queue.ResolveMetadata(new NewAchievementEventArgs
+        {
+            AppId = "2840770",
+            AchievementName = "AFOP_Ach_8",
+            EarnedTime = 1785988975,
+            UnlockState = UplayState("AFOP_Ach_8",
+                """{"AFOP_Ach_8": {"earned": 1, "earned_time": 1785988975, "displayName": "Homecoming", "description": "Reach the Hometree."}}""")
+        });
+
+        Assert.NotNull(item);
+        Assert.Equal("Homecoming", item.AchievementName);
+        Assert.Equal("Reach the Hometree.", item.Description);
+        Assert.Null(item.IconPath);
+    }
+
+    [Fact]
+    public void ResolveMetadata_KnownGameWithoutInlineText_UsesSchemaAndIcon()
+    {
+        var imgDir = Path.Combine(_gamesDir, "TestGame", "steam_settings", "img");
+        Directory.CreateDirectory(imgDir);
+        File.WriteAllBytes(Path.Combine(imgDir, "ach01.png"), new byte[] { 0x89, 0x50, 0x4E, 0x47 });
+
+        var queue = new NotificationQueue(_gameCache, _config);
+
+        var item = queue.ResolveMetadata(new NewAchievementEventArgs
+        {
+            AppId = "12345",
+            AchievementName = "ACH01",
+            EarnedTime = 1700000000,
+            UnlockState = UplayState("ACH01", """{"ACH01": {"earned": true, "earned_time": 1700000000}}""")
+        });
+
+        Assert.NotNull(item);
+        Assert.Equal("First Blood", item.AchievementName);
+        Assert.NotNull(item.IconPath);
+    }
+
+    [Fact]
+    public void Enqueue_UnknownGameWithInlineText_QueuesNotification()
+    {
+        var queue = new NotificationQueue(_gameCache, _config);
+
+        queue.Enqueue(new NewAchievementEventArgs
+        {
+            AppId = "2840770",
+            AchievementName = "AFOP_Ach_8",
+            EarnedTime = 1785988975,
+            UnlockState = UplayState("AFOP_Ach_8",
+                """{"AFOP_Ach_8": {"earned": 1, "displayName": "Homecoming", "description": "Reach the Hometree."}}""")
+        });
+
+        Assert.Equal(1, queue.Count);
+    }
 }

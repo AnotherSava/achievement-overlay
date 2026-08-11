@@ -285,4 +285,27 @@ public class AppConfigTests : IDisposable
         Assert.Equal(@"C:\Games", config.GamesPaths[0]);
         Assert.Equal(@"D:\More", config.GamesPaths[1]);
     }
+
+    [Fact]
+    public void EmptyGamesPaths_IsAccepted()
+    {
+        // A user whose games all describe their own achievements has no Steam game roots.
+        var data = new { gseSavesPaths = _gseSavesDir, gamesPaths = "", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 };
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(data));
+
+        var config = new AppConfig(_settingsPath);
+
+        Assert.Empty(config.GamesPaths);
+    }
+
+    [Fact]
+    public void MissingGamesPathsKey_Throws()
+    {
+        // An absent key is still a config error, so a typo'd key stays loud.
+        var data = new { gseSavesPaths = _gseSavesDir, language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 };
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(data));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new AppConfig(_settingsPath));
+        Assert.Contains("gamesPaths", ex.Message);
+    }
 }

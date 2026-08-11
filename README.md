@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/AnotherSava/achievement-overlay/actions/workflows/build.yml/badge.svg)](https://github.com/AnotherSava/achievement-overlay/actions/workflows/build.yml)
 
-A Windows background app that displays Steam-like achievement popup notifications for games running in [Goldberg Steam Emulator](https://github.com/Detanup01/gbe_fork).
+A Windows background app that displays Steam-like achievement popup notifications for games running in [Goldberg Steam Emulator](https://github.com/Detanup01/gbe_fork) — and in other emulators that write their unlocks to the same GSE Saves folder.
 
 <img src="docs/screenshots/sample-notification.png" alt="Achievement notification">
 
@@ -10,12 +10,15 @@ A Windows background app that displays Steam-like achievement popup notification
 
 The Steam emulator stores achievement data in JSON files and updates them as soon as the next one gets unlocked. Achievement Overlay monitors these files and notifies the user with Steam-style pop-up notifications.
 
+Achievement names and descriptions normally come from the game's own `steam_settings/achievements.json`. Some emulators instead write that text straight into the unlock file — those games are tracked with no setup at all, as described under [Other emulators](#other-emulators).
+
 ## Features
 
 - **Steam-style notifications** — achievement icon, name, and description slide in at the bottom-right of the game window
 - **Non-invasive** — works even with particularly sensitive games like Red Dead Redemption
 - **Recent achievements** — press Ctrl+Shift+H (shortcut is configurable) to review recent achievements. Also the easiest way to test that the overlay is working. Press again or Esc to dismiss
 - **Automatic game detection** — scans configured directories for games with achievement metadata
+- **Other emulators** — a game whose unlock file carries its own achievement names is tracked with no configuration at all (see [Other emulators](#other-emulators))
 - **Setup confirmation** — a one-time "Gearhead" popup confirms tracking is working, either when a newly configured game first runs or as soon as you add a game that has run before (shown only while the game has no unlocks yet, so it never masks a real first achievement)
 - **Multi-monitor support** — notifications appear on the monitor with the foreground window, with correct DPI scaling across mixed-DPI setups
 - **Unlock sound** — plays a default or user-defined sound on achievement unlock
@@ -55,7 +58,7 @@ A `config.json` file ships next to the executable with sensible defaults. Edit i
 
 | Setting | Description | Default |
 |---|---|---|
-| `gamesPaths` | Semicolon-separated list of directories to scan for games with `steam_appid.txt` (in the game root or inside `steam_settings/`). | `C:\Games` |
+| `gamesPaths` | Semicolon-separated list of directories to scan for games with `steam_appid.txt` (in the game root or inside `steam_settings/`). May be left empty if all your games are tracked via [Other emulators](#other-emulators), but the key itself must be present. | `C:\Games` |
 | `gseSavesPaths` | Semicolon-separated list of GSE Saves directories. Supports `%appdata%` and other env vars. | `%appdata%\GSE Saves` |
 | `language` | Preferred language for achievement display text. Falls back to english. | `english` |
 | `soundEnabled` | Play a sound on achievement unlock. | `true` |
@@ -102,6 +105,26 @@ Notes:
 - **Denuvo games** — these won't load `steam_api64.dll`. If Denuvo is detected with no crack present, the tool stops before changing anything.
 - **Windows Defender** — current GBE releases sometimes trigger a false positive on download. If that happens, the wizard offers to add the needed Defender exclusions (with a UAC prompt) and retries automatically. Alternatively, point the Advanced **GBE release folder** at an already-extracted release and uncheck "Download the latest GBE release".
 
+## Other emulators
+
+The overlay is built around GBE, but it tracks any emulator that writes a GSE-Saves-style
+`achievements.json` — one JSON object per achievement, keyed by achievement name, with an `earned`
+flag and an `earned_time`. Both `true`/`false` and `1`/`0` are accepted for `earned`.
+
+Where such an emulator also writes `displayName` and `description` into each entry — the Goldberg
+Uplay R2 emulator does, when pointed at the GSE Saves folder — the unlock file describes itself, and
+the game needs **no `steam_settings/` folder, no `steam_appid.txt`, and no entry in `gamesPaths`**.
+Point the emulator's achievement output at `%appdata%\GSE Saves\<id>\` and it is tracked on the next
+unlock.
+
+Two limitations for these games, both because the emulator provides nothing to work with:
+
+- **No achievement icons** — notifications use the default icon.
+- **No game name** — the Recent-achievements panel labels the game with the folder's id.
+
+The [Add game…](#adding-a-game) wizard is Steam-only: it works by replacing the game's Steam library
+with GBE's, which does not apply to other emulators.
+
 ## Troubleshooting
 
 The app writes a log file (`overlay.log`) next to the config file (use the tray context menu to find it). Check it for diagnostic information. Look for `[WARN]` and `[ERROR]` entries.
@@ -114,7 +137,7 @@ The app shows an error dialog on startup if the config is missing, has invalid J
 - **Invalid JSON** — fix the syntax in `config.json`. Use the [example config](#example-config) above as a reference.
 - **Invalid settings** — required fields like `gseSavesPaths`, `gamesPaths`, `displayDuration`, or `recentAchievementsCount` may be missing or have invalid values.
 - **GSE Saves directory does not exist** — check that `gseSavesPaths` points to valid directories (default: `%appdata%\GSE Saves`). Non-existent paths are logged as warnings and skipped; the app exits only if none are valid.
-- **No games with achievement metadata found** — check that `gamesPaths` points to directories containing games with `steam_appid.txt` and `steam_settings/achievements.json`. Generate metadata with the tray [Add game…](#adding-a-game) dialog if needed.
+- **No games with achievement metadata found** — a `[WARN]`, no longer fatal, since a game may still be tracked via [Other emulators](#other-emulators). Check that `gamesPaths` points to directories containing games with `steam_appid.txt` and `steam_settings/achievements.json`. Generate metadata with the tray [Add game…](#adding-a-game) dialog if needed.
 
 ### Game is not found
 
@@ -124,7 +147,7 @@ If the game doesn't appear in the log at all, make sure its directory is under o
 
 If the log shows `[WARN] Skipped: appid=... (no 'achievements.json')`, the game is detected but has no achievement metadata. Generate it with the tray [Add game…](#adding-a-game) dialog.
 
-If no games are found at all, the app exits with an error dialog — check `gamesPaths` in config.
+If no games are found at all, the log shows `[WARN] No games with achievement metadata found` and the app keeps running — only games tracked via [Other emulators](#other-emulators) will produce notifications. Check `gamesPaths` in config.
 
 ### Notification shows default icon instead of achievement icon
 

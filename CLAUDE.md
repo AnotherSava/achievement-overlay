@@ -8,7 +8,32 @@ Stack: .NET 10, WinForms tray + WPF overlay window.
 
 ## Tracking-configured notification
 
-A synthetic "Gearhead" achievement fires the first time the app sees a game's `%appdata%/GSE Saves/<appid>/` folder appear (GBE creates it on first run) — confirming tracking is live before any real unlock. `AchievementWatcher` raises `GameFolderCreated` from a second `FileSystemWatcher` (the `achievements.json` filter doesn't fire on bare folder creation), and `TrayApplicationContext.NotifyTrackingConfiguredForExistingFolders` sweeps already-existing folders at startup and again after **Add game…** (a game configured mid-session may already have a folder from an earlier run, so its creation event has been and gone). `TrayApplicationContext.TryNotifyTrackingConfigured` gates it (game known in `GameCache`, not already shown, and a *known* earned count of zero — an unlock file that exists but can't be read counts as unknown, never as zero), shows it via `NotificationQueue.EnqueueSynthetic` (bypasses the schema lookup), and persists `appid → fire-time` in the `trackingConfigured` map in `config.json` (once per game). It also appears in the Recent panel, timestamped by fire-time. Bundled icon at `src/Assets/tracking_configured.jpg`; embedded-resource extraction shared via `src/EmbeddedAssets.cs`.
+A synthetic "Gearhead" achievement fires the first time the app sees a game's `%appdata%/GSE Saves/<appid>/` folder appear (GBE creates it on first run) — confirming tracking is live before any real unlock. `AchievementWatcher` raises `GameFolderObserved` from two places — a second `FileSystemWatcher` watching for bare folder creation (the `achievements.json` filter doesn't fire on that), and the first successful read of a folder's `achievements.json`, which carries the parsed states on the event so the handler needn't re-read a file the emulator may still hold open. The folder-creation raise is deliberately unguarded, since at that moment there is usually no file yet to judge the game by. `TrayApplicationContext.NotifyTrackingConfiguredForExistingFolders` sweeps already-existing folders at startup and again after **Add game…** (a game configured mid-session may already have a folder from an earlier run, so its creation event has been and gone). `TrayApplicationContext.TryNotifyTrackingConfigured` gates it (game known in `GameCache`, not already shown, and a *known* earned count of zero — an unlock file that exists but can't be read counts as unknown, never as zero), shows it via `NotificationQueue.EnqueueSynthetic` (bypasses the schema lookup), and persists `appid → fire-time` in the `trackingConfigured` map in `config.json` (once per game). It also appears in the Recent panel, timestamped by fire-time. Bundled icon at `src/Assets/tracking_configured.jpg`; embedded-resource extraction shared via `src/EmbeddedAssets.cs`.
+
+## Self-describing unlock files (non-GBE emulators)
+
+GBE's GSE Saves `achievements.json` holds only `earned`/`earned_time`, so display text comes from the
+game's `steam_settings/achievements.json` via `GameCache`. Other emulators — the Goldberg Uplay R2
+one, per [issue #5](https://github.com/AnotherSava/achievement-overlay/issues/5) — write the same
+file with a numeric `earned` and the `displayName`/`description` inlined per entry. Such a file is
+*self-describing*: `AchievementMetadata.HasInlineText`/`IsSelfDescribing` detect it, and the game is
+tracked with no `steam_appid.txt`, no `steam_settings/`, and no `gamesPaths` entry.
+
+`AchievementMetadata.ResolvePreferringInline` is the single place the source is chosen — inline text
+wins when present (a self-describing file is not GBE's, so a cached schema under the same id is a
+different game — Ubisoft and Steam id ranges overlap), otherwise the schema. Both the popup path
+(`Resolve`) and the Recent panel call it, so the two can't disagree about an achievement's text;
+`Resolve` adds the cache lookup around it and rescans only for an appid with neither source. Tolerance
+lives in `FlexibleBooleanConverter`/`FlexibleInt64Converter` (property-scoped, so the shared
+`JsonOptions` is untouched) and in `ParseUnlockStates`, which converts entries individually so one
+bad value costs one achievement rather than the whole file.
+
+Consequences elsewhere: `AchievementWatcher` seeds unconditionally (an appid that becomes resolvable
+later would otherwise replay its backlog), seeds rather than notifies for a folder that appears after
+`Start()`, subscribes `Renamed`, and raises `GameFolderObserved` from the file path as well as the
+folder path. An empty `GameCache` is a warning, not a fatal error. Uplay games get no icons and no
+game name — the Recent panel falls back to the appid. Plan:
+`docs/plans/completed/2026-08-11-uplay-emulator-support.md`.
 
 ## Config generator (Add game dialog)
 

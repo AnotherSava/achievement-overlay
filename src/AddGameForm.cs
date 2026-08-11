@@ -715,7 +715,7 @@ public sealed class AddGameForm : Form, IConfigProgress
             if (primary == null)
             {
                 _folderStatus.ForeColor = Color.Firebrick;
-                _folderStatus.Text = "No steam_api64.dll / steam_api.dll found under this folder. Pick the game's install folder.";
+                _folderStatus.Text = "No steam_api64.dll / steam_api.dll found under this folder. Pick the game's install folder. This wizard configures Steam games only — other emulators are tracked automatically once they write to the GSE Saves folder.";
                 FitToActivePage();
                 return;
             }

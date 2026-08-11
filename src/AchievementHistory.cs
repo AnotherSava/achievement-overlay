@@ -44,9 +44,30 @@ public sealed class AchievementHistory
             foreach (var dir in Directory.GetDirectories(gseSavesPath))
             {
                 var appId = Path.GetFileName(dir);
-                var gameInfo = _gameCache.Contains(appId) ? _gameCache.Lookup(appId) : null;
-                if (gameInfo == null)
+                // LookupCached, never Lookup — a rescan per unknown folder would run on every
+                // press of the Recent-achievements shortcut.
+                var gameInfo = _gameCache.LookupCached(appId);
+
+                Dictionary<string, AchievementUnlockState>? states = null;
+                var achievementsFile = Path.Combine(dir, "achievements.json");
+                if (File.Exists(achievementsFile))
+                {
+                    try
+                    {
+                        states = AchievementMetadata.ParseUnlockStates(File.ReadAllText(achievementsFile));
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"Error reading achievements for appid {appId}: {ex.Message}");
+                    }
+                }
+
+                // A game qualifies by being configured, or by describing itself in its unlock file.
+                var selfDescribing = states != null && AchievementMetadata.IsSelfDescribing(states);
+                if (gameInfo == null && !selfDescribing)
                     continue;
+
+                var gameName = gameInfo?.GameName ?? appId;
 
                 // Synthetic "tracking configured" milestone, timestamped by when the notification
                 // first fired. Added even before any real unlock exists.
@@ -55,43 +76,41 @@ public sealed class AchievementHistory
                     entries.Add(new AchievementHistoryEntry
                     {
                         AppId = appId,
-                        GameName = gameInfo.GameName,
-                        AchievementName = "Gearhead",
-                        Description = $"Configure achievement tracking for\n{gameInfo.GameName}",
+                        GameName = gameName,
+                        AchievementName = TrackingConfirmation.Title,
+                        Description = TrackingConfirmation.Description(gameName),
                         IconPath = EmbeddedAssets.GetTrackingConfiguredIconPath(),
                         EarnedTime = configuredTime
                     });
                 }
 
-                var achievementsFile = Path.Combine(dir, "achievements.json");
-                if (!File.Exists(achievementsFile))
+                if (states == null)
                     continue;
 
-                try
-                {
-                    var json = File.ReadAllText(achievementsFile);
-                    var states = AchievementMetadata.ParseUnlockStates(json);
+                // Load the schema once per game rather than once per earned achievement.
+                var definitions = gameInfo != null ? GameCache.LoadDefinitions(gameInfo) : null;
+                var metadataDir = gameInfo != null ? Path.GetDirectoryName(gameInfo.MetadataPath)! : "";
 
-                    foreach (var (achName, state) in states)
+                foreach (var (achName, state) in states)
+                {
+                    if (!state.Earned)
+                        continue;
+
+                    var resolved = AchievementMetadata.ResolvePreferringInline(
+                        state, definitions, metadataDir, achName, _config.Language);
+
+                    if (gameInfo == null && resolved == null)
+                        continue;
+
+                    entries.Add(new AchievementHistoryEntry
                     {
-                        if (!state.Earned)
-                            continue;
-
-                        var resolved = AchievementMetadata.Resolve(_gameCache, appId, achName, _config.Language);
-                        entries.Add(new AchievementHistoryEntry
-                        {
-                            AppId = appId,
-                            GameName = gameInfo.GameName,
-                            AchievementName = resolved?.DisplayName ?? achName,
-                            Description = resolved?.Description ?? "",
-                            IconPath = resolved?.IconPath,
-                            EarnedTime = state.EarnedTime
-                        });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Warn($"Error reading achievements for appid {appId}: {ex.Message}");
+                        AppId = appId,
+                        GameName = gameName,
+                        AchievementName = resolved?.DisplayName ?? achName,
+                        Description = resolved?.Description ?? "",
+                        IconPath = resolved?.IconPath,
+                        EarnedTime = state.EarnedTime
+                    });
                 }
             }
         }

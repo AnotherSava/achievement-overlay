@@ -6,6 +6,12 @@ namespace AchievementOverlay;
 /// </summary>
 public static class TrackingConfirmation
 {
+    /// <summary>Achievement name shown on the synthetic notification and its Recent-panel row.</summary>
+    public const string Title = "Gearhead";
+
+    /// <summary>Description shown alongside <see cref="Title"/>, in both places it appears.</summary>
+    public static string Description(string gameName) => $"Configure achievement tracking for\n{gameName}";
+
     /// <summary>
     /// Returns true when the synthetic notification should fire for a game: the game must be
     /// known/configured, not already shown, and have zero earned achievements.
