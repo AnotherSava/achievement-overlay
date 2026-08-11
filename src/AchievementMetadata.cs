@@ -189,7 +189,6 @@ public static class AchievementMetadata
 
         return new ResolvedAchievement
         {
-            GameName = gameInfo.GameName,
             DisplayName = displayName,
             Description = description,
             IconPath = iconPath
@@ -199,7 +198,6 @@ public static class AchievementMetadata
 
 public sealed class ResolvedAchievement
 {
-    public required string GameName { get; init; }
     public required string DisplayName { get; init; }
     public required string Description { get; init; }
     public string? IconPath { get; init; }
