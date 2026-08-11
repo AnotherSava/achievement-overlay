@@ -30,4 +30,11 @@ public class TrackingConfirmationTests
     {
         Assert.False(TrackingConfirmation.ShouldNotify(gameKnown: true, alreadyShown: false, earnedCount));
     }
+
+    [Fact]
+    public void ShouldNotify_UnknownEarnedCount_ReturnsFalse()
+    {
+        // The unlock file exists but could not be read — that is not "nothing earned yet".
+        Assert.False(TrackingConfirmation.ShouldNotify(gameKnown: true, alreadyShown: false, earnedCount: null));
+    }
 }

@@ -90,10 +90,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _watcher.GameFolderCreated += OnGameFolderCreated;
         _watcher.Start(_gameCache.GetAllAppIds());
 
-        // Fire the synthetic "tracking configured" notification for already-existing eligible folders
-        // (e.g. games configured and run before this app started).
-        foreach (var appId in _watcher.GetExistingAppIdFolders())
-            TryNotifyTrackingConfigured(appId);
+        NotifyTrackingConfiguredForExistingFolders();
 
         _achievementHistory = new AchievementHistory(_config, _gameCache);
         _recentDisplay = new RecentAchievementsDisplay(_achievementHistory, _config, _soundPlayer);
@@ -207,6 +204,18 @@ public sealed class TrayApplicationContext : ApplicationContext
     }
 
     /// <summary>
+    /// Evaluates every already-existing GSE Saves folder for the synthetic "tracking configured"
+    /// notification. Runs at startup (for games configured and run before this app started), and
+    /// again after a game is added — a game configured mid-session may already have a folder from
+    /// an earlier run, so its folder-creation event has been and gone.
+    /// </summary>
+    private void NotifyTrackingConfiguredForExistingFolders()
+    {
+        foreach (var appId in _watcher.GetExistingAppIdFolders())
+            TryNotifyTrackingConfigured(appId);
+    }
+
+    /// <summary>
     /// Shows the synthetic "Achievement tracking configured" notification for a game the first time
     /// its GSE Saves folder is seen — once per game (persisted), and only while it has zero earned
     /// achievements (so it never competes with a real first unlock).
@@ -252,10 +261,14 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     /// <summary>
     /// Counts earned achievements for a game by reading its GSE Saves achievements.json.
-    /// Returns 0 if the file does not exist yet (the common case at folder-creation time).
+    /// Returns 0 if the file does not exist yet (the common case at folder-creation time), and
+    /// null if every file that does exist could not be read or parsed — a file locked mid-write
+    /// by the emulator must not be reported as "no achievements earned yet".
     /// </summary>
-    private int CountEarnedAchievements(string appId)
+    private int? CountEarnedAchievements(string appId)
     {
+        var unreadable = false;
+
         foreach (var gseSavesPath in _config.GseSavesPaths)
         {
             var file = Path.Combine(gseSavesPath, appId, "achievements.json");
@@ -269,10 +282,12 @@ public sealed class TrayApplicationContext : ApplicationContext
             }
             catch (Exception ex)
             {
-                Logger.Info($"Could not read achievements for appid {appId}: {ex.Message}");
+                Logger.Warn($"Could not read achievements for appid {appId}: {ex.Message}");
+                unreadable = true;
             }
         }
-        return 0;
+
+        return unreadable ? null : 0;
     }
 
     private void OpenAddGameDialog()
@@ -313,6 +328,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         _gameCache.ScanAll();
         _watcher.ReseedKnownAppIds(_gameCache.GetAllAppIds());
         Logger.Info($"Game cache now has {_gameCache.GetAll().Count} game(s) after Add game.");
+
+        // This is the re-evaluation that TryNotifyTrackingConfigured leaves unguarded games for.
+        NotifyTrackingConfiguredForExistingFolders();
     }
 
     private void ExitApplication()

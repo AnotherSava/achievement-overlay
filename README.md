@@ -16,7 +16,7 @@ The Steam emulator stores achievement data in JSON files and updates them as soo
 - **Non-invasive** — works even with particularly sensitive games like Red Dead Redemption
 - **Recent achievements** — press Ctrl+Shift+H (shortcut is configurable) to review recent achievements. Also the easiest way to test that the overlay is working. Press again or Esc to dismiss
 - **Automatic game detection** — scans configured directories for games with achievement metadata
-- **Setup confirmation** — the first time a newly configured game runs, a one-time "Gearhead" popup confirms tracking is working (shown only while the game has no unlocks yet, so it never masks a real first achievement)
+- **Setup confirmation** — a one-time "Gearhead" popup confirms tracking is working, either when a newly configured game first runs or as soon as you add a game that has run before (shown only while the game has no unlocks yet, so it never masks a real first achievement)
 - **Multi-monitor support** — notifications appear on the monitor with the foreground window, with correct DPI scaling across mixed-DPI setups
 - **Unlock sound** — plays a default or user-defined sound on achievement unlock
 - **Configurable** via `config.json` (ships with the app)
