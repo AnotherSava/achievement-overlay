@@ -160,6 +160,13 @@ public sealed class AppConfig
                 // File locked or inaccessible — keep last good config
                 // Don't advance _lastWriteTimeUtc so the file will be re-read on next access
             }
+            catch (InvalidOperationException)
+            {
+                // Failed validation (e.g. a required setting momentarily deleted while the user
+                // edits the file) — keep last good config. Without this the exception escapes
+                // every config property getter and takes the app down mid-session.
+                // Don't advance _lastWriteTimeUtc so the file will be re-read on next access
+            }
         }
     }
 

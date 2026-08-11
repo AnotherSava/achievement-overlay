@@ -182,6 +182,42 @@ public class AppConfigTests : IDisposable
     }
 
     [Fact]
+    public void HotReload_InvalidSettings_KeepsLastGoodConfig()
+    {
+        var initialData = new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 };
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(initialData));
+
+        var config = new AppConfig(_settingsPath);
+        Assert.Equal(5, config.RecentAchievementsCount);
+
+        // The user saves an intermediate state while hand-editing: valid JSON, but a required
+        // setting is momentarily gone. Reading a property must not take the app down.
+        Thread.Sleep(50);
+        var midEdit = new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H" };
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(midEdit));
+        File.SetLastWriteTimeUtc(_settingsPath, DateTime.UtcNow.AddSeconds(1));
+
+        Assert.Equal(5, config.RecentAchievementsCount);
+        Assert.Equal("english", config.Language);
+    }
+
+    [Fact]
+    public void HotReload_MalformedJson_KeepsLastGoodConfig()
+    {
+        var initialData = new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 };
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(initialData));
+
+        var config = new AppConfig(_settingsPath);
+        Assert.Equal("english", config.Language);
+
+        Thread.Sleep(50);
+        File.WriteAllText(_settingsPath, "{ not valid json");
+        File.SetLastWriteTimeUtc(_settingsPath, DateTime.UtcNow.AddSeconds(1));
+
+        Assert.Equal("english", config.Language);
+    }
+
+    [Fact]
     public void UpdateConfigValue_UpdatesSingleProperty()
     {
         var initialData = new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 };
