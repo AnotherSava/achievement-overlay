@@ -73,7 +73,7 @@ public sealed class NotificationQueue : IDisposable
         var item = ResolveMetadata(args);
         if (item == null)
         {
-            Logger.Info($"Skipping notification for {args.AppId}/{args.AchievementName} (no game metadata)");
+            Logger.Warn($"Skipping notification for {args.AppId}/{args.AchievementName} (no game metadata)");
             return;
         }
 

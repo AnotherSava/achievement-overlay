@@ -91,7 +91,7 @@ public sealed class AchievementHistory
                 }
                 catch (Exception ex)
                 {
-                    Logger.Info($"Error reading achievements for appid {appId}: {ex.Message}");
+                    Logger.Warn($"Error reading achievements for appid {appId}: {ex.Message}");
                 }
             }
         }
