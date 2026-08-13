@@ -19,11 +19,20 @@ file with a numeric `earned` and the `displayName`/`description` inlined per ent
 *self-describing*: `AchievementMetadata.HasInlineText`/`IsSelfDescribing` detect it, and the game is
 tracked with no `steam_appid.txt`, no `steam_settings/`, and no `gamesPaths` entry.
 
-`AchievementMetadata.ResolvePreferringInline` is the single place the source is chosen — inline text
-wins when present (a self-describing file is not GBE's, so a cached schema under the same id is a
-different game — Ubisoft and Steam id ranges overlap), otherwise the schema. Both the popup path
+`AchievementMetadata.ResolvePreferringSchema` is the single place the source is chosen — the game's
+schema leads where it defines that achievement name, inline text is the fallback, and the choice is
+made **per field**: a schema can name an achievement and still leave a field blank (Steam redacts
+hidden achievements' descriptions, and the Add game wizard writes them empty when no Firecrawl key
+fills them in), so choosing wholesale would discard text the unlock file did carry. Schema-first is what
+gives such a game icons and localised text: the reporter's Uplay emulator is configured to emit the
+game's real Steam achievement names, so a game that also has a `steam_settings/` config under
+`gamesPaths` is just a Steam game with an unusual writer. Matching on the achievement name is the
+appid-collision guard that inline-first used to be — a schema cached under a colliding Ubisoft id
+defines other achievements, so it doesn't match and the inline text stands. Both the popup path
 (`Resolve`) and the Recent panel call it, so the two can't disagree about an achievement's text;
-`Resolve` adds the cache lookup around it and rescans only for an appid with neither source. Tolerance
+`Resolve` adds the cache lookup: a full rescan on a miss when there is no inline text (no schema means
+no notification at all), and `GameCache.LookupScanningOnce` — one rescan per appid — when there is,
+since then the schema only upgrades a notification that already works. Tolerance
 lives in `FlexibleBooleanConverter`/`FlexibleInt64Converter` (property-scoped, so the shared
 `JsonOptions` is untouched) and in `ParseUnlockStates`, which converts entries individually so one
 bad value costs one achievement rather than the whole file.
@@ -31,9 +40,10 @@ bad value costs one achievement rather than the whole file.
 Consequences elsewhere: `AchievementWatcher` seeds unconditionally (an appid that becomes resolvable
 later would otherwise replay its backlog), seeds rather than notifies for a folder that appears after
 `Start()`, subscribes `Renamed`, and raises `GameFolderObserved` from the file path as well as the
-folder path. An empty `GameCache` is a warning, not a fatal error. Uplay games get no icons and no
-game name — the Recent panel falls back to the appid. Plan:
-`docs/plans/completed/2026-08-11-uplay-emulator-support.md`.
+folder path. An empty `GameCache` is a warning, not a fatal error. A self-describing game with no
+`steam_settings/` of its own gets no icons and no game name — the Recent panel falls back to the
+appid. Plan: `docs/plans/completed/2026-08-11-uplay-emulator-support.md` (its final section covers the
+schema-first follow-up).
 
 ## Config generator (Add game dialog)
 

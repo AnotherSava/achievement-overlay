@@ -159,6 +159,37 @@ public class GameCacheTests : IDisposable
         Assert.Equal("55555", info!.AppId);
     }
 
+    [Fact]
+    public void LookupScanningOnce_NewGameAppears_FirstMissRescansAndFindsIt()
+    {
+        var gamesPath = Path.Combine(_tempDir, "games");
+        Directory.CreateDirectory(gamesPath);
+        var cache = new GameCache(new[] { gamesPath });
+        cache.ScanAll();
+
+        CreateGameDir("NewGame", "55555", """[{"name": "ACH01", "displayName": "Test"}]""");
+
+        Assert.NotNull(cache.LookupScanningOnce("55555"));
+    }
+
+    [Fact]
+    public void LookupScanningOnce_AppIdAlreadyRescanned_DoesNotRescanAgain()
+    {
+        var gamesPath = Path.Combine(_tempDir, "games");
+        Directory.CreateDirectory(gamesPath);
+        var cache = new GameCache(new[] { gamesPath });
+        cache.ScanAll();
+
+        // Spends this appid's one rescan while nothing is there to find.
+        Assert.Null(cache.LookupScanningOnce("55555"));
+
+        CreateGameDir("NewGame", "55555", """[{"name": "ACH01", "displayName": "Test"}]""");
+
+        Assert.Null(cache.LookupScanningOnce("55555"));
+        cache.ScanAll();
+        Assert.NotNull(cache.LookupScanningOnce("55555"));
+    }
+
     // --- GameInfo tests ---
 
     [Fact]

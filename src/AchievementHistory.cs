@@ -96,7 +96,7 @@ public sealed class AchievementHistory
                     if (!state.Earned)
                         continue;
 
-                    var resolved = AchievementMetadata.ResolvePreferringInline(
+                    var resolved = AchievementMetadata.ResolvePreferringSchema(
                         state, definitions, metadataDir, achName, _config.Language);
 
                     if (gameInfo == null && resolved == null)

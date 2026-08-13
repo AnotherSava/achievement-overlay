@@ -446,11 +446,11 @@ public class AchievementMetadataTests : IDisposable
     }
 
     [Fact]
-    public void ResolveInline_UsesInlineText()
+    public void ResolvePreferringSchema_NoSchema_UsesInlineText()
     {
         var states = AchievementMetadata.ParseUnlockStates(UplayJson);
 
-        var resolved = AchievementMetadata.ResolveInline(states["AFOP_Ach_8"], "AFOP_Ach_8", "english");
+        var resolved = Inline(states["AFOP_Ach_8"], "AFOP_Ach_8");
 
         Assert.NotNull(resolved);
         Assert.Equal("Homecoming", resolved.DisplayName);
@@ -459,11 +459,11 @@ public class AchievementMetadataTests : IDisposable
     }
 
     [Fact]
-    public void ResolveInline_DescriptionOnly_FallsBackToAchievementName()
+    public void ResolvePreferringSchema_InlineDescriptionOnly_FallsBackToAchievementName()
     {
         var states = AchievementMetadata.ParseUnlockStates("""{"A": {"earned": 1, "description": "Do the thing"}}""");
 
-        var resolved = AchievementMetadata.ResolveInline(states["A"], "A", "english");
+        var resolved = Inline(states["A"], "A");
 
         Assert.NotNull(resolved);
         Assert.Equal("A", resolved.DisplayName);
@@ -471,20 +471,169 @@ public class AchievementMetadataTests : IDisposable
     }
 
     [Fact]
-    public void ResolveInline_MultiLanguageText_HonoursLanguage()
+    public void ResolvePreferringSchema_MultiLanguageInlineText_HonoursLanguage()
     {
         var states = AchievementMetadata.ParseUnlockStates(
             """{"A": {"earned": 1, "displayName": {"english": "First Strike", "german": "Erstschlag"}}}""");
 
-        Assert.Equal("Erstschlag", AchievementMetadata.ResolveInline(states["A"], "A", "german")!.DisplayName);
+        Assert.Equal("Erstschlag", AchievementMetadata.ResolvePreferringSchema(
+            states["A"], definitions: null, "", "A", "german")!.DisplayName);
     }
 
     [Fact]
-    public void ResolveInline_NoInlineText_ReturnsNull()
+    public void ResolvePreferringSchema_NoSchemaAndNoInlineText_ReturnsNull()
     {
         var states = AchievementMetadata.ParseUnlockStates("""{"A": {"earned": true, "earned_time": 1}}""");
 
-        Assert.Null(AchievementMetadata.ResolveInline(states["A"], "A", "english"));
-        Assert.Null(AchievementMetadata.ResolveInline(null, "A", "english"));
+        Assert.Null(Inline(states["A"], "A"));
+        Assert.Null(Inline(null, "A"));
+    }
+
+    /// <summary>Resolves with no schema at all, i.e. from the unlock entry's own text.</summary>
+    private static ResolvedAchievement? Inline(AchievementUnlockState? state, string achievementName)
+        => AchievementMetadata.ResolvePreferringSchema(state, definitions: null, "", achievementName, "english");
+
+    [Fact]
+    public void ResolvePreferringSchema_SchemaDefinesAchievement_WinsOverInlineText()
+    {
+        // A self-describing emulator ships no icons, so a configured game's schema must win.
+        File.WriteAllBytes(Path.Combine(_tempDir, "afop8.jpg"), new byte[] { 0xFF, 0xD8 });
+        var states = AchievementMetadata.ParseUnlockStates(UplayJson);
+        var definitions = AchievementMetadata.ParseDefinitions(
+            """[{"name": "AFOP_Ach_8", "displayName": "Schema Name", "description": "Schema description.", "icon": "afop8.jpg"}]""");
+
+        var resolved = AchievementMetadata.ResolvePreferringSchema(
+            states["AFOP_Ach_8"], definitions, _tempDir, "AFOP_Ach_8", "english");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("Schema Name", resolved.DisplayName);
+        Assert.Equal("Schema description.", resolved.Description);
+        Assert.Equal(Path.Combine(_tempDir, "afop8.jpg"), resolved.IconPath);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_AchievementAbsentFromSchema_FallsBackToInlineText()
+    {
+        // The appid-collision case: a schema cached under a colliding id defines other achievements.
+        var states = AchievementMetadata.ParseUnlockStates(UplayJson);
+        var definitions = AchievementMetadata.ParseDefinitions(
+            """[{"name": "ACH01", "displayName": "A different game's achievement"}]""");
+
+        var resolved = AchievementMetadata.ResolvePreferringSchema(
+            states["AFOP_Ach_8"], definitions, _tempDir, "AFOP_Ach_8", "english");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("Homecoming", resolved.DisplayName);
+        Assert.Equal("Reach the Hometree.", resolved.Description);
+        Assert.Null(resolved.IconPath);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_EmptySchemaList_ReturnsNullWithoutInlineText()
+    {
+        var states = AchievementMetadata.ParseUnlockStates("""{"A": {"earned": true, "earned_time": 1}}""");
+
+        Assert.Null(AchievementMetadata.ResolvePreferringSchema(
+            states["A"], new List<AchievementDefinition>(), "", "A", "english"));
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_SchemaDescriptionEmpty_KeepsInlineDescription()
+    {
+        // Steam redacts hidden achievements' descriptions, and the Add game wizard writes them empty
+        // when no Firecrawl key fills them in — the schema naming the achievement must not blank text
+        // the unlock file did carry.
+        var states = AchievementMetadata.ParseUnlockStates(UplayJson);
+        var definitions = AchievementMetadata.ParseDefinitions(
+            """[{"name": "AFOP_Ach_8", "displayName": "Schema Name", "description": ""}]""");
+
+        var resolved = AchievementMetadata.ResolvePreferringSchema(
+            states["AFOP_Ach_8"], definitions, _tempDir, "AFOP_Ach_8", "english");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("Schema Name", resolved.DisplayName);
+        Assert.Equal("Reach the Hometree.", resolved.Description);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_SchemaDisplayNameEmpty_KeepsInlineDisplayName()
+    {
+        var states = AchievementMetadata.ParseUnlockStates(UplayJson);
+        var definitions = AchievementMetadata.ParseDefinitions(
+            """[{"name": "AFOP_Ach_8", "description": "Schema description."}]""");
+
+        var resolved = AchievementMetadata.ResolvePreferringSchema(
+            states["AFOP_Ach_8"], definitions, _tempDir, "AFOP_Ach_8", "english");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("Homecoming", resolved.DisplayName);
+        Assert.Equal("Schema description.", resolved.Description);
+    }
+
+    // --- Resolve: how hard the schema is looked for ---
+
+    /// <summary>Writes a GBE-shaped config for <paramref name="appId"/> under the games root.</summary>
+    private string CreateConfiguredGame(string appId, string achievementsJson)
+    {
+        var gamesDir = Path.Combine(_tempDir, "games");
+        var gameDir = Path.Combine(gamesDir, "Game" + appId);
+        var settingsDir = Path.Combine(gameDir, "steam_settings");
+        Directory.CreateDirectory(settingsDir);
+        File.WriteAllText(Path.Combine(gameDir, "steam_appid.txt"), appId);
+        File.WriteAllText(Path.Combine(settingsDir, "achievements.json"), achievementsJson);
+        return gamesDir;
+    }
+
+    private const string SchemaJson = """[{"name": "AFOP_Ach_8", "displayName": "Schema Name", "description": "Schema description."}]""";
+
+    [Fact]
+    public void Resolve_InlineText_ConfigAddedAfterScan_IsPickedUp()
+    {
+        var gamesDir = Path.Combine(_tempDir, "games");
+        Directory.CreateDirectory(gamesDir);
+        var cache = new GameCache(new[] { gamesDir });
+        cache.ScanAll();
+
+        CreateConfiguredGame("2840770", SchemaJson);
+        var state = AchievementMetadata.ParseUnlockStates(UplayJson)["AFOP_Ach_8"];
+
+        var resolved = AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, "english");
+
+        Assert.Equal("Schema Name", resolved!.DisplayName);
+    }
+
+    [Fact]
+    public void Resolve_InlineText_RescansOncePerAppId()
+    {
+        var gamesDir = Path.Combine(_tempDir, "games");
+        Directory.CreateDirectory(gamesDir);
+        var cache = new GameCache(new[] { gamesDir });
+        cache.ScanAll();
+        var state = AchievementMetadata.ParseUnlockStates(UplayJson)["AFOP_Ach_8"];
+
+        // Spends this appid's one rescan while nothing is configured; the inline text carries it.
+        Assert.Equal("Homecoming", AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, "english")!.DisplayName);
+
+        CreateConfiguredGame("2840770", SchemaJson);
+
+        // No second rescan: a notification already works, so the schema is not chased per unlock.
+        Assert.Equal("Homecoming", AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, "english")!.DisplayName);
+    }
+
+    [Fact]
+    public void Resolve_NoInlineText_RescansOnEveryMiss()
+    {
+        var gamesDir = Path.Combine(_tempDir, "games");
+        Directory.CreateDirectory(gamesDir);
+        var cache = new GameCache(new[] { gamesDir });
+        cache.ScanAll();
+        var state = AchievementMetadata.ParseUnlockStates("""{"AFOP_Ach_8": {"earned": true, "earned_time": 1}}""")["AFOP_Ach_8"];
+
+        // Without inline text a missing schema means no notification at all, so every miss rescans.
+        Assert.Null(AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, "english"));
+
+        CreateConfiguredGame("2840770", SchemaJson);
+
+        Assert.Equal("Schema Name", AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, "english")!.DisplayName);
     }
 }

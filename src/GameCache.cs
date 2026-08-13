@@ -21,6 +21,11 @@ public sealed class GameInfo
 public sealed class GameCache
 {
     private readonly ConcurrentDictionary<string, GameInfo> _cache = new();
+
+    // Appids a LookupScanningOnce miss has already spent a rescan on. Concurrent because unlocks are
+    // resolved on fire-and-forget watcher tasks.
+    private readonly ConcurrentDictionary<string, byte> _rescannedAppIds = new();
+
     private readonly AppConfig? _config;
     private readonly string[]? _staticGamesPaths;
 
@@ -68,6 +73,20 @@ public sealed class GameCache
     /// per GSE Saves folder, where a rescan miss would be paid over and over.
     /// </summary>
     public GameInfo? LookupCached(string appId) => _cache.TryGetValue(appId, out var info) ? info : null;
+
+    /// <summary>
+    /// Looks up a game by appid, rescanning at most once per appid. Use this where a miss is a normal
+    /// steady state — a game tracked through a self-describing unlock file needs no steam_settings/ at
+    /// all, and an unthrottled <see cref="Lookup"/> would walk every configured games path again on
+    /// every unlock. The one attempt still picks up a config added after the last scan.
+    /// </summary>
+    public GameInfo? LookupScanningOnce(string appId)
+    {
+        if (_cache.TryGetValue(appId, out var info))
+            return info;
+
+        return _rescannedAppIds.TryAdd(appId, 0) ? Lookup(appId) : null;
+    }
 
     /// <summary>
     /// Looks up a game by appid. If not found, triggers a re-scan and tries again.

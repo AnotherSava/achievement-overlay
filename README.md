@@ -122,8 +122,23 @@ Two limitations for these games, both because the emulator provides nothing to w
 - **No achievement icons** — notifications use the default icon.
 - **No game name** — the Recent-achievements panel labels the game with the folder's id.
 
+### Getting icons and the game name back
+
+Both limitations lift if the game also has a GBE-style config, because the overlay reads the schema
+first and treats the inline text as the fallback. Put a `steam_settings/` folder (with
+`achievements.json` and its `achievement_images/`) and a `steam_appid.txt` holding the same id as the
+GSE Saves folder into the game's own folder, and make sure `gamesPaths` covers it. Notifications then
+use the schema's icons and text, and the Recent panel shows the game's name.
+
+This works only where the emulator emits the same achievement names as the Steam schema — for the
+Uplay R2 emulator that is what its `AchKeyPrefix` setting is for. Names the schema doesn't define fall
+back to the unlock file's own text, and so does any single field the schema leaves blank (hidden
+achievements often have no description), so a partial match is fine. The config is picked up on that
+game's next unlock; restart the overlay if it has already shown notifications for it.
+
 The [Add game…](#adding-a-game) wizard is Steam-only: it works by replacing the game's Steam library
-with GBE's, which does not apply to other emulators.
+with GBE's, which does not apply to other emulators. Use it on the Steam version of the game (or any
+GBE config generator) to produce the `steam_settings/` folder, then copy that folder across.
 
 ## Troubleshooting
 
@@ -152,6 +167,8 @@ If no games are found at all, the log shows `[WARN] No games with achievement me
 ### Notification shows default icon instead of achievement icon
 
 The icon path in the game's `steam_settings/achievements.json` doesn't match an actual file. Check that the `icon` field (e.g. `"img/abc123.jpg"`) points to an existing file relative to the `steam_settings/` directory.
+
+For a game tracked through a non-GBE emulator, the default icon also means no schema was found for it — see [Getting icons and the game name back](#getting-icons-and-the-game-name-back).
 
 ### Wrong language
 

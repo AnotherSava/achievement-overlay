@@ -200,4 +200,23 @@ public class AchievementHistoryTests : IDisposable
         Assert.Equal("2840770", entry.GameName);
         Assert.Null(entry.IconPath);
     }
+
+    [Fact]
+    public void GetRecent_SelfDescribingKnownAppId_UsesSchemaAndGameName()
+    {
+        CreateGame("12345", "TestGame");
+        CreateSaveFile("12345",
+            """{"ACH01": {"earned": 1, "earned_time": 1774855788, "displayName": "Inline Name", "description": "Inline description."}}""");
+
+        var config = CreateConfig();
+        var gameCache = new GameCache(new[] { _gamesDir });
+        gameCache.ScanAll();
+
+        var recent = new AchievementHistory(config, gameCache).GetRecent(10);
+
+        var entry = Assert.Single(recent, e => e.AppId == "12345");
+        Assert.Equal("Test Achievement", entry.AchievementName);
+        Assert.Equal("Test Desc", entry.Description);
+        Assert.Equal("TestGame", entry.GameName);
+    }
 }

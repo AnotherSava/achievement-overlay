@@ -125,6 +125,9 @@ catch and `ProcessFile_InvalidJson_LogsErrorAndSkips` keep working.
 
 ### 4. Resolution chain — `src/AchievementMetadata.cs`, `src/NotificationQueue.cs`
 
+> Superseded by the schema-first follow-up at the end of this document; the precedence below is what
+> shipped in v1.6.0-rc1.
+
 Split `Resolve` into `ResolveFromDefinitions` (today's body from `FindDefinition` down) and
 `ResolveInline(state, name, language)` (null when the state is null or both texts are empty;
 `IconPath` always null — never probe GSE Saves for images).
@@ -224,13 +227,56 @@ the format — it cannot detect U1, U3, U4 or U5 being wrong. So: build the bran
 build, and ask him to confirm popups carry the right name and description. That answer is the real
 acceptance test.
 
+## Follow-up: schema-first precedence (2026-08-13)
+
+The reporter confirmed the popups work, then asked for the one thing v1 ruled out: **icons**. His
+argument settles the design question v1 hedged on. He configures the emulator's `AchKeyPrefix` so it
+emits the game's *real Steam achievement names*, and names the save folder with the *Steam* AppID —
+deliberately, so Steam-oriented trackers line up. So a Uplay game with a GBE `steam_settings/` beside
+it is not a special case at all: it is a Steam game whose unlock file happens to be written by an
+odd emulator. He also pointed out that inline text is not guaranteed — the legitimate Ubisoft client
+writes only `ach_id`/`earned`/`earned_time` — which kills any design that treats the inline text as
+the primary source.
+
+**Change:** `ResolvePreferringInline` becomes `ResolvePreferringSchema` — the schema leads where it
+defines that achievement name, inline text is the fallback. `ResolveFromDefinitions` and
+`ResolveInline` (v1's split) fold into it, since neither had another caller.
+
+The appid collision that motivated inline-first (Ubisoft and Steam id ranges overlap) is handled
+better by the name match itself: a schema cached under a colliding id defines *other* achievements, so
+`FindDefinition` misses and the inline text is used. Per-achievement rather than per-file, so a game
+whose emulator names only partly match the schema resolves each achievement from whichever source has
+it.
+
+Per *field*, too — review caught this and it is not hypothetical. Steam redacts hidden achievements'
+descriptions, so the Add game wizard run without a Firecrawl key writes `"description": ""` into a
+schema that still carries a real `displayName`. Choosing a source wholesale would then blank a
+description the unlock file did carry — a regression against rc1 for exactly the games this follow-up
+is for. Each field takes the schema's text when it has any, the inline text otherwise; the icon can
+only ever come from the schema.
+
+`Resolve`'s lookup policy now splits by what is at stake:
+
+| unlock file | lookup | why |
+|---|---|---|
+| no inline text | `Lookup` (rescan on every miss) | without a schema there is no notification at all |
+| inline text | `LookupScanningOnce` (one rescan per appid) | the notification already works; the schema only upgrades it, so a config dropped in after startup is picked up without paying a library walk per unlock |
+
+Everything else from v1 stands. The `earned: 0/1` tolerance the reporter offered as an alternative
+("just accept it for all Steam games") was already implemented that way — universally, not gated on
+detecting a Uplay install — so his second option needed no work.
+
 ## Follow-ups (deliberately not in v1)
 
-- **Game name and icons.** If the reporter wants them, the discovery route that needs no unverified
-  ini key is content matching: scan `gamesPaths` for `achievements_schema.json` and match it to a GSE
-  Saves folder by achievement-name-set intersection, since the save file starts as a byte-identical
-  copy. That yields a name *and* a definitions source. Only that route needs object-shaped definition
-  parsing (`Name` backfilled from the dictionary key).
+- ~~**Game name and icons.**~~ Answered by the schema-first follow-up above: both come from a
+  `steam_settings/` config the user places beside the game. The rejected alternative — discovering
+  Uplay games by scanning `gamesPaths` for `achievements_schema.json` and matching a GSE Saves folder
+  by achievement-name-set intersection — is still the only route for a game with *no* Steam config,
+  and still not worth its cost.
+- **A metadata-only mode for the Add game… wizard** — generate `steam_settings/` (schema + icons +
+  `steam_appid.txt`) into a folder without locating or replacing a Steam DLL, so a non-Steam emulator
+  user can produce the config from the app instead of copying one in. Considered for this follow-up
+  and deferred: the reporter already has the config his emulator was configured against.
 - **`gameNames` config map**, pending the reporter's preference.
 - **Shared Gearhead strings.** The title and description are written verbatim in both
   `TrayApplicationContext` and `AchievementHistory`; consolidate while step 6/7 touch both.

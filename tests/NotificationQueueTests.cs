@@ -321,6 +321,53 @@ public class NotificationQueueTests : IDisposable
     }
 
     [Fact]
+    public void ResolveMetadata_KnownGameWithInlineText_PrefersSchemaAndIcon()
+    {
+        // The Uplay emulator can be configured to emit the game's real Steam achievement names, so a
+        // configured game's schema — the only source with icons — wins over the file's own text.
+        var imgDir = Path.Combine(_gamesDir, "TestGame", "steam_settings", "img");
+        Directory.CreateDirectory(imgDir);
+        File.WriteAllBytes(Path.Combine(imgDir, "ach01.png"), new byte[] { 0x89, 0x50, 0x4E, 0x47 });
+
+        var queue = new NotificationQueue(_gameCache, _config);
+
+        var item = queue.ResolveMetadata(new NewAchievementEventArgs
+        {
+            AppId = "12345",
+            AchievementName = "ACH01",
+            EarnedTime = 1700000000,
+            UnlockState = UplayState("ACH01",
+                """{"ACH01": {"earned": 1, "earned_time": 1700000000, "displayName": "Inline Name", "description": "Inline description."}}""")
+        });
+
+        Assert.NotNull(item);
+        Assert.Equal("First Blood", item.AchievementName);
+        Assert.Equal("Get your first kill", item.Description);
+        Assert.NotNull(item.IconPath);
+        Assert.Contains("ach01.png", item.IconPath);
+    }
+
+    [Fact]
+    public void ResolveMetadata_KnownGameAchievementAbsentFromSchema_UsesInlineText()
+    {
+        var queue = new NotificationQueue(_gameCache, _config);
+
+        var item = queue.ResolveMetadata(new NewAchievementEventArgs
+        {
+            AppId = "12345",
+            AchievementName = "AFOP_Ach_8",
+            EarnedTime = 1785988975,
+            UnlockState = UplayState("AFOP_Ach_8",
+                """{"AFOP_Ach_8": {"earned": 1, "displayName": "Homecoming", "description": "Reach the Hometree."}}""")
+        });
+
+        Assert.NotNull(item);
+        Assert.Equal("Homecoming", item.AchievementName);
+        Assert.Equal("Reach the Hometree.", item.Description);
+        Assert.Null(item.IconPath);
+    }
+
+    [Fact]
     public void Enqueue_UnknownGameWithInlineText_QueuesNotification()
     {
         var queue = new NotificationQueue(_gameCache, _config);

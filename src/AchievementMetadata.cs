@@ -295,89 +295,66 @@ public static class AchievementMetadata
 
     /// <summary>
     /// Resolves display name, description, and icon path for an achievement.
-    /// Returns null if game or definition not found.
+    /// Returns null when neither the game's schema nor the unlock entry itself names it.
     /// </summary>
     public static ResolvedAchievement? Resolve(
         GameCache gameCache, string appId, string achievementName, AchievementUnlockState? unlockState, string language)
     {
-        var inline = HasInlineText(unlockState);
-        var game = gameCache.LookupCached(appId);
+        // How hard to look for a schema depends on what is at stake. Without inline text a missing
+        // schema means no notification at all, so a full rescan per unlock is worth it; with inline
+        // text the notification already works and the schema only upgrades it, so one rescan per
+        // appid is enough to pick up a config dropped in after startup.
+        var game = HasInlineText(unlockState)
+            ? gameCache.LookupScanningOnce(appId)
+            : gameCache.Lookup(appId);
 
-        // A self-describing file is by construction not GBE's, so a cached schema under the same id
-        // belongs to a different game — Ubisoft and Steam id ranges fully overlap.
-        if (inline && game != null)
-            Logger.Warn($"appid {appId} has both a configured game and a self-describing unlock file — using the file's own text");
-
-        // Rescan only when there is neither a cached game nor inline text to fall back on.
-        if (game == null && !inline)
-            game = gameCache.Lookup(appId);
-
-        // Only load the schema when it will actually be consulted.
-        var definitions = !inline && game != null ? GameCache.LoadDefinitions(game) : null;
+        var definitions = game != null ? GameCache.LoadDefinitions(game) : null;
         var metadataDir = game != null ? Path.GetDirectoryName(game.MetadataPath)! : "";
 
-        return ResolvePreferringInline(unlockState, definitions, metadataDir, achievementName, language);
+        return ResolvePreferringSchema(unlockState, definitions, metadataDir, achievementName, language);
     }
 
     /// <summary>
-    /// Resolves against already-loaded definitions, so a caller iterating many achievements loads
-    /// and parses the schema once rather than once per achievement.
+    /// Resolves one achievement from the two sources that can describe it: the game's schema (already
+    /// loaded, so a caller iterating many achievements parses it once) and the unlock entry's own
+    /// inline text. The single place this precedence is decided, so the popup and the Recent-
+    /// achievements panel can never disagree about an achievement's text. Null when neither source
+    /// names the achievement.
+    /// The schema leads because it is the only source with icons and localised text — a self-describing
+    /// emulator ships neither. Matching on the achievement name is itself the appid-collision guard
+    /// (Ubisoft and Steam id ranges overlap): a schema cached under a colliding id defines other
+    /// achievements, so it does not match and the inline text stands.
+    /// Field by field rather than source by source, because a schema can name an achievement and still
+    /// leave a field blank — Steam redacts hidden achievements' descriptions, and the Add game wizard
+    /// writes them empty when no Firecrawl key fills them in. Choosing wholesale would then discard a
+    /// description the unlock file did carry.
     /// </summary>
-    public static ResolvedAchievement? ResolveFromDefinitions(
-        IEnumerable<AchievementDefinition> definitions, string metadataDir, string achievementName, string language)
-    {
-        var definition = FindDefinition(definitions, achievementName);
-        if (definition == null)
-            return null;
-
-        var displayName = GetDisplayText(definition.DisplayName, language);
-        if (string.IsNullOrEmpty(displayName))
-            displayName = achievementName;
-
-        return new ResolvedAchievement
-        {
-            DisplayName = displayName,
-            Description = GetDisplayText(definition.Description, language),
-            IconPath = ResolveIconPath(definition, metadataDir)
-        };
-    }
-
-    /// <summary>
-    /// Chooses the metadata source for one achievement: the unlock entry's own inline text when it
-    /// carries any, otherwise the game's schema. The single place this precedence is decided, so the
-    /// popup and the Recent-achievements panel can never disagree about an achievement's text.
-    /// </summary>
-    public static ResolvedAchievement? ResolvePreferringInline(
+    public static ResolvedAchievement? ResolvePreferringSchema(
         AchievementUnlockState? state, IEnumerable<AchievementDefinition>? definitions,
         string metadataDir, string achievementName, string language)
-        => HasInlineText(state)
-            ? ResolveInline(state, achievementName, language)
-            : definitions != null
-                ? ResolveFromDefinitions(definitions, metadataDir, achievementName, language)
-                : null;
-
-    /// <summary>
-    /// Resolves from the unlock state's own inline text, for emulators that write it into the
-    /// GSE Saves file. No icon: such writers ship none, and the GSE Saves folder is never probed
-    /// for images.
-    /// </summary>
-    public static ResolvedAchievement? ResolveInline(
-        AchievementUnlockState? state, string achievementName, string language)
     {
-        if (!HasInlineText(state))
+        var definition = definitions != null ? FindDefinition(definitions, achievementName) : null;
+        var inline = HasInlineText(state) ? state : null;
+        if (definition == null && inline == null)
             return null;
-
-        var displayName = GetDisplayText(state!.DisplayName, language);
-        if (string.IsNullOrEmpty(displayName))
-            displayName = achievementName;
 
         return new ResolvedAchievement
         {
-            DisplayName = displayName,
-            Description = GetDisplayText(state.Description, language),
-            IconPath = null
+            DisplayName = FirstNonEmpty(
+                GetDisplayText(definition?.DisplayName, language),
+                GetDisplayText(inline?.DisplayName, language),
+                achievementName),
+            Description = FirstNonEmpty(
+                GetDisplayText(definition?.Description, language),
+                GetDisplayText(inline?.Description, language)),
+            // Only the schema can supply an icon: writers that inline their text ship none, and the
+            // GSE Saves folder is never probed for images.
+            IconPath = definition != null ? ResolveIconPath(definition, metadataDir) : null
         };
     }
+
+    private static string FirstNonEmpty(params string[] candidates)
+        => Array.Find(candidates, c => !string.IsNullOrEmpty(c)) ?? "";
 }
 
 public sealed class ResolvedAchievement
