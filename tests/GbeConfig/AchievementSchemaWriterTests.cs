@@ -34,10 +34,9 @@ public class AchievementSchemaWriterTests
     public void ApplyDescriptions_PatchesByApiName()
     {
         var list = AchievementSchemaWriter.Build(new[] { Ach("H", hidden: 1, desc: "No description available") });
-        var patched = AchievementSchemaWriter.ApplyDescriptions(list,
+        AchievementSchemaWriter.ApplyDescriptions(list,
             new Dictionary<string, string> { ["H"] = "The real hidden text" });
 
-        Assert.Equal(1, patched);
         Assert.Equal("The real hidden text", list[0].Description);
         Assert.Equal("1", list[0].Hidden); // stays hidden
     }
@@ -46,10 +45,9 @@ public class AchievementSchemaWriterTests
     public void ApplyDescriptions_NoMatch_LeavesUnchanged()
     {
         var list = AchievementSchemaWriter.Build(new[] { Ach("A", desc: "orig") });
-        var patched = AchievementSchemaWriter.ApplyDescriptions(list,
+        AchievementSchemaWriter.ApplyDescriptions(list,
             new Dictionary<string, string> { ["OTHER"] = "x" });
 
-        Assert.Equal(0, patched);
         Assert.Equal("orig", list[0].Description);
     }
 

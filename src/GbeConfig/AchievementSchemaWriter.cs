@@ -62,11 +62,10 @@ public static class AchievementSchemaWriter
     /// <summary>
     /// Patches descriptions for achievements whose API name appears in
     /// <paramref name="descriptions"/>. Used to fill in hidden-achievement text scraped
-    /// from SteamDB. Returns the number of entries updated.
+    /// from SteamDB.
     /// </summary>
-    public static int ApplyDescriptions(List<GbeAchievement> achievements, IReadOnlyDictionary<string, string> descriptions)
+    public static void ApplyDescriptions(List<GbeAchievement> achievements, IReadOnlyDictionary<string, string> descriptions)
     {
-        var patched = 0;
         for (var i = 0; i < achievements.Count; i++)
         {
             var a = achievements[i];
@@ -81,10 +80,8 @@ public static class AchievementSchemaWriter
                     Icon = a.Icon,
                     IconGray = a.IconGray
                 };
-                patched++;
             }
         }
-        return patched;
     }
 
     public static string Serialize(List<GbeAchievement> achievements) =>
