@@ -63,6 +63,10 @@ preferring local) — use it to keep your personal `steamWebApiKey` / `firecrawl
 CI/release builds `local.json` doesn't exist, so `default.json` is used. `config/local.json` is
 created from the committed defaults plus credential placeholders; fill them in after first checkout.
 
+Fill the keys in **`config/local.json`**, not in the running app. Deploy copies `local.json` over the
+installed `config.json`, so a key typed into the Add game wizard (which writes the *installed* file)
+survives only until the next deploy — an empty placeholder in `local.json` silently blanks it.
+
 ## Build & Test
 
 ```
