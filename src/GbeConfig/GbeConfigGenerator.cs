@@ -140,19 +140,26 @@ public sealed class GbeConfigGenerator
         if (hiddenCount > 0)
         {
             Step($"Fetching {hiddenCount} hidden description(s) from SteamDB...");
-            var descs = await SteamDbScraper.FetchHiddenDescriptionsAsync(appId, _req.FirecrawlApiKey, _http, ct);
-            if (descs == null)
+            var scrape = await SteamDbScraper.FetchHiddenDescriptionsAsync(appId, _req.FirecrawlApiKey, _http, ct);
+            if (scrape.Descriptions == null)
             {
-                _progress.FailStep("Couldn't fetch hidden descriptions from SteamDB (no Firecrawl API key, or the scrape "
-                    + "failed). Hidden achievements are left with placeholder descriptions.");
+                _progress.FailStep($"Couldn't fetch hidden descriptions from SteamDB. {scrape.FailureReason}");
+                Warn($"Hidden achievements are left with placeholder descriptions. To fill them in by hand, see "
+                    + $"{SteamDbScraper.StatsPageUrl(appId)}");
                 partial = true;
             }
             else
             {
-                var patched = AchievementSchemaWriter.ApplyDescriptions(achievements, descs);
-                Info($"Patched {patched}/{hiddenCount} hidden description(s).");
-                if (patched < hiddenCount)
+                AchievementSchemaWriter.ApplyDescriptions(achievements, scrape.Descriptions);
+                var missing = schema.Where(a => a.Hidden != 0 && !scrape.Descriptions.ContainsKey(a.Name))
+                    .Select(a => a.Name).ToList();
+                Info($"Patched {hiddenCount - missing.Count}/{hiddenCount} hidden description(s) "
+                    + $"({scrape.Descriptions.Count} achievement(s) found on the SteamDB page).");
+                if (missing.Count > 0)
+                {
+                    Warn($"SteamDB had no description for {missing.Count} hidden achievement(s): {Summarize(missing)}");
                     partial = true;
+                }
             }
         }
 
@@ -288,6 +295,14 @@ public sealed class GbeConfigGenerator
 
         Warn("No crack indicator found; if the game ignores steam_api64.dll this won't work.");
         return true;
+    }
+
+    /// <summary>Joins names for a log line, capping the list so one bad game can't flood the log.</summary>
+    private static string Summarize(IReadOnlyList<string> names)
+    {
+        const int cap = 10;
+        var shown = string.Join(", ", names.Take(cap));
+        return names.Count <= cap ? shown : $"{shown} (+{names.Count - cap} more)";
     }
 
     private void Debug(string m) => _progress.Report(ConfigLogLevel.Debug, m);
