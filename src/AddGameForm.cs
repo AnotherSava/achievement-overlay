@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Net.Http;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using AchievementOverlay.GbeConfig;
 
@@ -90,7 +89,6 @@ public sealed class AddGameForm : Form, IConfigProgress
     private readonly List<Label> _wrapLabels = new();
     private Panel? _activePanel;
     private FlowLayoutPanel _buttonBar = null!;
-    private Bitmap? _folderIcon;
 
     // Collected state
     private string _gameDir = "";
@@ -204,7 +202,7 @@ public sealed class AddGameForm : Form, IConfigProgress
             null,
             g =>
             {
-                var folderRow = MakeInputRow(_gameDirBox, MakeBrowseButton(_gameDirBox));
+                var folderRow = DialogControls.MakeInputRow(_gameDirBox, MakeBrowseButton(_gameDirBox));
                 folderRow.Margin = new Padding(TextInset, 28, TextInset, 2); // gap before the box; inset to align with text
                 g.Controls.Add(folderRow);
                 _folderStatus.Margin = new Padding(0, 6, 0, 0);
@@ -291,7 +289,7 @@ public sealed class AddGameForm : Form, IConfigProgress
                 g.Controls.Add(_advancedToggle);
 
                 var gbeLabel = new Label { Text = "GBE release folder", AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(0, 14, 0, 6) };
-                var gbeRow = MakeInputRow(_gbePathBox, MakeBrowseButton(_gbePathBox));
+                var gbeRow = DialogControls.MakeInputRow(_gbePathBox, MakeBrowseButton(_gbePathBox));
                 gbeRow.Margin = new Padding(TextInset, 6, TextInset, 12); // align the box edge with the text; extra space above/below
                 var gbeHelp = MakeHelp(
                     "GBE provides the Steam emulator that's copied into the game (and the tool that lists its Steam "
@@ -375,53 +373,9 @@ public sealed class AddGameForm : Form, IConfigProgress
         return summary;
     }
 
-    /// <summary>A full-width input row, optionally with a trailing (frameless folder) button.</summary>
-    private static Control MakeInputRow(TextBox input, Button? trailing)
-    {
-        input.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        if (trailing == null)
-        {
-            input.Margin = new Padding(0, 2, 0, 2);
-            return input;
-        }
-
-        var row = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(0, 2, 0, 2) };
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        input.Margin = new Padding(0, 0, 4, 0);
-        input.Dock = DockStyle.Fill;
-        row.Controls.Add(input, 0, 0);
-        row.Controls.Add(trailing, 1, 0);
-        return row;
-    }
-
     private Button MakeBrowseButton(TextBox target)
     {
-        var button = new Button
-        {
-            AutoSize = false,
-            Width = 24,
-            Height = 22,
-            FlatStyle = FlatStyle.Flat,
-            Anchor = AnchorStyles.Left,
-            Margin = new Padding(0),
-            TabStop = false,
-            ImageAlign = ContentAlignment.MiddleCenter,
-            BackColor = SystemColors.Control,
-            Cursor = Cursors.Hand
-        };
-        button.FlatAppearance.BorderSize = 0;
-        button.FlatAppearance.MouseOverBackColor = SystemColors.ControlLight;
-        button.FlatAppearance.MouseDownBackColor = SystemColors.ControlDark;
-
-        _folderIcon ??= NativeFolderIcon.GetSmall();
-        if (_folderIcon != null)
-            button.Image = _folderIcon;
-        else
-            button.Text = "…";
-
-        _toolTip.SetToolTip(button, "Browse for folder");
-        button.Click += (_, _) => PickFolder(target);
+        var button = DialogControls.MakeBrowseButton(_toolTip, "Browse for folder", () => PickFolder(target));
         _browseButtons.Add(button);
         return button;
     }
@@ -947,11 +901,9 @@ public sealed class AddGameForm : Form, IConfigProgress
 
     private void PickFolder(TextBox target)
     {
-        using var dialog = new FolderBrowserDialog { ShowNewFolderButton = false };
-        if (Directory.Exists(target.Text))
-            dialog.SelectedPath = target.Text;
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-            target.Text = dialog.SelectedPath;
+        var picked = DialogControls.PickFolder(this, target.Text);
+        if (picked != null)
+            target.Text = picked;
     }
 
     private static void OpenUrl(string url)
@@ -1081,57 +1033,10 @@ public sealed class AddGameForm : Form, IConfigProgress
     {
         if (disposing)
         {
-            _folderIcon?.Dispose();
             _toolTip.Dispose();
             _http.Dispose();
             _spinner.Dispose();
         }
         base.Dispose(disposing);
-    }
-}
-
-/// <summary>Loads the OS's native shell folder icon so the browse button matches Windows.</summary>
-internal static class NativeFolderIcon
-{
-    private const int SiidFolder = 3;
-    private const uint ShgsiIcon = 0x000000100;
-    private const uint ShgsiSmallIcon = 0x000000001;
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct ShStockIconInfo
-    {
-        public uint cbSize;
-        public IntPtr hIcon;
-        public int iSysImageIndex;
-        public int iIcon;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-        public string szPath;
-    }
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-    private static extern int SHGetStockIconInfo(int siid, uint uFlags, ref ShStockIconInfo psii);
-
-    [DllImport("user32.dll")]
-    private static extern bool DestroyIcon(IntPtr hIcon);
-
-    public static Bitmap? GetSmall()
-    {
-        var info = new ShStockIconInfo { cbSize = (uint)Marshal.SizeOf<ShStockIconInfo>() };
-        try
-        {
-            if (SHGetStockIconInfo(SiidFolder, ShgsiIcon | ShgsiSmallIcon, ref info) != 0 || info.hIcon == IntPtr.Zero)
-                return null;
-            using var icon = Icon.FromHandle(info.hIcon);
-            return icon.ToBitmap();
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-        finally
-        {
-            if (info.hIcon != IntPtr.Zero)
-                DestroyIcon(info.hIcon);
-        }
     }
 }
