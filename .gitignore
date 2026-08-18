@@ -2,14 +2,17 @@
 bin/
 obj/
 publish/
+__pycache__/
 
 # Claude Code
 .claude/settings.local.json
 
-# Local docs — ignore all except plans
+# Local docs — ignore all except plans and the pages the README links to
 docs/*
 !docs/plans/
 !docs/screenshots/
+!docs/gbe-reference.md
+!docs/playnite.md
 
 # Runtime config (generated on first run)
 config.json

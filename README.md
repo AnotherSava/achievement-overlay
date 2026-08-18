@@ -105,6 +105,8 @@ Notes:
 - **Denuvo games** — these won't load `steam_api64.dll`. If Denuvo is detected with no crack present, the tool stops before changing anything.
 - **Windows Defender** — current GBE releases sometimes trigger a false positive on download. If that happens, the wizard offers to add the needed Defender exclusions (with a UAC prompt) and retries automatically. Alternatively, point the Advanced **GBE release folder** at an already-extracted release and uncheck "Download the latest GBE release".
 
+The [GBE reference](docs/gbe-reference.md) covers what the wizard is doing underneath — where unlocks are stored, the achievement schema format, why the overlay disables GBE's own, and why hidden achievement descriptions arrive blank. You don't need any of it for normal use.
+
 ## Other emulators
 
 The overlay is built around GBE, but it tracks any emulator that writes a GSE-Saves-style
@@ -140,6 +142,13 @@ The [Add game…](#adding-a-game) wizard is Steam-only: it works by replacing th
 with GBE's, which does not apply to other emulators. Use it on the Steam version of the game (or any
 GBE config generator) to produce the `steam_settings/` folder, then copy that folder across.
 
+## Playnite
+
+An emulator-tracked game launched through [Playnite](https://playnite.link) won't show achievements in
+the SuccessStory plugin on its own, because the game carries no Steam AppID for the plugin to look up.
+One line of configuration fixes it, and SuccessStory then reads unlock state from the same GSE Saves
+files this overlay watches — see [Playnite and SuccessStory](docs/playnite.md).
+
 ## Troubleshooting
 
 The app writes a log file (`overlay.log`) next to the config file (use the tray context menu to find it). Check it for diagnostic information. Look for `[WARN]` and `[ERROR]` entries.
@@ -164,9 +173,19 @@ If the log shows `[WARN] Skipped: appid=... (no 'achievements.json')`, the game 
 
 If no games are found at all, the log shows `[WARN] No games with achievement metadata found` and the app keeps running — only games tracked via [Other emulators](#other-emulators) will produce notifications. Check `gamesPaths` in config.
 
+### Game unlocked an achievement but nothing appeared
+
+Check that `%appdata%\GSE Saves\<app_id>\achievements.json` exists and lists the unlock. If it doesn't, the emulator never recorded it and the overlay had nothing to show:
+
+- Older emulator builds and some cracks write to `%appdata%\Goldberg SteamEmu Saves\` instead. Add that folder to `gseSavesPaths`.
+- A folder named `4294967295` means the emulator never got a valid AppID — check `steam_appid.txt`.
+- Achievements earned **before** you configured the game are never backfilled. The emulator only records an unlock at the moment the game reports it.
+
+More detail in the [GBE reference](docs/gbe-reference.md#where-unlocks-are-stored).
+
 ### Notification shows default icon instead of achievement icon
 
-The icon path in the game's `steam_settings/achievements.json` doesn't match an actual file. Check that the `icon` field (e.g. `"img/abc123.jpg"`) points to an existing file relative to the `steam_settings/` directory.
+The icon path in the game's `steam_settings/achievements.json` doesn't match an actual file. Check that the `icon` field (e.g. `"img/abc123.jpg"`) points to an existing file relative to the `steam_settings/` directory. The [schema format](docs/gbe-reference.md#the-achievement-schema-format) lists the layouts different generators produce.
 
 For a game tracked through a non-GBE emulator, the default icon also means no schema was found for it — see [Getting icons and the game name back](#getting-icons-and-the-game-name-back).
 
