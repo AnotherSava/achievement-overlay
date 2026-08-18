@@ -17,7 +17,6 @@ public sealed class RecentAchievementsDisplay : IDisposable
     private GlobalHotkey? _escHotkey;
     private DispatcherTimer? _cascadeTimer;
     private const int ESC_HOTKEY_ID = 9999;
-    private const double GapBetweenWindows = 6;
     private DateTime _lastShowTime;
 
     public bool IsVisible => _windows.Count > 0;
@@ -57,15 +56,17 @@ public sealed class RecentAchievementsDisplay : IDisposable
         Logger.Info($"Showing {entries.Count} recent achievement(s)");
 
         var gameWindowRect = AppUtilities.GetForegroundWindowRect();
+        // The settings dialog allows clearing the shortcut, leaving the tray menu as the way in.
         var shortcut = _config.RecentAchievementsShortcut;
+        var dismissHint = string.IsNullOrWhiteSpace(shortcut) ? "Press Esc to hide" : $"Press {shortcut} or Esc to hide";
         var notificationWidth = Math.Max(250, gameWindowRect.Width * 0.15);
         var margin = Math.Min(gameWindowRect.Width, gameWindowRect.Height) * 0.02;
         var standardSlideDistance = gameWindowRect.Height * 0.015;
 
         // Show footer first (info bar with dismiss instructions)
-        var footer = new NotificationWindow(_config.DisplayDuration);
+        var footer = new NotificationWindow(NotificationAppearance.From(_config));
         var footerTop = gameWindowRect.Bottom - margin - 40; // rough estimate, corrected after render
-        footer.ShowFooter($"Achievement Overlay \u2014 Recent achievements\n\nPress {shortcut} or Esc to hide", gameWindowRect, footerTop, standardSlideDistance);
+        footer.ShowFooter($"Achievement Overlay \u2014 Recent achievements\n\n{dismissHint}", gameWindowRect, footerTop, standardSlideDistance);
         _windows.Add(footer);
 
         // After footer renders, position correctly and start cascading achievements
@@ -82,7 +83,7 @@ public sealed class RecentAchievementsDisplay : IDisposable
         {
             var footerHeight = footer.ActualHeight > 0 ? footer.ActualHeight : 40;
             footer.Top = gameWindowRect.Bottom - footerHeight - margin;
-            ctx.NextBottomEdge = footer.Top - GapBetweenWindows;
+            ctx.NextBottomEdge = footer.Top - NotificationWindow.StackGap;
 
             var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
             timer.Tick += (_, _) =>
@@ -116,11 +117,11 @@ public sealed class RecentAchievementsDisplay : IDisposable
         var timestamp = DateTimeOffset.FromUnixTimeSeconds(entry.EarnedTime).LocalDateTime.ToString("MMM dd, HH:mm");
         var gameInfoLine = $"{entry.GameName} \u2014 {timestamp}";
 
-        var window = new NotificationWindow(_config.DisplayDuration);
+        var window = new NotificationWindow(NotificationAppearance.From(_config));
 
         var estimatedHeight = 80.0;
         var finalTop = ctx.NextBottomEdge - estimatedHeight;
-        double slideUpDistance = estimatedHeight + GapBetweenWindows;
+        double slideUpDistance = NotificationWindow.SlotHeight(estimatedHeight);
 
         _soundPlayer?.Play();
         window.ShowRecent(entry.AchievementName, entry.Description, entry.IconPath, ctx.GameWindowRect, finalTop, slideUpDistance, gameInfoLine);
@@ -130,7 +131,7 @@ public sealed class RecentAchievementsDisplay : IDisposable
         {
             var actualHeight = window.ActualHeight > 0 ? window.ActualHeight : estimatedHeight;
             window.Top = ctx.NextBottomEdge - actualHeight;
-            ctx.NextBottomEdge = window.Top - GapBetweenWindows;
+            ctx.NextBottomEdge -= NotificationWindow.SlotHeight(actualHeight);
 
             if (index + 1 < ctx.Entries.Count)
             {

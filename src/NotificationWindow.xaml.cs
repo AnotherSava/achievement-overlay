@@ -9,15 +9,60 @@ namespace AchievementOverlay;
 
 public partial class NotificationWindow : Window
 {
-    private const double WindowWidthFraction = 0.15;
     private const double MarginFraction = 0.02;
     private const double SlideDistanceFraction = 0.015;
     // Fixed design width (DIU) at scale 1: padding 24 + icon 56 + icon margin 12 + text 230.
     // Every popup is this width (× scale), so notifications never vary in width.
-    private const double BaseOuterWidth = 322;
+    private const double BaseOuterWidth = NotificationScale.DesignWidth;
     private const double IconBaseSize = 56;      // matches AchievementIcon Width/Height in XAML
-    private const double MinScale = 0.75;
-    private const double MaxScale = 2.5;
+    private const double MinScale = NotificationScale.MinFactor;
+    private const double MaxScale = NotificationScale.MaxFactor;
+
+    /// <summary>Vertical gap between stacked popups, shared by the recent panel and the settings preview.</summary>
+    public const double StackGap = 6;
+
+    /// <summary>
+    /// Vertical space one popup occupies in a stack, gap included. The single expression of the
+    /// stacking rule: the recent panel walks a bottom edge up by this per entry, and the settings
+    /// preview shifts what is already on screen by it when a new popup takes the bottom slot. Two
+    /// separate formulations of the same spacing would be free to drift apart.
+    /// </summary>
+    public static double SlotHeight(double popupHeight) => popupHeight + StackGap;
+
+    private static readonly Duration SlideToDuration = new(TimeSpan.FromMilliseconds(220));
+    private double _slideTarget;
+
+    /// <summary>
+    /// Slides the popup to a new top rather than jumping there — used when a stack closes a gap after
+    /// one of its members expires. Nothing the user did moved it, so an instant jump reads as a glitch.
+    /// Animates Window.Top itself: a transform would only move the content inside the window.
+    /// </summary>
+    public void SlideTo(double top)
+    {
+        _slideTarget = top;
+        // Falls under constant acceleration from rest: s = ½at² is displacement ∝ t², which is
+        // exactly a quadratic ease-in. It arrives at full speed and stops, the way a dropped thing
+        // lands — an ease-out would start fast and glide, which reads as sliding, not falling.
+        var animation = new DoubleAnimation(top, SlideToDuration)
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn },
+            FillBehavior = FillBehavior.Stop
+        };
+        animation.Completed += (_, _) =>
+        {
+            // A held animation would make every later assignment to Top silently do nothing, so hand
+            // the property back — unless a newer slide has already taken over, which will finish it.
+            if (_slideTarget != top)
+                return;
+            BeginAnimation(TopProperty, null);
+            Top = top;
+        };
+        BeginAnimation(TopProperty, animation);
+    }
+
+    /// <summary>Outer size as drawn, known once the popup has been shown and placed.</summary>
+    public double RenderedHeight { get; private set; }
+    public double RenderedWidth { get; private set; }
 
     private static readonly Duration SlideDuration = new(TimeSpan.FromMilliseconds(300));
     private static readonly Duration FadeDuration = new(TimeSpan.FromMilliseconds(500));
@@ -25,11 +70,17 @@ public partial class NotificationWindow : Window
     private double _slideDistance;
     private bool _recentMode;
 
-    public NotificationWindow(int displayDurationSeconds = 10)
+    private readonly NotificationAppearance _appearance;
+
+    public NotificationWindow(NotificationAppearance appearance)
     {
         InitializeComponent();
+        _appearance = appearance;
         Opacity = 0;
-        _holdTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(displayDurationSeconds) };
+        // Set on the window so every TextBlock inherits it — one assignment, no per-element drift.
+        // An unknown family is not an error: WPF falls back rather than rendering nothing.
+        FontFamily = new FontFamily(appearance.ResolvedFont);
+        _holdTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(appearance.DurationSeconds) };
         _holdTimer.Tick += (_, _) =>
         {
             _holdTimer.Stop();
@@ -58,19 +109,29 @@ public partial class NotificationWindow : Window
     }
 
     /// <summary>
-    /// Computes a uniform scale from the foreground display's logical width and applies it to the
-    /// whole popup, so font, icon, padding and text-wrap width always keep the same proportions.
-    /// Uses the foreground monitor's own DPI (not the primary's), so the popup is sized for the
-    /// display it appears on.
+    /// Applies a uniform scale to the whole popup, so font, icon, padding and text-wrap width always
+    /// keep the same proportions. Automatic derives it from the foreground display's logical width —
+    /// using that monitor's own DPI, not the primary's, so the popup is sized for the display it
+    /// appears on; a fixed setting uses the percentage as given.
     /// </summary>
     private double ApplyScale()
     {
-        var targetWidth = Math.Max(250, AppUtilities.GetForegroundLogicalWidth() * WindowWidthFraction);
-        var scale = Math.Clamp(targetWidth / BaseOuterWidth, MinScale, MaxScale);
+        var scale = ComputeScale(_appearance.Scale, AppUtilities.GetForegroundLogicalWidth());
         RootScale.ScaleX = scale;
         RootScale.ScaleY = scale;
         return scale;
     }
+
+    /// <summary>
+    /// The scale factor for a setting on a display of the given logical width. Pure, so the width the
+    /// settings window reports and the width actually drawn come from the same calculation.
+    /// </summary>
+    internal static double ComputeScale(NotificationScale setting, double displayLogicalWidth) =>
+        Math.Clamp(setting.WidthOn(displayLogicalWidth) / BaseOuterWidth, MinScale, MaxScale);
+
+    /// <summary>The popup's drawn width for a setting — what the settings window's footer states.</summary>
+    internal static double ComputeWidth(NotificationScale setting, double displayLogicalWidth) =>
+        BaseOuterWidth * ComputeScale(setting, displayLogicalWidth);
 
     /// <summary>
     /// Shows as a footer info bar — no icon, no title, just text. No auto-dismiss.
@@ -224,6 +285,8 @@ public partial class NotificationWindow : Window
         // returns 0. RootBorder.DesiredSize includes the scale transform, matching the rect's DIPs.
         RootBorder.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var height = RootBorder.DesiredSize.Height > 0 ? RootBorder.DesiredSize.Height : 80 * scale;
+        RenderedHeight = height;
+        RenderedWidth = BaseOuterWidth * scale;
         Top = gameWindowRect.Bottom - height - margin - _slideDistance;
     }
 

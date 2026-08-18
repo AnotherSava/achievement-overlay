@@ -76,4 +76,22 @@ public class GlobalHotkeyTests
         Assert.Equal(0u, modifiers);
         Assert.Equal(0u, vk);
     }
+
+    [Theory]
+    [InlineData(Keys.H)]
+    [InlineData(Keys.D1)]
+    [InlineData(Keys.F5)]
+    [InlineData(Keys.OemQuestion)] // aliased: ToString() gives "Oem2", which must still parse back
+    [InlineData(Keys.NumPad7)]
+    [InlineData(Keys.Space)]
+    [InlineData(Keys.Oemtilde)]
+    public void ParseHotkeyString_RoundTripsCapturedKeyNames(Keys key)
+    {
+        // The settings dialog builds its shortcut string from Keys.ToString(), so every name it can
+        // produce has to parse back — otherwise a shortcut the user picked in the GUI would be saved
+        // and then silently fail to register.
+        var (modifiers, vk) = GlobalHotkey.ParseHotkeyString($"Ctrl+Shift+Alt+{key}");
+        Assert.Equal(0x0002u | 0x0004u | 0x0001u, modifiers);
+        Assert.Equal((uint)key, vk);
+    }
 }

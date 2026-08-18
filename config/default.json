@@ -2,6 +2,8 @@
   "gamesPaths": "C:\\Games",
   "gseSavesPaths": "%appdata%\\GSE Saves",
   "language": "english",
+  "font": "Segoe UI",
+  "scale": "15%",
   "soundEnabled": true,
   "soundPath": "",
   "displayDuration": 7,

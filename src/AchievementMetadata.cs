@@ -198,6 +198,54 @@ public static class AchievementMetadata
     }
 
     /// <summary>
+    /// The language keys a game's achievement text is actually available in — the property names of
+    /// its multi-language displayName/description objects. The settings dialog offers these instead
+    /// of Steam's full language list, so the choice is limited to values that will resolve rather
+    /// than fall back. A schema whose text is plain strings contributes nothing: it is
+    /// single-language, and there is nothing to choose between.
+    /// </summary>
+    public static IReadOnlyCollection<string> CollectLanguages(IEnumerable<AchievementDefinition> definitions) =>
+        CollectLanguages(definitions.Select(d => (d.DisplayName, d.Description)));
+
+    /// <summary>
+    /// The same, for a self-describing unlock file. Such a game has no schema at all, so the only
+    /// record of which languages it can display is the unlock file itself — leaving it out would
+    /// make those languages invisible to a user whose games are all tracked this way.
+    /// </summary>
+    public static IReadOnlyCollection<string> CollectLanguages(IEnumerable<AchievementUnlockState> states) =>
+        CollectLanguages(states.Select(s => (s.DisplayName, s.Description)));
+
+    private static IReadOnlyCollection<string> CollectLanguages(IEnumerable<(JsonElement? DisplayName, JsonElement? Description)> texts)
+    {
+        var languages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (displayName, description) in texts)
+        {
+            AddObjectKeys(languages, displayName);
+            AddObjectKeys(languages, description);
+        }
+        return languages;
+    }
+
+    /// <summary>
+    /// Steam's localization token (e.g. "NEW_ACHIEVEMENT_1_0_NAME") sits in the same object as the
+    /// real languages, but selecting it would show that raw string as the achievement's name.
+    /// </summary>
+    private const string TokenKey = "token";
+
+    private static void AddObjectKeys(HashSet<string> into, JsonElement? element)
+    {
+        if (element?.ValueKind != JsonValueKind.Object)
+            return;
+
+        foreach (var property in element.Value.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.String
+                && !property.NameEquals(TokenKey))
+                into.Add(property.Name);
+        }
+    }
+
+    /// <summary>
     /// Resolves display text from a JsonElement that may be a plain string or a
     /// multi-language object. Falls back to english, then first available value.
     /// </summary>
@@ -216,6 +264,16 @@ public static class AchievementMetadata
             if (element.Value.TryGetProperty(language, out var langValue)
                 && langValue.ValueKind == JsonValueKind.String)
                 return langValue.GetString() ?? "";
+
+            // Schemas disagree on case for the same language (one game ships "LATAM", another
+            // "latam"), and one value in config has to serve every game, so retry ignoring case
+            // before treating it as unavailable.
+            foreach (var prop in element.Value.EnumerateObject())
+            {
+                if (prop.Value.ValueKind == JsonValueKind.String
+                    && string.Equals(prop.Name, language, StringComparison.OrdinalIgnoreCase))
+                    return prop.Value.GetString() ?? "";
+            }
 
             // Fallback to english
             Logger.Warn($"Language '{language}' not available, falling back to english");

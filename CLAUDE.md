@@ -4,7 +4,7 @@
 
 C# WPF app — Steam-like achievement overlay notifications for GBE-configured games. Monitors `%appdata%/GSE Saves/` for `achievements.json` changes via `FileSystemWatcher` and displays transparent popup notifications over the game window. No game process interaction — purely filesystem-based.
 
-Stack: .NET 10, WinForms tray + WPF overlay window.
+Stack: .NET 10, WinForms tray + WPF notification and settings windows.
 
 ## Tracking-configured notification
 
@@ -55,6 +55,101 @@ After a run, `TrayApplicationContext.RegisterNewGame` ensures the game's folder 
 
 The original plan for this feature (written for a CLI; the front-end was later changed to the dialog) is at `docs/plans/completed/2026-06-18-gbe-config-generator.md`.
 
+## Settings window
+
+The tray menu's **Settings…** opens `SettingsWindow` — four pages behind a nav rail (General,
+Notifications, Folders, Advanced), one card per setting with its explanation visible rather than
+hidden in a tooltip. Built to the `5a`–`5d` frames of the Claude Design project *Windows app settings
+dialog redesign*.
+
+**WPF, not WinForms.** The design needs a toggle switch, sliders and OS dark mode, none of which
+WinForms has; the app already hosts WPF for the notification itself, so this adds no dependency.
+`ThemeMode="System"` (WPF's Fluent theme) supplies the control styles, the light/dark switch and the
+system accent — only the chrome the theme has no key for (page, card and nav colours) is defined in
+`ApplyThemeBrushes`, matched to the mode read from the registry. The popup deliberately keeps its own
+dark `#1A1A2E` look: it sits over a game, not over Windows, so the two are not meant to match.
+
+The window writes nothing itself. It returns a `SettingsResult` holding the values that changed —
+`SettingsDiff.Compute` diffs the collected `SettingsData` against the snapshot the window opened
+against, keyed by property name — and `TrayApplicationContext.ApplySettings` persists them through
+`AppConfig.UpdateConfigValues` (one file write, not one per field) and re-wires whatever binds a
+changed value at startup. That diff is load-bearing rather than an optimisation: it's how the host
+knows to re-register the hotkey, rescan `GameCache`, or rebuild `AchievementWatcher` over new
+`gseSavesPaths` (it binds its paths at construction, and `Start()` re-seeds from disk so the new
+paths' backlog is recorded rather than replayed). Values read live on every use — sound, duration,
+language, font, scale, recent count — need nothing beyond the write.
+
+**Pause notifications** is deliberately absent: a momentary tray toggle, not a setting. The
+`trackingConfigured` map stays out too — app-managed state, and `SettingsDiff` never compares it, so
+a save can't drop a game's setup confirmation.
+
+Page-specific notes:
+
+- **Achievement text** (the `language` key) is a combo box listing what the installed games actually
+  provide. `AchievementMetadata.CollectLanguages` reads the keys off a multi-language
+  `displayName`/`description` object, and `TrayApplicationContext.AvailableLanguages` unions **both**
+  sources of display text: every game's schema, and every GSE Saves unlock file — a self-describing
+  game has no schema, so its unlock file is the only record of the languages it can show. Steam's
+  `token` key is excluded; it sits in the same object but is a localisation token, and picking it
+  would put `NEW_ACHIEVEMENT_1_0_NAME` on screen as the achievement name. It stays **editable on
+  purpose**: the list cannot be proven complete (a fresh install offers only english), and
+  select-only would leave a legitimate language reachable only by hand-editing `config.json`.
+- **Popup width** (the `scale` key) is deliberately *one* setting rather than a size plus a separate
+  text size. They overlap — scaling already enlarges the text — and a large popup with small text is a
+  combination neither value alone would explain.
+
+  There is also **no "automatic" mode**, because automatic was only ever *15% of the display's width*.
+  Expressed in a unit the user picks, that is just the default value, so the mode disappears and the
+  number on screen means something: `NotificationScale` is `"15%"` (a share of the display) or
+  `"384px"` (absolute), written self-describing so the unit survives the round trip. The earlier
+  design drew this as Automatic/Fixed with a percentage of the 322 px *design* width — an abstract
+  number ("119%") that told the user nothing.
+
+  `NotificationScale.WidthOn` gives the requested width; `NotificationWindow.ComputeScale` clamps it
+  to the readable range and is the single pure calculation behind both what the footer reports and
+  what is drawn, so the two cannot disagree. Switching unit in the window carries the current width
+  across rather than the bare number, so the popup doesn't jump (15% of 2560 → 384 px).
+- **Font** applies to the whole popup by being set on the window, which every `TextBlock` inherits —
+  one assignment, no per-element drift. An unknown family is not an error: WPF falls back. The picker
+  is a shortlist rather than every installed family, because achievement text is localised and a
+  picker of everything invites one with no Cyrillic or CJK coverage.
+- **Shortcut** captures keystrokes rather than accepting typed text, so its value always round-trips
+  through `GlobalHotkey.ParseHotkeyString`; note `Keys.ToString()` can return an alias (`OemQuestion`
+  → `Oem2`), which parses back fine.
+
+  Capturing needs two defences, because **a global hotkey beats the focused window** — that is the
+  whole point of `RegisterHotKey` — so a combination already spoken for never reaches the field, and
+  the shortcuts most worth reassigning are exactly the unreachable ones:
+  - *Ours*: `OpenSettingsDialog` suspends the hotkey for the window's lifetime and rebuilds it from
+    config in a `finally`, so a cancel re-registers the unchanged value. `ApplySettings` therefore
+    does **not** touch the hotkey.
+  - *Everyone else's*: `LowLevelKeyboardHook` (`WH_KEYBOARD_LL`), installed only while the field has
+    focus. It runs ahead of every hotkey owner and returns 1 to swallow the keystroke, so another
+    app's hotkey — or an Explorer "Shortcut key" on a `.lnk`, registered the same way — does not
+    fire. It is *system-wide*, so `OnHookedKeyDown` bails out unless this window is active with the
+    field focused, and both blur and close uninstall it.
+
+  Both paths funnel into `TryCaptureShortcut` so they cannot disagree. The hook reports WinForms
+  `Keys` (physical, e.g. `LControlKey`); the WPF fallback converts through
+  `KeyInterop.VirtualKeyFromKey`, so both spellings are filtered.
+- **Sound** is a radio pair (Built-in / Custom file) rather than a path box that means "built-in" when
+  empty. Choosing Built-in writes `soundPath: ""`, so config still says plainly which is in use.
+- **Folder cards** show a live status line — how many games were found, or that a drive isn't
+  connected — which is the check that used to run only on OK. Entries round-trip **raw** (no
+  expansion), and a freshly picked folder is packed back through
+  `AppConfig.CollapseEnvironmentVariables`, the inverse of `ExpandEnvironmentVariables`. Without that,
+  editing the default `%appdata%\GSE Saves` would pin it to one machine's user profile, which matters
+  because this config is used from more than one. Collapsing takes the *deepest* matching folder
+  (`%localappdata%` over `%userprofile%`) and only on a separator boundary, so `C:\Users\Bobby` never
+  collapses against `C:\Users\Bob`. Existing entries are left exactly as written.
+- **Show me** needs no special handling for the window covering the corner: the notification is
+  topmost, so it draws over the window, and the window can be moved.
+
+Validation blocks only the two entries that would fail silently — a GSE Saves list where nothing
+exists, and a missing custom sound file — and switches to the page that needs fixing before saying so.
+
+The folder picker and browse button are shared with `AddGameForm` via `src/DialogControls.cs`;
+`PickFolder` takes a nullable owner so the WPF window, which has no `IWin32Window`, uses the same one.
 ## Config files
 
 `config/default.json` is the committed config that ships as `config.json` next to the exe. For local

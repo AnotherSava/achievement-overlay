@@ -163,7 +163,7 @@ public sealed class NotificationQueue : IDisposable
 
             _soundPlayer?.Play();
 
-            var window = new NotificationWindow(_config.DisplayDuration);
+            var window = new NotificationWindow(NotificationAppearance.From(_config));
             window.Closed += (_, _) => ScheduleRetry(_gapTimer ??= CreateTimer(), GapBetweenNotifications);
 
             window.ShowNotification(item.AchievementName, item.Description, item.IconPath, gameWindowRect);

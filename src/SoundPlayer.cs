@@ -22,14 +22,20 @@ public sealed class UnlockSoundPlayer : IDisposable
     /// Plays the unlock sound if sound is enabled in config.
     /// Fire-and-forget, non-blocking. Errors are logged and swallowed.
     /// </summary>
-    public void Play()
+    public void Play() => Play(_config.SoundEnabled, _config.SoundPath);
+
+    /// <summary>
+    /// Plays a specific choice rather than the saved one, so the settings window's "Show me" can
+    /// preview a sound that hasn't been saved yet. The single implementation behind both, so a
+    /// preview can never sound different from the real unlock.
+    /// </summary>
+    public void Play(bool enabled, string? customPath)
     {
-        if (!_config.SoundEnabled)
+        if (!enabled)
             return;
 
         try
         {
-            var customPath = _config.SoundPath;
             if (!string.IsNullOrEmpty(customPath))
             {
                 if (File.Exists(customPath))

@@ -108,7 +108,88 @@ public class AchievementMetadataTests : IDisposable
         Assert.Equal("ach.jpg", defs[0].Icon);
     }
 
+    // --- CollectLanguages tests ---
+
+    [Fact]
+    public void CollectLanguages_UnionsKeysAcrossBothTextFields()
+    {
+        var json = """
+        [
+            {"name": "A", "displayName": {"english": "One", "german": "Eins"}, "description": {"english": "d", "french": "f"}},
+            {"name": "B", "displayName": {"english": "Two", "russian": "Два"}}
+        ]
+        """;
+
+        var languages = AchievementMetadata.CollectLanguages(AchievementMetadata.ParseDefinitions(json));
+
+        Assert.Equal(new[] { "english", "french", "german", "russian" }, languages.OrderBy(l => l).ToArray());
+    }
+
+    [Fact]
+    public void CollectLanguages_SingleLanguageSchema_ReturnsNothing()
+    {
+        // Plain-string text is single-language: there is nothing for the dialog to offer a choice of.
+        var json = """[{"name": "A", "displayName": "One", "description": "d"}]""";
+
+        Assert.Empty(AchievementMetadata.CollectLanguages(AchievementMetadata.ParseDefinitions(json)));
+    }
+
+    [Fact]
+    public void CollectLanguages_IgnoresNonStringValues()
+    {
+        // Only a string value is text the overlay can display, so a stray nested object is not a language.
+        var json = """[{"name": "A", "displayName": {"english": "One", "meta": {"x": 1}}}]""";
+
+        Assert.Equal(new[] { "english" }, AchievementMetadata.CollectLanguages(AchievementMetadata.ParseDefinitions(json)).ToArray());
+    }
+
+    [Fact]
+    public void CollectLanguages_ReadsSelfDescribingUnlockFile()
+    {
+        // A game tracked through a non-GBE emulator has no schema, so the unlock file is the only
+        // record of which languages it can display.
+        var json = """
+        {
+            "ACH01": {"earned": 1, "displayName": {"english": "One", "german": "Eins"}, "description": {"french": "d"}},
+            "ACH02": {"earned": 0, "displayName": {"english": "Two", "russian": "Два"}}
+        }
+        """;
+
+        var languages = AchievementMetadata.CollectLanguages(AchievementMetadata.ParseUnlockStates(json).Values);
+
+        Assert.Equal(new[] { "english", "french", "german", "russian" }, languages.OrderBy(l => l).ToArray());
+    }
+
+    [Fact]
+    public void CollectLanguages_PlainGbeUnlockFile_ReturnsNothing()
+    {
+        // GBE's own file carries no display text at all, so it has no say in the language list.
+        var json = """{"ACH01": {"earned": true, "earned_time": 1774855788}}""";
+
+        Assert.Empty(AchievementMetadata.CollectLanguages(AchievementMetadata.ParseUnlockStates(json).Values));
+    }
+
+    [Fact]
+    public void CollectLanguages_ExcludesSteamLocalizationToken()
+    {
+        // Real schemas (e.g. Red Dead Redemption) carry Steam's token beside the languages. Offering
+        // it as a choice would put "NEW_ACHIEVEMENT_1_0_NAME" on screen as the achievement's name.
+        var json = """[{"name": "A", "displayName": {"token": "NEW_ACHIEVEMENT_1_0_NAME", "english": "One"}}]""";
+
+        Assert.Equal(new[] { "english" }, AchievementMetadata.CollectLanguages(AchievementMetadata.ParseDefinitions(json)).ToArray());
+    }
+
     // --- GetDisplayText tests ---
+
+    [Fact]
+    public void GetDisplayText_LanguageKeyDiffersInCase_StillMatches()
+    {
+        // One game ships "LATAM", another "latam", and a single config value has to serve both.
+        var json = """[{"name": "A", "displayName": {"english": "One", "LATAM": "Uno"}}]""";
+        var defs = AchievementMetadata.ParseDefinitions(json);
+
+        Assert.Equal("Uno", AchievementMetadata.GetDisplayText(defs[0].DisplayName, "latam"));
+    }
 
     [Fact]
     public void GetDisplayText_PlainString_ReturnsString()

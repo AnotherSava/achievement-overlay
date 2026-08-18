@@ -14,22 +14,27 @@ namespace AchievementOverlay;
 /// </summary>
 public sealed class TrayApplicationContext : ApplicationContext
 {
+    private const int RecentHotkeyId = 1;
+
     private readonly AppConfig _config = null!;
     private readonly GameCache _gameCache = null!;
-    private readonly AchievementWatcher _watcher = null!;
     private readonly NotificationQueue _notificationQueue = null!;
     private readonly UnlockSoundPlayer _soundPlayer = null!;
     private readonly AchievementHistory _achievementHistory = null!;
     private readonly RecentAchievementsDisplay _recentDisplay = null!;
-    private readonly GlobalHotkey _hotkey = null!;
     private readonly NotifyIcon _trayIcon = null!;
-    private readonly ToolStripMenuItem _soundEnabledItem = null!;
+    private readonly ToolStripMenuItem _recentItem = null!;
     private readonly ToolStripMenuItem _pauseItem = null!;
-    private readonly ToolStripMenuItem _startWithWindowsItem = null!;
+
+    // Rebuilt in place when the settings dialog changes the paths they watch / the keys they bind.
+    private AchievementWatcher _watcher = null!;
+    private GlobalHotkey? _hotkey;
 
     private Icon? _activeIcon;
     private Icon? _pausedIcon;
     private AddGameForm? _addGameForm;
+    private SettingsWindow? _settingsWindow;
+    private bool _startWithWindowsEnabled;
     private bool _disposed;
 
     // Appids already evaluated for the synthetic "tracking configured" notification this session,
@@ -73,7 +78,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _soundPlayer = new UnlockSoundPlayer(_config);
         _notificationQueue = new NotificationQueue(_gameCache, _config, _soundPlayer);
 
-        var validSavesPaths = _config.GseSavesPaths.Where(p => { if (Directory.Exists(p)) return true; Logger.Warn($"GSE Saves path does not exist: '{p}'"); return false; }).ToArray();
+        var validSavesPaths = ValidGseSavesPaths();
         if (validSavesPaths.Length == 0)
         {
             ShowConfigError("Config file is invalid", "No valid 'gseSavesPaths' directories found.");
@@ -87,32 +92,16 @@ public sealed class TrayApplicationContext : ApplicationContext
         if (_gameCache.GetAll().Count == 0)
             Logger.Warn("No games with achievement metadata found under 'gamesPaths' — only games whose unlock file carries its own achievement names will be tracked.");
 
-        _watcher = new AchievementWatcher(validSavesPaths);
-        _watcher.NewAchievement += OnNewAchievement;
-        _watcher.GameFolderObserved += OnGameFolderObserved;
-        _watcher.Start();
+        _watcher = CreateWatcher(validSavesPaths);
 
         NotifyTrackingConfiguredForExistingFolders();
 
         _achievementHistory = new AchievementHistory(_config, _gameCache);
         _recentDisplay = new RecentAchievementsDisplay(_achievementHistory, _config, _soundPlayer);
-        _hotkey = new GlobalHotkey(1, _config.RecentAchievementsShortcut, () => _recentDisplay.Toggle());
-        if (!_hotkey.IsRegistered)
-            Logger.Warn($"Could not register hotkey '{_config.RecentAchievementsShortcut}' — use the tray menu instead");
+        _startWithWindowsEnabled = GetStartWithWindows();
 
         _activeIcon = AppUtilities.LoadOrCreateIcon(false);
         _pausedIcon = AppUtilities.LoadOrCreateIcon(true);
-
-        _soundEnabledItem = new ToolStripMenuItem("Sound enabled")
-        {
-            CheckOnClick = true,
-            Checked = _config.SoundEnabled
-        };
-        _soundEnabledItem.CheckedChanged += (_, _) =>
-        {
-            _config.UpdateConfigValue(nameof(SettingsData.SoundEnabled), _soundEnabledItem.Checked);
-            Logger.Info($"Sound enabled: {_soundEnabledItem.Checked}");
-        };
 
         _pauseItem = new ToolStripMenuItem("Pause notifications")
         {
@@ -126,12 +115,15 @@ public sealed class TrayApplicationContext : ApplicationContext
             Logger.Info($"Notifications paused: {_pauseItem.Checked}");
         };
 
-        _startWithWindowsItem = new ToolStripMenuItem("Start with Windows")
-        {
-            CheckOnClick = true,
-            Checked = GetStartWithWindows()
-        };
-        _startWithWindowsItem.CheckedChanged += OnStartWithWindowsChanged;
+        _recentItem = new ToolStripMenuItem("Show recent achievements");
+        _recentItem.Click += (_, _) => _recentDisplay.Toggle();
+        RebuildHotkey();
+
+        var addGameItem = new ToolStripMenuItem("Add game…");
+        addGameItem.Click += (_, _) => OpenAddGameDialog();
+
+        var settingsItem = new ToolStripMenuItem("Settings…");
+        settingsItem.Click += (_, _) => OpenSettingsDialog();
 
         var openConfigItem = new ToolStripMenuItem("Open config/logs location");
         openConfigItem.Click += (_, _) =>
@@ -154,23 +146,14 @@ public sealed class TrayApplicationContext : ApplicationContext
             ContextMenuStrip = new ContextMenuStrip()
         };
 
-        var recentItem = new ToolStripMenuItem("Show recent");
-        if (_hotkey.IsRegistered)
-            recentItem.ShortcutKeyDisplayString = _config.RecentAchievementsShortcut;
-        recentItem.Click += (_, _) => _recentDisplay.Toggle();
-
-        var addGameItem = new ToolStripMenuItem("Add game…");
-        addGameItem.Click += (_, _) => OpenAddGameDialog();
-
         _trayIcon.ContextMenuStrip.Items.AddRange(new ToolStripItem[]
         {
-            recentItem,
+            _recentItem,
             addGameItem,
             new ToolStripSeparator(),
-            _soundEnabledItem,
             _pauseItem,
             new ToolStripSeparator(),
-            _startWithWindowsItem,
+            settingsItem,
             openConfigItem,
             new ToolStripSeparator(),
             exitItem
@@ -179,20 +162,45 @@ public sealed class TrayApplicationContext : ApplicationContext
         Logger.Info("Achievement Overlay started.");
     }
 
-    private void OnStartWithWindowsChanged(object? sender, EventArgs e)
+    /// <summary>
+    /// Every language the installed games actually carry achievement text in, so the settings dialog
+    /// can offer those rather than Steam's full list — most of which would only ever fall back to
+    /// english for this user's games. Both sources of display text are read, because a game tracked
+    /// through a self-describing unlock file has no schema to contribute and would otherwise have
+    /// its languages go unoffered.
+    /// </summary>
+    private IReadOnlyCollection<string> AvailableLanguages()
     {
-        try
+        var languages = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var game in _gameCache.GetAll())
         {
-            AppConfig.SetStartWithWindows(_startWithWindowsItem.Checked);
-            Logger.Info($"Start with Windows: {_startWithWindowsItem.Checked}");
+            var definitions = GameCache.LoadDefinitions(game);
+            if (definitions != null)
+                languages.UnionWith(AchievementMetadata.CollectLanguages(definitions));
         }
-        catch (Exception ex)
+
+        foreach (var appId in _watcher.GetExistingAppIdFolders())
         {
-            Logger.Error($"Failed to set Start with Windows: {ex.Message}");
-            _startWithWindowsItem.CheckedChanged -= OnStartWithWindowsChanged;
-            _startWithWindowsItem.Checked = !_startWithWindowsItem.Checked;
-            _startWithWindowsItem.CheckedChanged += OnStartWithWindowsChanged;
+            var states = ReadUnlockStates(appId, out _);
+            if (states != null)
+                languages.UnionWith(AchievementMetadata.CollectLanguages(states.Values));
         }
+
+        return languages;
+    }
+
+    /// <summary>The configured GSE Saves paths that actually exist, warning about the ones that don't.</summary>
+    private string[] ValidGseSavesPaths() =>
+        _config.GseSavesPaths.Where(p => { if (Directory.Exists(p)) return true; Logger.Warn($"GSE Saves path does not exist: '{p}'"); return false; }).ToArray();
+
+    private AchievementWatcher CreateWatcher(string[] gseSavesPaths)
+    {
+        var watcher = new AchievementWatcher(gseSavesPaths);
+        watcher.NewAchievement += OnNewAchievement;
+        watcher.GameFolderObserved += OnGameFolderObserved;
+        watcher.Start();
+        return watcher;
     }
 
     private void OnNewAchievement(object? sender, NewAchievementEventArgs e)
@@ -355,6 +363,146 @@ public sealed class TrayApplicationContext : ApplicationContext
         NotifyTrackingConfiguredForExistingFolders();
     }
 
+    private void OpenSettingsDialog()
+    {
+        if (_settingsWindow != null)
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+
+        // A registered hotkey wins over the focused window system-wide — that is the point of
+        // RegisterHotKey — so while it is live the Shortcut field can never see the combination
+        // already configured: pressing it opens the recent panel instead of being recorded, making
+        // the current shortcut the one combination that cannot be re-picked. Suspend it for the
+        // dialog's lifetime and re-register whatever config ends up holding.
+        _hotkey?.Dispose();
+        _hotkey = null;
+        _recentDisplay.Dismiss(); // it may be on screen from exactly that misfire
+
+        SettingsResult? result = null;
+        _settingsWindow = new SettingsWindow(_config, _startWithWindowsEnabled, AvailableLanguages(), _soundPlayer);
+        try
+        {
+            if (_settingsWindow.ShowDialog() == true)
+                result = _settingsWindow.Result;
+            if (result != null)
+                ApplySettings(result);
+        }
+        finally
+        {
+            _settingsWindow = null;
+            RebuildHotkey(); // after a cancel this re-registers the unchanged value
+        }
+
+        if (result != null && result.ChangedSettings.ContainsKey(nameof(SettingsData.RecentAchievementsShortcut)))
+            WarnIfShortcutUnavailable();
+    }
+
+    /// <summary>
+    /// Says so when a shortcut the user just picked could not be registered, which in practice means
+    /// another application already owns it. The dialog accepts any combination the keyboard can
+    /// produce, so without this the field looks saved and silently does nothing.
+    /// </summary>
+    private void WarnIfShortcutUnavailable()
+    {
+        var shortcut = _config.RecentAchievementsShortcut;
+        if (string.IsNullOrWhiteSpace(shortcut) || _hotkey == null || _hotkey.IsRegistered)
+            return;
+
+        MessageBox.Show(
+            $"'{shortcut}' is already in use by another application, so it won't open the recent achievements panel.\r\n\r\n"
+            + "Pick a different combination in Settings, or use 'Show recent' in the tray menu.",
+            "Achievement Overlay", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+
+    /// <summary>
+    /// Persists what the settings dialog changed and re-wires whatever binds a changed value at
+    /// startup, so nothing here needs a restart. Values read live on every use — the sound, the
+    /// display duration, the language, the recent count — need no work beyond the write.
+    /// </summary>
+    private void ApplySettings(SettingsResult result)
+    {
+        if (result.ChangedSettings.Count > 0)
+        {
+            _config.UpdateConfigValues(result.ChangedSettings);
+            Logger.Info($"Settings saved: {string.Join(", ", result.ChangedSettings.Keys)}");
+        }
+
+        if (result.StartWithWindows != _startWithWindowsEnabled)
+            ApplyStartWithWindows(result.StartWithWindows);
+
+        // The shortcut needs no work here: OpenSettingsDialog suspends the hotkey for the dialog's
+        // lifetime and re-registers from config on the way out, which covers a changed value too.
+        var gamesPathsChanged = result.ChangedSettings.ContainsKey(nameof(SettingsData.GamesPaths));
+        var savesPathsChanged = result.ChangedSettings.ContainsKey(nameof(SettingsData.GseSavesPaths));
+
+        if (gamesPathsChanged)
+        {
+            _gameCache.ScanAll();
+            Logger.Info($"Game cache now has {_gameCache.GetAll().Count} game(s) after the games paths changed.");
+        }
+
+        if (savesPathsChanged)
+            RebuildWatcher();
+        else if (gamesPathsChanged)
+            _watcher.ReseedAll();
+
+        if (gamesPathsChanged || savesPathsChanged)
+            NotifyTrackingConfiguredForExistingFolders();
+    }
+
+    /// <summary>
+    /// Rebuilds the watcher over the current 'gseSavesPaths'. It binds its paths at construction, so
+    /// a path change needs a fresh instance; Start() re-seeds every unlock already on disk, so the
+    /// new paths' backlog is recorded rather than replayed as a burst of notifications.
+    /// </summary>
+    private void RebuildWatcher()
+    {
+        var validSavesPaths = ValidGseSavesPaths();
+        if (validSavesPaths.Length == 0)
+        {
+            // The dialog refuses to save this, so it means the folders went away in between.
+            Logger.Warn("No valid 'gseSavesPaths' directories — keeping the previous watcher.");
+            return;
+        }
+
+        _watcher.NewAchievement -= OnNewAchievement;
+        _watcher.GameFolderObserved -= OnGameFolderObserved;
+        _watcher.Dispose();
+        _watcher = CreateWatcher(validSavesPaths);
+    }
+
+    /// <summary>
+    /// Re-registers the global shortcut and syncs the tray item's shortcut hint. An unregistrable
+    /// combination (invalid, or already taken by another app) leaves the tray item as the way in.
+    /// </summary>
+    private void RebuildHotkey()
+    {
+        var shortcut = _config.RecentAchievementsShortcut;
+        _hotkey?.Dispose();
+        _hotkey = new GlobalHotkey(RecentHotkeyId, shortcut, () => _recentDisplay.Toggle());
+        _recentItem.ShortcutKeyDisplayString = _hotkey.IsRegistered ? shortcut : "";
+        if (!_hotkey.IsRegistered)
+            Logger.Warn($"Could not register hotkey '{shortcut}' — use the tray menu instead");
+    }
+
+    private void ApplyStartWithWindows(bool enabled)
+    {
+        try
+        {
+            AppConfig.SetStartWithWindows(enabled);
+            _startWithWindowsEnabled = enabled;
+            Logger.Info($"Start with Windows: {enabled}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to set Start with Windows: {ex.Message}");
+            MessageBox.Show($"Could not change the Windows startup entry:\r\n\r\n{ex.Message}",
+                "Achievement Overlay", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
     private void ExitApplication()
     {
         Logger.Info("Shutting down...");
@@ -372,7 +520,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
-            _hotkey.Dispose();
+            _hotkey?.Dispose();
             _recentDisplay.Dispose();
             _watcher.Dispose();
             _notificationQueue.Dispose();

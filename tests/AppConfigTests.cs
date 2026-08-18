@@ -102,6 +102,91 @@ public class AppConfigTests : IDisposable
     }
 
     [Fact]
+    public void CollapseEnvironmentVariables_PathUnderAppData_UsesVariable()
+    {
+        var appdata = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+        Assert.Equal(@"%appdata%\GSE Saves", AppConfig.CollapseEnvironmentVariables(Path.Combine(appdata, "GSE Saves")));
+    }
+
+    [Fact]
+    public void CollapseEnvironmentVariables_FolderItself_BecomesBareVariable()
+    {
+        var appdata = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+        Assert.Equal("%appdata%", AppConfig.CollapseEnvironmentVariables(appdata));
+    }
+
+    [Fact]
+    public void CollapseEnvironmentVariables_PrefersTheDeepestFolder()
+    {
+        // LocalApplicationData sits under UserProfile, so the shorter match must not win.
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+
+        Assert.Equal(@"%localappdata%\Games", AppConfig.CollapseEnvironmentVariables(Path.Combine(localAppData, "Games")));
+    }
+
+    [Fact]
+    public void CollapseEnvironmentVariables_UnrelatedPath_IsUnchanged()
+    {
+        Assert.Equal(@"D:\Games\Atomfall", AppConfig.CollapseEnvironmentVariables(@"D:\Games\Atomfall"));
+    }
+
+    [Fact]
+    public void CollapseEnvironmentVariables_SiblingWithSharedPrefix_IsUnchanged()
+    {
+        // A sibling of the profile folder shares its whole text but is not inside it: 'C:\Users\Bobby'
+        // must not collapse against 'C:\Users\Bob'. Built from the profile because it is the outermost
+        // collapsible folder, so nothing else can legitimately claim the result.
+        var sibling = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "Extra";
+
+        Assert.Equal(sibling, AppConfig.CollapseEnvironmentVariables(sibling));
+    }
+
+    [Fact]
+    public void CollapseEnvironmentVariables_RoundTripsThroughExpand()
+    {
+        // The whole point: what the dialog stores has to read back as the folder that was picked.
+        var picked = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GSE Saves");
+
+        var collapsed = AppConfig.CollapseEnvironmentVariables(picked);
+
+        Assert.NotEqual(picked, collapsed);
+        Assert.Equal(picked, AppConfig.ExpandEnvironmentVariables(collapsed));
+    }
+
+    [Fact]
+    public void SplitRawPaths_KeepsEnvironmentVariablesUnexpanded()
+    {
+        // The settings window round-trips these straight back into config, so expanding here would
+        // freeze a portable '%appdata%\GSE Saves' into one machine's absolute path on the first save.
+        var result = AppConfig.SplitRawPaths(@"%appdata%\GSE Saves");
+
+        Assert.Single(result);
+        Assert.Equal(@"%appdata%\GSE Saves", result[0]);
+    }
+
+    [Fact]
+    public void SplitRawPaths_SplitsOnSemicolonAndTrims()
+    {
+        var result = AppConfig.SplitRawPaths(@"  C:\Games ;  D:\More  ");
+
+        Assert.Equal(2, result.Length);
+        Assert.Equal(@"C:\Games", result[0]);
+        Assert.Equal(@"D:\More", result[1]);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void SplitRawPaths_EmptyValue_ReturnsNoEntries(string? value)
+    {
+        // A user whose games all describe their own achievements has no game roots at all.
+        Assert.Empty(AppConfig.SplitRawPaths(value));
+    }
+
+    [Fact]
     public void ParseGamesPaths_SemicolonSeparated_ReturnsSplitArray()
     {
         var result = AppConfig.ParseGamesPaths(@"C:\Games;D:\MoreGames;E:\Steam");
@@ -264,6 +349,65 @@ public class AppConfigTests : IDisposable
         var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json);
         Assert.NotNull(parsed);
         Assert.Equal(JsonValueKind.False, parsed!["soundEnabled"].ValueKind);
+    }
+
+    [Fact]
+    public void UpdateConfigValues_WritesEveryChangedKeyInOnePass()
+    {
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 }));
+
+        var config = new AppConfig(_settingsPath);
+        config.UpdateConfigValues(new Dictionary<string, object?>
+        {
+            ["Language"] = "german",
+            ["DisplayDuration"] = 12,
+            ["SoundEnabled"] = false,
+            ["SteamWebApiKey"] = "key"
+        }, _settingsPath);
+
+        var settings = config.GetCurrent();
+        Assert.Equal("german", settings.Language);
+        Assert.Equal(12, settings.DisplayDuration);
+        Assert.False(settings.SoundEnabled);
+        Assert.Equal("key", settings.SteamWebApiKey);
+
+        // Untouched keys survive, and the file is still valid JSON.
+        Assert.Equal(@"C:\Games", settings.GamesPaths);
+        Assert.Equal(5, settings.RecentAchievementsCount);
+        Assert.NotNull(JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(File.ReadAllText(_settingsPath)));
+    }
+
+    [Fact]
+    public void UpdateConfigValues_RoundTripsAScaleSavedFromTheSettingsWindow()
+    {
+        // The settings window boxes a NotificationScale into the object dictionary, so it is
+        // serialized on its own rather than as a property of SettingsData. With the converter
+        // attached to the property instead of the type it wrote {"Unit":0,"Value":15} and threw
+        // "Cannot convert token StartObject to a scale" on the read back — after the file was
+        // already written, leaving a config the app could not start from.
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 }));
+
+        var config = new AppConfig(_settingsPath);
+        config.UpdateConfigValues(new Dictionary<string, object?> { ["Scale"] = NotificationScale.Pixels(420) }, _settingsPath);
+
+        var saved = config.GetCurrent().Scale;
+        Assert.Equal(ScaleUnit.Pixels, saved.Unit);
+        Assert.Equal(420, saved.Value);
+        Assert.Contains("\"420px\"", File.ReadAllText(_settingsPath));
+    }
+
+    [Fact]
+    public void UpdateConfigValues_PreservesAppManagedState()
+    {
+        // trackingConfigured isn't editable in the settings dialog, so a save must leave it alone.
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5, trackingConfigured = new Dictionary<string, long> { ["1601580"] = 1755000000 } }));
+
+        var config = new AppConfig(_settingsPath);
+        config.UpdateConfigValues(new Dictionary<string, object?> { ["Language"] = "french" }, _settingsPath);
+
+        var tracking = config.GetCurrent().TrackingConfigured;
+        Assert.NotNull(tracking);
+        Assert.Equal(1755000000, tracking!["1601580"]);
     }
 
     [Fact]

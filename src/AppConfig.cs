@@ -39,6 +39,8 @@ public sealed class AppConfig
     public string[] GamesPaths { get { Reload(); return _gamesPaths ??= ParseGamesPaths(_settings.GamesPaths); } }
     public string[] GseSavesPaths { get { Reload(); return _gseSavesPaths ??= ParseGamesPaths(_settings.GseSavesPaths); } }
     public string Language { get { Reload(); return _settings.Language; } }
+    public string Font { get { Reload(); return _settings.Font; } }
+    public NotificationScale Scale { get { Reload(); return _settings.Scale; } }
     public bool SoundEnabled { get { Reload(); return _settings.SoundEnabled; } }
     public string SoundPath { get { Reload(); return _settings.SoundPath; } }
     public int DisplayDuration { get { Reload(); return _settings.DisplayDuration; } }
@@ -63,21 +65,37 @@ public sealed class AppConfig
 
     internal void UpdateConfigValue(string propertyName, object value, string settingsPath)
     {
+        UpdateConfigValues(new Dictionary<string, object?> { [propertyName] = value }, settingsPath);
+    }
+
+    /// <summary>
+    /// Writes several settings in one read-modify-write pass, keyed by <see cref="SettingsData"/>
+    /// property name. The settings dialog saves through here so a save is one file write rather than
+    /// one per field — every write bumps the file's timestamp and triggers a reload.
+    /// </summary>
+    public void UpdateConfigValues(IReadOnlyDictionary<string, object?> values)
+    {
+        UpdateConfigValues(values, _settingsFilePath);
+    }
+
+    internal void UpdateConfigValues(IReadOnlyDictionary<string, object?> values, string settingsPath)
+    {
         lock (_lock)
         {
+            var names = string.Join(", ", values.Keys);
             string json;
             try
             {
                 if (!File.Exists(settingsPath))
                 {
-                    Logger.Warn($"Config file not found, cannot update '{propertyName}'");
+                    Logger.Warn($"Config file not found, cannot update '{names}'");
                     return;
                 }
                 json = File.ReadAllText(settingsPath);
             }
             catch (IOException ex)
             {
-                Logger.Warn($"Could not read config to update '{propertyName}': {ex.Message}");
+                Logger.Warn($"Could not read config to update '{names}': {ex.Message}");
                 return;
             }
 
@@ -89,12 +107,15 @@ public sealed class AppConfig
             }
             catch (JsonException ex)
             {
-                Logger.Warn($"Config file is malformed, could not update '{propertyName}': {ex.Message}");
+                Logger.Warn($"Config file is malformed, could not update '{names}': {ex.Message}");
                 return;
             }
 
-            var camelKey = JsonNamingPolicy.CamelCase.ConvertName(propertyName);
-            dict[camelKey] = JsonSerializer.SerializeToElement(value, JsonOptions);
+            foreach (var (propertyName, value) in values)
+            {
+                var camelKey = JsonNamingPolicy.CamelCase.ConvertName(propertyName);
+                dict[camelKey] = JsonSerializer.SerializeToElement(value, JsonOptions);
+            }
 
             var updated = JsonSerializer.Serialize(dict, JsonOptions);
             try
@@ -104,7 +125,7 @@ public sealed class AppConfig
             }
             catch (IOException ex)
             {
-                Logger.Warn($"Could not write config for '{propertyName}': {ex.Message}");
+                Logger.Warn($"Could not write config for '{names}': {ex.Message}");
             }
             _settings = Deserialize(updated);
             InvalidateCaches();
@@ -204,17 +225,79 @@ public sealed class AppConfig
         return Environment.ExpandEnvironmentVariables(path);
     }
 
-    public static string[] ParseGamesPaths(string? gamesPaths)
+    /// <summary>
+    /// Folder variables an absolute path is packed back into, tried by expansion length so a nested
+    /// one (%localappdata%) wins over the parent it sits under (%userprofile%).
+    /// </summary>
+    private static readonly string[] CollapsibleVariables =
     {
-        if (string.IsNullOrWhiteSpace(gamesPaths))
-            return Array.Empty<string>();
+        "%appdata%", "%localappdata%", "%programdata%", "%programfiles(x86)%", "%programfiles%", "%public%", "%userprofile%"
+    };
 
-        return gamesPaths
-            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    /// <summary>
+    /// The inverse of <see cref="ExpandEnvironmentVariables"/>: rewrites an absolute path back into
+    /// variable form when it sits under a known folder, leaving anything else untouched. The folder
+    /// picker only ever hands back absolute paths, so without this, picking the GSE Saves folder
+    /// would replace the portable default '%appdata%\GSE Saves' with one machine's user profile —
+    /// and a config that travels between machines would stop resolving on the other one.
+    /// </summary>
+    public static string CollapseEnvironmentVariables(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return path;
+
+        string? bestVariable = null;
+        var bestLength = 0;
+
+        foreach (var variable in CollapsibleVariables)
+        {
+            // An undefined variable expands to itself, which is never a path prefix worth using.
+            var expanded = ExpandEnvironmentVariables(variable);
+            if (expanded == variable || string.IsNullOrEmpty(expanded))
+                continue;
+
+            expanded = Path.TrimEndingDirectorySeparator(expanded);
+            if (expanded.Length > bestLength && StartsWithFolder(path, expanded))
+            {
+                bestVariable = variable;
+                bestLength = expanded.Length;
+            }
+        }
+
+        return bestVariable == null ? path : bestVariable + path[bestLength..];
+    }
+
+    /// <summary>
+    /// True when <paramref name="path"/> is <paramref name="folder"/> or sits inside it. The
+    /// separator check is what stops 'C:\Users\Bobby' from matching the folder 'C:\Users\Bob'.
+    /// </summary>
+    private static bool StartsWithFolder(string path, string folder)
+    {
+        if (!path.StartsWith(folder, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return path.Length == folder.Length || path[folder.Length] is '\\' or '/';
+    }
+
+    /// <summary>
+    /// Splits a semicolon-separated setting <em>without</em> expanding environment variables. The
+    /// settings dialog round-trips entries straight back into config, so '%appdata%\GSE Saves' has
+    /// to stay written that way rather than being frozen to one machine's absolute path.
+    /// </summary>
+    public static string[] SplitRawPaths(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? Array.Empty<string>()
+            : value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    /// <summary>
+    /// The same list, expanded and ready to use. Splits through <see cref="SplitRawPaths"/> so the
+    /// ';' convention is stated once — the raw and expanded readings can't disagree about it.
+    /// </summary>
+    public static string[] ParseGamesPaths(string? gamesPaths) =>
+        SplitRawPaths(gamesPaths)
             .Select(ExpandEnvironmentVariables)
             .Where(p => !string.IsNullOrEmpty(p))
             .ToArray();
-    }
 
     private static string ExpandAndCache(ref string? cached, string raw)
     {
@@ -268,6 +351,18 @@ public sealed class SettingsData
 
     [JsonPropertyName("language")]
     public string Language { get; set; } = "";
+
+    /// <summary>
+    /// Font family for the popup's text. Empty means the built-in default — resolved at render
+    /// time rather than here, so a family that is later uninstalled degrades to the default
+    /// instead of blanking the notification.
+    /// </summary>
+    [JsonPropertyName("font")]
+    public string Font { get; set; } = "";
+
+    /// <summary>Absent reads as the default share of the screen. The converter is on the type.</summary>
+    [JsonPropertyName("scale")]
+    public NotificationScale Scale { get; set; }
 
     [JsonPropertyName("soundEnabled")]
     public bool SoundEnabled { get; set; }
