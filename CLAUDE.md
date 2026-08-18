@@ -67,6 +67,21 @@ Fill the keys in **`config/local.json`**, not in the running app. Deploy copies 
 installed `config.json`, so a key typed into the Add game wizard (which writes the *installed* file)
 survives only until the next deploy — an empty placeholder in `local.json` silently blanks it.
 
+## Encrypted files
+
+The `track-achievements` skill under `.claude/skills/` is the operational runbook for putting a game
+on this machine under GBE tracking — the counterpart to the Add game wizard, for the cases a GUI can't
+cover. It is stored encrypted: `.gitattributes` routes that directory through transcrypt, so the files
+are plaintext in the working tree and ciphertext in git.
+
+The whole directory is encrypted rather than individual `*.secret.*` files because Claude Code
+discovers a skill by its literal `SKILL.md` name, which leaves no room for the marker in the filename.
+
+A fresh clone reads those files as base64 and the skill won't register until the repo is unlocked with
+transcrypt and the shared passphrase. Everything the runbook covers that is safe to publish lives in
+`docs/gbe-reference.md` and `docs/playnite.md` instead — put new findings there by preference, and
+keep the encrypted files for what genuinely can't be public.
+
 ## Build & Test
 
 ```

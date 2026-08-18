@@ -1,0 +1,10 @@
+# Transcrypt: these files are stored encrypted in git and stay plaintext in the
+# working tree. A fresh clone reads them as base64 until it is unlocked with the
+# shared key — see "Encrypted files" in CLAUDE.md.
+
+*.secret.* filter=crypt diff=crypt merge=crypt
+
+# The track-achievements skill is encrypted whole rather than per-file: Claude
+# Code discovers a skill by its literal SKILL.md name, so the entry point cannot
+# carry the *.secret.* marker.
+.claude/skills/track-achievements/** filter=crypt diff=crypt merge=crypt
