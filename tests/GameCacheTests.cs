@@ -355,4 +355,76 @@ public class GameCacheTests : IDisposable
 
         Assert.True((cache.LookupCached("33333") != null));
     }
+
+    // --- Games carrying more than one steam_settings folder ---
+
+    private const string Schema = """[{"name": "ACH01", "displayName": "Test"}]""";
+
+    /// <summary>Writes a steam_settings folder with its own appid file and schema, and returns it.</summary>
+    private string CreateSettingsDir(string appId, params string[] relativeParts)
+    {
+        var dir = Path.Combine(new[] { _tempDir, "games" }.Concat(relativeParts).Append("steam_settings").ToArray());
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "steam_appid.txt"), appId);
+        File.WriteAllText(Path.Combine(dir, "achievements.json"), Schema);
+        return dir;
+    }
+
+    [Fact]
+    public void ScanAll_GameWithTwoSettingsFolders_KeepsBothDeepestFirst()
+    {
+        // A repack's decorated copy at the game root, plus the one the emulator actually reads.
+        var root = CreateSettingsDir("2378900", "Coffin");
+        var nested = CreateSettingsDir("2378900", "Coffin", "Coffin", "www", "greenworks", "lib");
+
+        var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
+        cache.ScanAll();
+
+        var info = cache.LookupCached("2378900")!;
+        Assert.Equal(new[] { nested, root }, info.SettingsDirs);
+        // The deepest is the schema source, so icons and achievement text are unaffected.
+        Assert.Equal(Path.Combine(nested, "achievements.json"), info.MetadataPath);
+        Assert.Single(cache.GetAll());
+    }
+
+    [Fact]
+    public void ScanAll_TwoGamesClaimingOneAppId_DoNotPoolTheirFolders()
+    {
+        // Without the game-folder half of the grouping key, an appid collision would answer an
+        // unlock with a mixture of two unrelated installs' settings.
+        CreateSettingsDir("480", "GameA");
+        CreateSettingsDir("480", "GameB");
+
+        var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
+        cache.ScanAll();
+
+        Assert.Single(cache.LookupCached("480")!.SettingsDirs);
+    }
+
+    [Fact]
+    public void ScanAll_AppIdFileAtTheGameRootAndInSettings_IsOneFolder()
+    {
+        // The Red Dead shape: both files name the same steam_settings folder.
+        var settings = CreateSettingsDir("2668510", "RDR");
+        File.WriteAllText(Path.Combine(_tempDir, "games", "RDR", "steam_appid.txt"), "2668510");
+
+        var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
+        cache.ScanAll();
+
+        Assert.Equal(new[] { settings }, cache.LookupCached("2668510")!.SettingsDirs);
+    }
+
+    [Fact]
+    public void ScanAll_HiddenSettingsFolder_IsStillFound()
+    {
+        // Repacks hide steam_settings routinely; the default enumeration skips hidden entries, which
+        // made such a game invisible with nothing in the log to say so.
+        var settings = CreateSettingsDir("44444", "HiddenGame");
+        File.SetAttributes(settings, File.GetAttributes(settings) | FileAttributes.Hidden);
+
+        var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
+        cache.ScanAll();
+
+        Assert.Equal(new[] { settings }, cache.LookupCached("44444")?.SettingsDirs);
+    }
 }

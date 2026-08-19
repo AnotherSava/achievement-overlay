@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         ThemeMode="System"
         Title="Achievement Overlay — Settings"
-        Width="720" Height="880" MinWidth="620" MinHeight="420"
+        Width="720" Height="1045" MinWidth="620" MinHeight="420"
         WindowStartupLocation="CenterScreen">
     <!-- ThemeMode="System" gives the Fluent control styles and follows the OS light/dark setting,
          so combo boxes, sliders and buttons need no styling of their own. Only the chrome the
@@ -242,9 +242,9 @@
                                             <ComboBoxItem Content="Pixels" />
                                         </ComboBox>
                                         <StackPanel>
-                                            <TextBlock Style="{StaticResource CardTitle}" Text="Popup width" />
+                                            <TextBlock Style="{StaticResource CardTitle}" Text="Popup size" />
                                             <TextBlock Style="{StaticResource CardDescription}"
-                                                       Text="Scales the whole popup — icon, padding, wrap width and text together. A share of the screen keeps it the same apparent size on any monitor; pixels pin it to one width everywhere." />
+                                                       Text="Scales the whole popup — text, icon, padding and wrap width together. Reach for this if notifications read too small. A share of the screen keeps the same apparent size on any monitor; pixels pin it to one width everywhere." />
                                         </StackPanel>
                                     </DockPanel>
                                     <Border BorderBrush="{DynamicResource CardBorder}" BorderThickness="0,1,0,0" Padding="14,10">
@@ -303,6 +303,20 @@
                                         </StackPanel>
                                     </Border>
                                 </StackPanel>
+                            </Border>
+
+                            <TextBlock Style="{StaticResource SectionHeading}" Text="Each game's own settings" Margin="0,22,0,8" />
+
+                            <Border Style="{StaticResource Card}">
+                                <DockPanel>
+                                    <ToggleButton x:Name="GameOverlaySettingsToggle" DockPanel.Dock="Right"
+                                                  Style="{StaticResource ToggleSwitch}" Margin="18,0,0,0" />
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource CardTitle}" Text="Use each game's own overlay settings" />
+                                        <TextBlock Style="{StaticResource CardDescription}"
+                                                   Text="Some games arrive with an unlock sound, a font or a display duration already set in their steam_settings folder. When one does, that game uses them; everything above still covers the rest, and Show me still previews this page." />
+                                    </StackPanel>
+                                </DockPanel>
                             </Border>
                         </StackPanel>
 

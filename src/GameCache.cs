@@ -11,6 +11,16 @@ public sealed class GameInfo
     public required string AppId { get; init; }
     public required string MetadataPath { get; init; }
     public required string GameName { get; init; }
+
+    /// <summary>
+    /// Every <c>steam_settings</c> folder this game has, deepest first. One install often carries
+    /// more than one — a repack drops a decorated copy at the game root while the emulator reads the
+    /// one beside the DLL (<c>bin/coldclient/</c>, <c>www/greenworks/lib/</c>) — and they rarely hold
+    /// the same things. The first is <see cref="MetadataPath"/>'s folder; the rest are consulted only
+    /// for a game's own overlay settings, where a folder that GBE itself never reads can still be the
+    /// only record of the sound and font the user chose.
+    /// </summary>
+    public required IReadOnlyList<string> SettingsDirs { get; init; }
 }
 
 /// <summary>
@@ -111,19 +121,20 @@ public sealed class GameCache
 
     private int ScanDirectory(string basePath)
     {
-        var count = 0;
-
         IEnumerable<string> appIdFiles;
         try
         {
-            appIdFiles = Directory.EnumerateFiles(basePath, "steam_appid.txt",
-                new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true });
+            appIdFiles = Directory.EnumerateFiles(basePath, "steam_appid.txt", AppUtilities.RecursiveScan);
         }
         catch (Exception ex)
         {
             Logger.Info($"  Error scanning '{basePath}': {ex.Message}");
             return 0;
         }
+
+        // Keyed by appid *and* game folder, not appid alone: two installs claiming one appid are two
+        // games, and folding their folders together would answer an unlock with a mixture of both.
+        var byGame = new Dictionary<(string AppId, string GameName), List<string>>();
 
         foreach (var appIdFile in appIdFiles)
         {
@@ -137,24 +148,20 @@ public sealed class GameCache
                 // generate_emu_config places steam_appid.txt inside steam_settings/ — collapse to game root
                 if (string.Equals(Path.GetFileName(gameDir), "steam_settings", StringComparison.OrdinalIgnoreCase))
                     gameDir = Path.GetDirectoryName(gameDir)!;
-                var metadataPath = Path.Combine(gameDir, "steam_settings", "achievements.json");
+                var settingsDir = Path.Combine(gameDir, "steam_settings");
 
-                if (!File.Exists(metadataPath))
+                if (!File.Exists(Path.Combine(settingsDir, "achievements.json")))
                 {
                     Logger.Warn($"  Skipped: appid={appId} at '{gameDir}' (no 'achievements.json')");
                     continue;
                 }
 
-                var info = new GameInfo
-                {
-                    AppId = appId,
-                    MetadataPath = metadataPath,
-                    GameName = ExtractGameName(basePath, gameDir)
-                };
-
-                _cache[appId] = info;
-                Logger.Info($"  Cached: appid={appId}, game={info.GameName}, path='{metadataPath}'");
-                count++;
+                var key = (appId, ExtractGameName(basePath, gameDir));
+                if (!byGame.TryGetValue(key, out var dirs))
+                    byGame[key] = dirs = new List<string>();
+                // A steam_appid.txt at the game root and one inside steam_settings/ name the same folder.
+                if (!dirs.Contains(settingsDir, StringComparer.OrdinalIgnoreCase))
+                    dirs.Add(settingsDir);
             }
             catch (Exception ex)
             {
@@ -162,7 +169,30 @@ public sealed class GameCache
             }
         }
 
-        return count;
+        foreach (var ((appId, gameName), dirs) in byGame)
+        {
+            // Deepest first: the emulator loads from beside its DLL, which is the nested copy in every
+            // layout seen so far (bin/coldclient, www/greenworks/lib, Binaries/Win64). Ordering by
+            // path keeps ties stable, so which folder supplies the schema stops depending on the order
+            // the filesystem happened to enumerate in.
+            var ordered = dirs
+                .OrderByDescending(d => d.Count(c => c is '\\' or '/'))
+                .ThenBy(d => d, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            _cache[appId] = new GameInfo
+            {
+                AppId = appId,
+                MetadataPath = Path.Combine(ordered[0], "achievements.json"),
+                GameName = gameName,
+                SettingsDirs = ordered
+            };
+
+            var extra = ordered.Count > 1 ? $" (+{ordered.Count - 1} more settings folder(s): {string.Join(", ", ordered.Skip(1).Select(d => $"'{d}'"))})" : "";
+            Logger.Info($"  Cached: appid={appId}, game={gameName}, path='{ordered[0]}\\achievements.json'{extra}");
+        }
+
+        return byGame.Count;
     }
 
     /// <summary>

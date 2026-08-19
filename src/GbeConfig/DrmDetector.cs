@@ -38,7 +38,7 @@ public static class DrmDetector
         if (!Directory.Exists(gameDir))
             return new DrmReport();
 
-        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+        var options = AppUtilities.RecursiveScan;
 
         long largestSize = 0;
         string? largestPath = null;

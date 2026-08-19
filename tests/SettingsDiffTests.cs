@@ -13,6 +13,7 @@ public class SettingsDiffTests
         SoundEnabled = true,
         SoundPath = "",
         DisplayDuration = 7,
+        UseGameOverlaySettings = true,
         RecentAchievementsShortcut = "Ctrl+Shift+H",
         RecentAchievementsCount = 5,
         SteamWebApiKey = "abc",
@@ -37,6 +38,17 @@ public class SettingsDiffTests
         Assert.Equal(2, changed.Count);
         Assert.Equal(10, changed[nameof(SettingsData.DisplayDuration)]);
         Assert.Equal(false, changed[nameof(SettingsData.SoundEnabled)]);
+    }
+
+    [Fact]
+    public void Compute_UseGameOverlaySettingsChanged_IsReported()
+    {
+        var edited = Sample();
+        edited.UseGameOverlaySettings = false;
+
+        var changed = SettingsDiff.Compute(Sample(), edited);
+
+        Assert.Equal(false, changed[nameof(SettingsData.UseGameOverlaySettings)]);
     }
 
     [Fact]

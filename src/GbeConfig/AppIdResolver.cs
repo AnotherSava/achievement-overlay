@@ -25,7 +25,7 @@ public static partial class AppIdResolver
         if (!Directory.Exists(gameDir))
             return null;
 
-        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+        var options = AppUtilities.RecursiveScan;
         foreach (var file in Directory.EnumerateFiles(gameDir, "steam_appid.txt", options))
         {
             try
@@ -52,7 +52,7 @@ public static partial class AppIdResolver
         if (!Directory.Exists(gameDir))
             return null;
 
-        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+        var options = AppUtilities.RecursiveScan;
         foreach (var pattern in new[] { "*.ini", "*.cfg" })
         {
             foreach (var file in Directory.EnumerateFiles(gameDir, pattern, options))

@@ -13,6 +13,23 @@ namespace AchievementOverlay;
 /// </summary>
 public static class AppUtilities
 {
+    // --- Filesystem scanning ---
+
+    /// <summary>
+    /// Options for every recursive scan of a game folder. The default <c>AttributesToSkip</c> is
+    /// <c>Hidden | System</c>, which quietly skips a hidden <c>steam_settings</c> — and repacks hide
+    /// theirs routinely, so a game whose only config folder was hidden went untracked with nothing in
+    /// the log to say why. System stays skipped: that is what keeps a scan out of
+    /// <c>$RECYCLE.BIN</c> and <c>System Volume Information</c>, which are hidden <em>and</em> system.
+    /// A fresh instance each time because the type is mutable.
+    /// </summary>
+    public static EnumerationOptions RecursiveScan => new()
+    {
+        RecurseSubdirectories = true,
+        IgnoreInaccessible = true,
+        AttributesToSkip = FileAttributes.System
+    };
+
     // --- Icon management ---
 
     public static Icon LoadOrCreateIcon(bool grayscale)

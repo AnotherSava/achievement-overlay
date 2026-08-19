@@ -90,7 +90,7 @@ public static class GbeBinaryManager
         if (!Directory.Exists(rootDir))
             return null;
 
-        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+        var options = AppUtilities.RecursiveScan;
 
         var regularDll = Directory.EnumerateFiles(rootDir, "steam_api64.dll", options)
             .FirstOrDefault(p => p.Replace('\\', '/').Contains("/regular/", StringComparison.OrdinalIgnoreCase));

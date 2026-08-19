@@ -94,9 +94,10 @@ Page-specific notes:
   would put `NEW_ACHIEVEMENT_1_0_NAME` on screen as the achievement name. It stays **editable on
   purpose**: the list cannot be proven complete (a fresh install offers only english), and
   select-only would leave a legitimate language reachable only by hand-editing `config.json`.
-- **Popup width** (the `scale` key) is deliberately *one* setting rather than a size plus a separate
+- **Popup size** (the `scale` key) is deliberately *one* setting rather than a size plus a separate
   text size. They overlap — scaling already enlarges the text — and a large popup with small text is a
-  combination neither value alone would explain.
+  combination neither value alone would explain. It is also the answer to "the text is too small",
+  which is why the card says so; see the floor note under **Per-game overlay settings**.
 
   There is also **no "automatic" mode**, because automatic was only ever *15% of the display's width*.
   Expressed in a unit the user picks, that is just the default value, so the mode disappears and the
@@ -110,7 +111,8 @@ Page-specific notes:
   what is drawn, so the two cannot disagree. Switching unit in the window carries the current width
   across rather than the bare number, so the popup doesn't jump (15% of 2560 → 384 px).
 - **Font** applies to the whole popup by being set on the window, which every `TextBlock` inherits —
-  one assignment, no per-element drift. An unknown family is not an error: WPF falls back. The picker
+  one assignment, no per-element drift. An unknown family is not an error: WPF falls back (a *file*
+  is a different matter — see `PopupFontLoader` under **Per-game overlay settings**). The picker
   is a shortlist rather than every installed family, because achievement text is localised and a
   picker of everything invites one with no Cyrillic or CJK coverage.
 - **Shortcut** captures keystrokes rather than accepting typed text, so its value always round-trips
@@ -150,6 +152,76 @@ exists, and a missing custom sound file — and switches to the page that needs 
 
 The folder picker and browse button are shared with `AddGameForm` via `src/DialogControls.cs`;
 `PickFolder` takes a nullable owner so the WPF window, which has no `IWin32Window`, uses the same one.
+## Per-game overlay settings
+
+A game that arrived with someone else's `steam_settings/` — a repack, a scene release, an old config
+generator — may already state an unlock sound, a display duration and a font. Those three are honoured
+for that game's popups when `useGameOverlaySettings` is on. Everything else GBE's
+`configs.overlay.ini` can say is deliberately ignored; the reasoning, the survey of what real installs
+actually contain, and why position was cut are in
+`docs/plans/completed/2026-08-18-per-game-overlay-settings.md`.
+
+**Nothing writes these files but a third party.** GBE writes back only `configs.user.ini`, and this
+app's own wizard writes a two-line stub and installs the *regular* GBE build, which has no overlay
+code and never reads the file. So the feature is not mirroring what the user sees in-game — it reads
+that file as *a standard place where someone has already written down what they want*. Any wording
+stronger than that is a fidelity claim it cannot make, which is why the settings card and
+`docs/gbe-reference.md` both say it plainly.
+
+The chain is `GbeOverlaySettingsReader.Read` (the only IO and the only cache) → an `IniFile.Parse` per
+config file per folder, folded with `WithFallback` → `GameOverlayConfig.Parse` → `GameOverlaySettings`
+(absolute paths that exist) → `NotificationAppearance.Resolve`. Everything but the reader is pure, so the precedence is
+unit-tested without a window, and `Resolve` is the single expression of it — the unlock popup, the
+recent panel and the settings preview all go through it, so the three cannot disagree about a font or
+a duration.
+
+Load-bearing details:
+
+- **A game usually has more than one `steam_settings` folder, and they hold different things.** A
+  repack decorates the copy at the game root while the emulator reads a bare one beside its DLL
+  (`bin/coldclient/`, `www/greenworks/lib/`). `GameInfo.SettingsDirs` holds all of them, deepest
+  first, and the reader folds them into one key space with the same first-definition-wins rule GBE
+  applies across its four filenames — so a sound or font living only in the copy GBE ignores is still
+  used. `MetadataPath` stays the deepest folder, so schema and icon resolution are untouched.
+  Grouping is keyed by appid **and** first-level game folder: two installs claiming one appid are two
+  games, and pooling their folders would answer an unlock with a mixture of both.
+- **The scan reads hidden folders** (`AppUtilities.RecursiveScan`). Repacks mark `steam_settings`
+  hidden routinely, and `EnumerationOptions` skips `Hidden | System` by default — which made such a
+  game untracked with nothing in the log to say why, since the folder was never enumerated rather
+  than enumerated and rejected. System stays skipped, which is what keeps a scan out of
+  `$RECYCLE.BIN` and `System Volume Information` (hidden *and* system). Every recursive scan in the
+  app shares that one options property, the wizard's included.
+- A game with no `steam_appid.txt` or outside `gamesPaths` (the self-describing Uplay case) can never
+  have per-game settings: nothing maps its appid to a folder.
+- The reader is **not** part of `GameCache`, whose entries are replaced wholesale on every `ScanAll`.
+  It caches against six timestamps per folder — the four ini files plus the `sounds/` and `fonts/`
+  folders, since a folder's own timestamp moves when a file appears inside it, which is how a wav or
+  a ttf added without an ini edit is noticed. The cache key is the whole folder list, so a game whose
+  set of folders changes re-reads rather than serving the old answer.
+- **Nothing suppresses a notification**, diverging from GBE on purpose. `Notification_Duration_Achievement=0`
+  and `disable_achievement_notification=1` mean silence over there; honouring them would let a stale
+  ini quietly stop this app from notifying for one game, which is the worst bug report an optional
+  nicety could earn. Keys are also read case-insensitively, where GBE compares stored spellings and
+  drops `font_size`.
+- **The sound master switch stays app-owned**: `soundEnabled: false` is silence whatever a game ships,
+  and only the *file* is overridable. A game-supplied wav that won't load falls back to the built-in
+  sound (an override must never leave the user worse off); a path the user typed does not, because
+  silence is the honest report that their file is wrong. That asymmetry is the whole reason
+  `NotificationAppearance.SoundIsFromGame` exists.
+- **The recent panel and the settings preview never use a game's settings** — the panel stacks entries
+  from several games at once, so no one game can speak for the stack. That is what
+  `NotificationAppearance.From` is.
+- `PopupFontLoader` exists because `new FontFamily(@"C:\…\poppins.ttf")` compiles, throws nothing and
+  silently draws a fallback family (measured: Arial). A file has to be addressed as a base URI plus
+  the family name inside it, via `Fonts.GetFontFamilies(Uri, string)` — and by file name, not by
+  folder, since the folder overload returns whatever else sits beside it.
+
+`NotificationScale.MinFactor` is **1.0**, not a fraction: the popup is laid out at a size chosen to be
+readable, so drawing below it is drawing text nobody sized. It binds at the default — 15% of a 1920 px
+display is 288 px against a 322 px design width. The consequence is that the percent slider's floor
+becomes `ceil(322 / displayWidth × 100)`, which can exceed `MaxScreenPercent` on a narrow or heavily
+scaled display, so `ApplyScaleSliderRange` holds the maximum at or above the minimum.
+
 ## Config files
 
 `config/default.json` is the committed config that ships as `config.json` next to the exe. For local

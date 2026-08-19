@@ -123,7 +123,9 @@ public sealed class RecentAchievementsDisplay : IDisposable
         var finalTop = ctx.NextBottomEdge - estimatedHeight;
         double slideUpDistance = NotificationWindow.SlotHeight(estimatedHeight);
 
-        _soundPlayer?.Play();
+        // App settings, never a game's: the panel stacks entries from several games at once, so no
+        // one game's config can speak for the stack.
+        _soundPlayer?.Play(_config.SoundEnabled, _config.SoundPath);
         window.ShowRecent(entry.AchievementName, entry.Description, entry.IconPath, ctx.GameWindowRect, finalTop, slideUpDistance, gameInfoLine);
         _windows.Add(window);
 

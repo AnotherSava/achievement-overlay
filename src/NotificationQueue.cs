@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
-using System.IO;
-using System.Windows;
 using System.Windows.Threading;
+using AchievementOverlay.GbeOverlay;
 
 namespace AchievementOverlay;
 
@@ -25,6 +24,7 @@ public sealed class NotificationQueue : IDisposable
     private readonly GameCache _gameCache;
     private readonly AppConfig _config;
     private readonly UnlockSoundPlayer? _soundPlayer;
+    private readonly GbeOverlaySettingsReader? _overlayReader;
     private readonly Dispatcher _dispatcher;
 
     private readonly ConcurrentQueue<NotificationItem> _queue = new();
@@ -53,12 +53,14 @@ public sealed class NotificationQueue : IDisposable
         GameCache gameCache,
         AppConfig config,
         UnlockSoundPlayer? soundPlayer = null,
-        Dispatcher? dispatcher = null)
+        Dispatcher? dispatcher = null,
+        GbeOverlaySettingsReader? overlayReader = null)
     {
         _gameCache = gameCache;
         _config = config;
         _soundPlayer = soundPlayer;
         _dispatcher = dispatcher ?? Dispatcher.CurrentDispatcher;
+        _overlayReader = overlayReader;
     }
 
     /// <summary>
@@ -161,9 +163,10 @@ public sealed class NotificationQueue : IDisposable
             var gameWindowRect = AppUtilities.GetForegroundWindowRect();
             Logger.Info($"Showing notification: {item.AchievementName} at ({gameWindowRect.Left},{gameWindowRect.Top} {gameWindowRect.Width}x{gameWindowRect.Height})");
 
-            _soundPlayer?.Play();
+            var appearance = ResolveAppearance(item.AppId);
+            _soundPlayer?.Play(appearance.SoundEnabled, appearance.SoundPath, appearance.SoundIsFromGame);
 
-            var window = new NotificationWindow(NotificationAppearance.From(_config));
+            var window = new NotificationWindow(appearance);
             window.Closed += (_, _) => ScheduleRetry(_gapTimer ??= CreateTimer(), GapBetweenNotifications);
 
             window.ShowNotification(item.AchievementName, item.Description, item.IconPath, gameWindowRect);
@@ -173,6 +176,22 @@ public sealed class NotificationQueue : IDisposable
             Logger.Info($"Error dispatching notification: {ex.Message}");
             ScheduleRetry(_gapTimer ??= CreateTimer(), GapBetweenNotifications);
         }
+    }
+
+    /// <summary>
+    /// How this game's popup is drawn: the app's settings, overridden by whatever the game's own
+    /// <c>steam_settings/</c> says. <see cref="GameCache.LookupCached"/> rather than a rescanning
+    /// lookup — this runs per unlock, and a game that isn't in the cache (one tracked purely through
+    /// a self-describing unlock file, or one outside 'gamesPaths') has no folder to read either way.
+    /// </summary>
+    private NotificationAppearance ResolveAppearance(string appId)
+    {
+        var settings = _config.GetCurrent();
+        if (!settings.UseGameOverlaySettings || _overlayReader == null)
+            return NotificationAppearance.From(settings);
+
+        var game = _gameCache.LookupCached(appId);
+        return NotificationAppearance.Resolve(settings, _overlayReader.Read(game?.SettingsDirs));
     }
 
     private DispatcherTimer CreateTimer()

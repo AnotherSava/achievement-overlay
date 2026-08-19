@@ -79,6 +79,23 @@ public class NotificationScaleTests
         Assert.Equal(500, NotificationWindow.ComputeWidth(NotificationScale.Pixels(500), 2560), 1);
     }
 
+    [Fact]
+    public void ComputeWidth_DefaultOn1080p_IsNeverBelowTheDesignWidth()
+    {
+        // 15% of 1920 is 288 px against a 322 px design width. Drawing that shrank the title to
+        // 12.5 px and the description to 10.7 px, which is the "reads very small" complaint.
+        Assert.Equal(NotificationScale.DesignWidth, NotificationWindow.ComputeWidth(NotificationScale.Default, 1920), 1);
+    }
+
+    [Theory]
+    [InlineData(1920)]
+    [InlineData(1366)]
+    [InlineData(960)]   // 1080p at 200% display scaling
+    public void ComputeScale_NarrowDisplays_NeverDrawSmallerThanDesigned(double displayWidth)
+    {
+        Assert.True(NotificationWindow.ComputeScale(NotificationScale.Default, displayWidth) >= 1.0);
+    }
+
     [Theory]
     [InlineData(5, 200)]      // far too small on a small screen
     [InlineData(50, 100000)]  // absurd on a huge one

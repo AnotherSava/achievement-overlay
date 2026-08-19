@@ -33,8 +33,14 @@ public readonly record struct NotificationScale
     /// <summary>The width the popup is laid out at before scaling: padding 24 + icon 56 + gap 12 + text 230.</summary>
     public const double DesignWidth = 322;
 
-    /// <summary>Guards both units: a popup below or above these is unreadable or absurd.</summary>
-    public const double MinFactor = 0.75;
+    /// <summary>
+    /// Guards both units: a popup below or above these is unreadable or absurd. The floor is the
+    /// design size itself rather than a fraction of it — everything inside is laid out at a size
+    /// chosen to be readable, so drawing smaller than that is drawing text nobody sized. It bites at
+    /// the default: 15% of a 1920 px display is 288 px against a 322 px design width, which used to
+    /// shrink the title to 12.5 px and the description to 10.7 px.
+    /// </summary>
+    public const double MinFactor = 1.0;
     public const double MaxFactor = 2.5;
 
     /// <summary>What automatic always meant, and what a fresh config gets.</summary>

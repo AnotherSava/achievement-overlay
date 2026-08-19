@@ -23,6 +23,7 @@ internal static class SettingsDiff
         AddIfChanged(changed, nameof(SettingsData.SoundEnabled), current.SoundEnabled, edited.SoundEnabled);
         AddIfChanged(changed, nameof(SettingsData.SoundPath), current.SoundPath, edited.SoundPath);
         AddIfChanged(changed, nameof(SettingsData.DisplayDuration), current.DisplayDuration, edited.DisplayDuration);
+        AddIfChanged(changed, nameof(SettingsData.UseGameOverlaySettings), current.UseGameOverlaySettings, edited.UseGameOverlaySettings);
         AddIfChanged(changed, nameof(SettingsData.RecentAchievementsShortcut), current.RecentAchievementsShortcut, edited.RecentAchievementsShortcut);
         AddIfChanged(changed, nameof(SettingsData.RecentAchievementsCount), current.RecentAchievementsCount, edited.RecentAchievementsCount);
         // A key absent from config and a key the user cleared are the same state, so compare both as "".

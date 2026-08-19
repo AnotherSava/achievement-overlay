@@ -52,6 +52,53 @@ gap this app fills.
 For the same reason, a GBE install should not include `steamclient64.dll`, `steamclient.dll`, or
 `GameOverlayRenderer64.dll` unless a specific game needs them.
 
+## The overlay config file
+
+GBE reads its own overlay settings from four files inside a game's `steam_settings/` folder —
+`configs.app.ini`, `configs.main.ini`, `configs.overlay.ini` and `configs.user.ini`. They share one
+key space: the **section** decides what a key means, not the file it sits in, and when more than one
+file defines a key the **first file in that order wins**. Unset keys are then filled in from
+`%appdata%\GSE Saves\settings\`, so a game's own folder beats the global one.
+
+These files are not written by the emulator. GBE only ever writes back `configs.user.ini` (account
+name, Steam ID, language, country). Everything else arrives from somewhere else:
+
+- a repack or scene release that bundled a ready-made `steam_settings/` — by far the most common
+- an older config generator
+- `steam_settings.EXAMPLE/configs.overlay.EXAMPLE.ini` from a GBE release, renamed and edited by hand
+- the [Add game…](../README.md#adding-a-game) wizard, which writes only
+  `[overlay::general] enable_experimental_overlay=0`
+
+This matters for [Per-game settings](../README.md#per-game-settings): the wizard installs the
+**regular** GBE build, which has no overlay code and ignores this file entirely. So when the app reads
+it, it is not mirroring anything the user sees in-game — it is reading a standard place where someone
+has already written down what they wanted.
+
+### Keys the overlay app reads
+
+Both live in `[overlay::appearance]`:
+
+| Key | Meaning | GBE default |
+|---|---|---|
+| `Notification_Duration_Achievement` | Seconds an unlock notification stays up | `7.0` |
+| `Font_Override` | TrueType file; a relative name resolves inside `steam_settings/fonts` | (none) |
+
+Alongside them, `steam_settings/sounds/overlay_achievement_notification.wav` is played on unlock.
+
+### Parsing quirks
+
+GBE uses SimpleIni in a narrow configuration, and a file written for it behaves accordingly:
+
+- Comments are **whole lines only**, starting with `;` or `#`. There are no trailing comments, so
+  `Font_Size=16 # big` has the literal value `16 # big`.
+- Quotes are not stripped: `Font_Override="a.ttf"` looks for a file whose name includes the quotes.
+- A repeated key inside one file means the last one wins; an empty value reads as absent.
+- Numbers are read with `std::stof`, which takes the leading numeric prefix — `7.0s` is 7.0 — and a
+  value it cannot read at all costs that one key rather than the file.
+- `[overlay::appearance]` keys are **case-sensitive** in GBE: `font_size=22` is silently discarded.
+  (This app reads them case-insensitively instead, on the grounds that for a wizard-configured game
+  nothing else reads the file anyway.)
+
 ## The achievement schema format
 
 Each configured game has a `steam_settings/achievements.json` next to its `steam_api64.dll`. This is

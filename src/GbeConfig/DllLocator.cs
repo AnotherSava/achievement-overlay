@@ -27,7 +27,7 @@ public static class DllLocator
         if (!Directory.Exists(gameDir))
             return results;
 
-        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+        var options = AppUtilities.RecursiveScan;
         foreach (var path in Directory.EnumerateFiles(gameDir, "steam_api*.dll", options))
         {
             var name = Path.GetFileName(path);

@@ -203,6 +203,7 @@ public partial class SettingsWindow : Window
         CustomSoundRadio.IsChecked = !string.IsNullOrWhiteSpace(_current.SoundPath);
         BuiltInSoundRadio.IsChecked = !CustomSoundRadio.IsChecked;
         SoundPathBox.Text = _current.SoundPath;
+        GameOverlaySettingsToggle.IsChecked = _current.UseGameOverlaySettings;
 
         SteamKeyMasked.Password = _current.SteamWebApiKey ?? "";
         SteamKeyPlain.Text = _current.SteamWebApiKey ?? "";
@@ -224,6 +225,7 @@ public partial class SettingsWindow : Window
         // plainly which of the two is in use.
         SoundPath = CustomSoundRadio.IsChecked == true ? SoundPathBox.Text.Trim() : "",
         DisplayDuration = (int)DurationSlider.Value,
+        UseGameOverlaySettings = GameOverlaySettingsToggle.IsChecked == true,
         RecentAchievementsShortcut = ShortcutBox.Text.Trim(),
         RecentAchievementsCount = ParseCount(),
         SteamWebApiKey = CurrentSteamKey().Trim(),
@@ -296,8 +298,13 @@ public partial class SettingsWindow : Window
             // bounds are rounded inwards to keep every step inside what the popup can draw, then
             // held to MaxScreenPercent, which is tighter than the clamp allows on a wide display.
             var displayWidth = AppUtilities.GetForegroundLogicalWidth();
-            ScaleSlider.Minimum = Math.Ceiling(minWidth / displayWidth * 100);
-            ScaleSlider.Maximum = Math.Min(MaxScreenPercent, Math.Floor(maxWidth / displayWidth * 100));
+            var minPercent = Math.Ceiling(minWidth / displayWidth * 100);
+            ScaleSlider.Minimum = minPercent;
+            // Held at or above the floor: on a narrow or heavily scaled display the smallest popup
+            // the renderer will draw already exceeds MaxScreenPercent — 1920x1080 at 200% scaling is
+            // 960 logical px, where the design width alone is 34% — and a slider whose maximum sits
+            // below its minimum snaps to nothing.
+            ScaleSlider.Maximum = Math.Max(minPercent, Math.Min(MaxScreenPercent, Math.Floor(maxWidth / displayWidth * 100)));
             ScaleSlider.TickFrequency = 1;
         }
         else
@@ -388,8 +395,7 @@ public partial class SettingsWindow : Window
         // Same order as a real unlock: sound first, then the popup.
         _soundPlayer?.Play(edited.SoundEnabled, edited.SoundPath);
 
-        var appearance = new NotificationAppearance(edited.DisplayDuration, edited.Font, edited.Scale);
-        var window = new NotificationWindow(appearance);
+        var window = new NotificationWindow(NotificationAppearance.From(edited));
         window.Closed += (_, _) =>
         {
             // Popups expire oldest-first, so it is the bottom of the stack that empties. Without
@@ -606,7 +612,7 @@ public partial class SettingsWindow : Window
 
         try
         {
-            var count = Directory.EnumerateFiles(path, "steam_appid.txt", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true }).Count();
+            var count = Directory.EnumerateFiles(path, "steam_appid.txt", AppUtilities.RecursiveScan).Count();
             return count == 0
                 ? ("no games with achievement metadata found", "StatusWarn")
                 : ($"{count} game{(count == 1 ? "" : "s")} with achievement metadata", "StatusGood");

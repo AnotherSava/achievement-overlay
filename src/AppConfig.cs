@@ -44,6 +44,7 @@ public sealed class AppConfig
     public bool SoundEnabled { get { Reload(); return _settings.SoundEnabled; } }
     public string SoundPath { get { Reload(); return _settings.SoundPath; } }
     public int DisplayDuration { get { Reload(); return _settings.DisplayDuration; } }
+    public bool UseGameOverlaySettings { get { Reload(); return _settings.UseGameOverlaySettings; } }
     public string RecentAchievementsShortcut { get { Reload(); return _settings.RecentAchievementsShortcut; } }
     public int RecentAchievementsCount { get { Reload(); return _settings.RecentAchievementsCount; } }
     public string? SteamWebApiKey { get { Reload(); return _settings.SteamWebApiKey; } }
@@ -372,6 +373,15 @@ public sealed class SettingsData
 
     [JsonPropertyName("displayDuration")]
     public int DisplayDuration { get; set; }
+
+    /// <summary>
+    /// Whether a game's own <c>steam_settings/</c> may override the unlock sound, the display
+    /// duration and the font for that game's popups. Absent reads as off, so an existing install
+    /// never changes behaviour because of an ini someone wrote years ago and forgot; a fresh config
+    /// ships with it on.
+    /// </summary>
+    [JsonPropertyName("useGameOverlaySettings")]
+    public bool UseGameOverlaySettings { get; set; }
 
     [JsonPropertyName("recentAchievementsShortcut")]
     public string RecentAchievementsShortcut { get; set; } = "";

@@ -7,6 +7,7 @@
   "soundEnabled": true,
   "soundPath": "",
   "displayDuration": 7,
+  "useGameOverlaySettings": true,
   "recentAchievementsShortcut": "Ctrl+Shift+H",
   "recentAchievementsCount": 5,
   "trackingConfigured": {}

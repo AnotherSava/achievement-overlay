@@ -78,8 +78,10 @@ public partial class NotificationWindow : Window
         _appearance = appearance;
         Opacity = 0;
         // Set on the window so every TextBlock inherits it — one assignment, no per-element drift.
-        // An unknown family is not an error: WPF falls back rather than rendering nothing.
-        FontFamily = new FontFamily(appearance.ResolvedFont);
+        // An unknown family is not an error: WPF falls back rather than rendering nothing. A font
+        // file the game supplies wins when it loads; when it doesn't, the configured family is a
+        // better answer than no text.
+        FontFamily = PopupFontLoader.Load(appearance.FontFilePath) ?? new FontFamily(appearance.ResolvedFont);
         _holdTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(appearance.DurationSeconds) };
         _holdTimer.Tick += (_, _) =>
         {

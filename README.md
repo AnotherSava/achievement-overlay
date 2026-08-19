@@ -22,6 +22,7 @@ Achievement names and descriptions normally come from the game's own `steam_sett
 - **Setup confirmation** — a one-time "Gearhead" popup confirms tracking is working, either when a newly configured game first runs or as soon as you add a game that has run before (shown only while the game has no unlocks yet, so it never masks a real first achievement)
 - **Multi-monitor support** — notifications appear on the monitor with the foreground window, with correct DPI scaling across mixed-DPI setups
 - **Unlock sound** — plays a default or user-defined sound on achievement unlock
+- **Per-game settings** — a game that arrived with its own `steam_settings/` can supply its unlock sound, display duration and font, used for that game only (see [Per-game settings](#per-game-settings))
 - **Adjustable popup** — set how wide the notification is drawn (a share of the screen, or a fixed pixel width) and which font it uses, with a **Show me** preview
 - **Configurable** — a [Settings](#settings) window covers every option, and saving applies it immediately
 - **Start with Windows** option
@@ -59,7 +60,7 @@ Right-click the tray icon for these options:
 Four pages:
 
 - **General** — start with Windows, and the shortcut and count for the recent achievements panel.
-- **Notifications** — everything about the popup: language, font, scale, duration and sound. **Show me** fires a real notification with the settings as they stand, and the footer states the popup's computed width, scale and duration.
+- **Notifications** — everything about the popup: language, font, size, duration, sound, and whether a game's own settings may override them. **Show me** fires a real notification with the settings as they stand, and the footer states the popup's computed width and duration.
 - **Folders** — game folders and GSE Saves folders, one card each, with a live status line saying what's actually there (how many games were found, or that a drive isn't connected).
 - **Advanced** — the Steam Web API and Firecrawl keys.
 
@@ -67,8 +68,9 @@ A few fields are worth a note:
 
 - **Achievement text** picks the language achievement names and descriptions appear in. The list holds the languages your installed games actually provide; a game that doesn't have the chosen one falls back to english.
 - **Shortcut** is captured rather than typed — click it and press the combination you want. Backspace clears it, leaving **Show recent achievements** in the tray menu as the way in. While the field has focus, the combination you press is recorded instead of running whatever normally owns it, so you can reassign a shortcut that's already taken — by this app, by another program, or by a desktop shortcut's **Shortcut key**. Nothing is intercepted once you click away from the field.
-- **Popup width** scales the whole popup — icon, padding, wrap width and text grow together — so this is the setting to reach for if notifications read too small. Pick the unit: **% of screen width** keeps the popup the same apparent size on any monitor (the default 15% is what the overlay has always used), while **Pixels** pins it to one width everywhere. The footer states the width it actually works out to.
+- **Popup size** scales the whole popup — text, icon, padding and wrap width grow together — so this is the setting to reach for if notifications read too small. It never draws smaller than the popup's design size, so the text stays legible whatever unit you pick. Pick the unit: **% of screen width** keeps the popup the same apparent size on any monitor (the default 15% is what the overlay has always used), while **Pixels** pins it to one width everywhere. The footer states the width it actually works out to.
 - **Game folders** and **GSE Saves folders** are edited a folder at a time with **Add folder**, **Change** and **Remove**. A folder you pick is stored with an environment variable where one fits — choosing your AppData GSE Saves folder is saved as `%appdata%\GSE Saves`, not as your user profile's full path — so the config stays portable between machines even after editing it here.
+- **Use each game's own overlay settings** lets a game that arrived with a `steam_settings/` folder of its own supply its unlock sound, its display duration and its font, for that game only. See [Per-game settings](#per-game-settings).
 - **Metadata providers** holds the two keys the [Add game](#adding-a-game) wizard asks for and reuses: the Steam Web API key that fetches achievement schemas and icons, and the optional Firecrawl key that fills in hidden-achievement descriptions.
 
 **Pause notifications** isn't here: it's a momentary toggle rather than a setting, so it stays in the tray menu and a restart clears it.
@@ -77,7 +79,7 @@ Two entries are refused because they would fail silently: a **GSE Saves folders*
 
 ## Configuration
 
-Every setting below has a field in the [Settings](#settings) window, which is the easiest way to change one. The `config.json` file that ships next to the executable can also be edited by hand: `language`, `font`, `scale`, `soundEnabled`, `soundPath`, `displayDuration`, and `recentAchievementsCount` are picked up automatically, while `gamesPaths`, `gseSavesPaths`, and `recentAchievementsShortcut` are only re-read on the next start. Saving from the window applies all of them at once.
+Every setting below has a field in the [Settings](#settings) window, which is the easiest way to change one. The `config.json` file that ships next to the executable can also be edited by hand: `language`, `font`, `scale`, `soundEnabled`, `soundPath`, `displayDuration`, `useGameOverlaySettings`, and `recentAchievementsCount` are picked up automatically, while `gamesPaths`, `gseSavesPaths`, and `recentAchievementsShortcut` are only re-read on the next start. Saving from the window applies all of them at once.
 
 ### Settings
 
@@ -87,10 +89,11 @@ Every setting below has a field in the [Settings](#settings) window, which is th
 | `gseSavesPaths` | Semicolon-separated list of GSE Saves directories. Supports `%appdata%` and other env vars. | `%appdata%\GSE Saves` |
 | `language` | Preferred language for achievement display text (**Achievement text** in the settings window). Falls back to english. | `english` |
 | `font` | Font family for the popup's name, description and game line. Empty uses the built-in default; an unavailable family falls back to it too. | `Segoe UI` |
-| `scale` | How wide the popup is drawn: `"15%"` is a share of the display's width, `"384px"` an absolute width. Clamped to a readable range either way. | `15%` |
+| `scale` | How wide the popup is drawn: `"15%"` is a share of the display's width, `"384px"` an absolute width. Clamped to a readable range either way, and never below the popup's design width. | `15%` |
 | `soundEnabled` | Play a sound on achievement unlock. | `true` |
 | `soundPath` | Custom `.wav` sound file path. Empty is the **Built-in sound** choice in the dialog. | (empty) |
 | `displayDuration` | How long the unlock notification stays on screen, in seconds. | `7` |
+| `useGameOverlaySettings` | Let a game's own `steam_settings/` override the unlock sound, duration and font for that game. See [Per-game settings](#per-game-settings). | `true` |
 | `recentAchievementsShortcut` | Global keyboard shortcut to show/hide recent achievements. | `Ctrl+Shift+H` |
 | `recentAchievementsCount` | Number of recent achievements to display. | `5` |
 | `steamWebApiKey` | Steam Web API key used by [Add game…](#adding-a-game). Set via the wizard or the Settings window; you rarely edit it by hand. | (none) |
@@ -108,6 +111,7 @@ Every setting below has a field in the [Settings](#settings) window, which is th
   "soundEnabled": true,
   "soundPath": "",
   "displayDuration": 7,
+  "useGameOverlaySettings": true,
   "recentAchievementsShortcut": "Ctrl+Shift+H",
   "recentAchievementsCount": 5
 }
@@ -135,6 +139,44 @@ Notes:
 - **Windows Defender** — current GBE releases sometimes trigger a false positive on download. If that happens, the wizard offers to add the needed Defender exclusions (with a UAC prompt) and retries automatically. Alternatively, point the Advanced **GBE release folder** at an already-extracted release and uncheck "Download the latest GBE release".
 
 The [GBE reference](docs/gbe-reference.md) covers what the wizard is doing underneath — where unlocks are stored, the achievement schema format, why the overlay disables GBE's own, and why hidden achievement descriptions arrive blank. You don't need any of it for normal use.
+
+## Per-game settings
+
+Some games arrive with a `steam_settings/` folder someone else prepared — a repack, a scene release,
+or an older config generator — and that folder can already say how notifications should look and
+sound. When **Use each game's own overlay settings** is on (it is by default), three of those choices
+are honoured for that game's popups:
+
+| What the game supplies | Where | Effect |
+|---|---|---|
+| Unlock sound | `steam_settings/sounds/overlay_achievement_notification.wav` | Played instead of the app's sound |
+| Display duration | `Notification_Duration_Achievement` in `steam_settings/configs.overlay.ini` | How long the popup stays, 1–60 s |
+| Font | `Font_Override` in the same file, resolved against `steam_settings/fonts` | The popup's font family |
+
+Anything the game doesn't set stays on the [Settings](#settings) value, and a game that supplies none
+of the three is unaffected. **Play a sound on unlock** stays in charge: with it off, nothing plays,
+whatever a game ships. A game's sound file that can't be played falls back to the built-in one rather
+than to silence.
+
+Deliberately not honoured: position, colours, rounding, margins, and font/icon *sizes*. The popup's
+look is this app's, not the emulator's, and GBE's sizes are measured against a differently shaped
+notification, so copying the numbers across would not reproduce the layout — use **Popup size**
+instead. Nothing in a game's config can suppress a notification either, even though the equivalent
+key does exactly that in GBE's own overlay.
+
+A game often has **more than one** `steam_settings` folder — a repack drops a decorated copy at the
+game root while the emulator reads a plainer one beside its DLL (`bin/coldclient/`,
+`www/greenworks/lib/`). All of them are read, nearest-the-DLL first, so a sound or font that lives only
+in the copy the emulator ignores is still used. Hidden folders count: repacks mark them hidden often,
+and both the tracking scan and this one look inside them.
+
+This only applies to games the app can locate on disk, which means a `steam_appid.txt` and a folder
+covered by `gamesPaths`. A game tracked purely through a [self-describing unlock file](#other-emulators)
+has no such folder, so there is nothing to read.
+
+The values are re-read when the files change, so editing an ini takes effect on the next unlock
+without restarting the app. The log names what was picked up: `Game overlay settings: duration=12s,
+sound='…' (from '…')`.
 
 ## Other emulators
 
@@ -196,7 +238,7 @@ The app shows an error dialog on startup if the config is missing, has invalid J
 
 If the log shows `[WARN] Game path does not exist`, check that `gamesPaths` in `config.json` points to valid directories.
 
-If the game doesn't appear in the log at all, make sure its directory is under one of the paths listed in `gamesPaths` and that it has a `steam_appid.txt` file (either in the game root or inside `steam_settings/`).
+If the game doesn't appear in the log at all, make sure its directory is under one of the paths listed in `gamesPaths` and that it has a `steam_appid.txt` file (either in the game root or inside `steam_settings/`). A hidden `steam_settings` folder is fine — those are scanned too.
 
 If the log shows `[WARN] Skipped: appid=... (no 'achievements.json')`, the game is detected but has no achievement metadata. Generate it with the tray [Add game…](#adding-a-game) dialog.
 
@@ -226,9 +268,15 @@ The log shows `[WARN] Language '...' not available, falling back to english`. Pi
 
 If you pick a shortcut another application already owns, the [Settings](#settings) dialog says so when you click OK; the log also shows `[WARN] Could not register hotkey`. Pick a different combination under **Shortcut**. The tray menu item still works as a fallback.
 
+### Notifications are too small
+
+Raise **Popup size** in the [Settings](#settings) dialog — it scales the text along with everything
+else. The default is 15% of the screen width, which on a 1080p display works out to the smallest size
+the popup will draw; anything above that gives you bigger text.
+
 ### No sound
 
-Check that **Play a sound on unlock** is on in the [Settings](#settings) dialog. With **Custom file** selected, `[WARN] Custom sound file not found` means it has since been moved or deleted, and `[WARN] Error playing sound` means it isn't a valid `.wav`. In both cases no sound plays — switch to **Built-in sound**.
+Check that **Play a sound on unlock** is on in the [Settings](#settings) dialog. With **Custom file** selected, `[WARN] Sound file not found` means it has since been moved or deleted, and `[WARN] Could not play sound` means it isn't a valid PCM `.wav`. In both cases no sound plays — switch to **Built-in sound**. If one game sounds different from the rest, it is supplying its own — see [Per-game settings](#per-game-settings).
 
 ### Settings not saving
 

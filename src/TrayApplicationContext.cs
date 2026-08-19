@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Windows.Forms;
 using AchievementOverlay.GbeConfig;
+using AchievementOverlay.GbeOverlay;
 
 namespace AchievementOverlay;
 
@@ -68,15 +69,15 @@ public sealed class TrayApplicationContext : ApplicationContext
             ShowConfigError(heading, detail);
             return;
         }
-        Logger.Info($"Config: gamesPaths='{string.Join(";", _config.GamesPaths)}', gseSavesPaths='{string.Join(";", _config.GseSavesPaths)}', language={_config.Language}, soundEnabled={_config.SoundEnabled}, soundPath='{_config.SoundPath}', displayDuration={_config.DisplayDuration}, recentAchievementsShortcut={_config.RecentAchievementsShortcut}, recentAchievementsCount={_config.RecentAchievementsCount}");
+        Logger.Info($"Config: gamesPaths='{string.Join(";", _config.GamesPaths)}', gseSavesPaths='{string.Join(";", _config.GseSavesPaths)}', language={_config.Language}, soundEnabled={_config.SoundEnabled}, soundPath='{_config.SoundPath}', displayDuration={_config.DisplayDuration}, useGameOverlaySettings={_config.UseGameOverlaySettings}, recentAchievementsShortcut={_config.RecentAchievementsShortcut}, recentAchievementsCount={_config.RecentAchievementsCount}");
 
         _gameCache = new GameCache(_config);
         _gameCache.ScanAll();
         foreach (var game in _gameCache.GetAll())
             Logger.Info($"  {game.GameName}, appid={game.AppId}, path='{game.MetadataPath}'");
 
-        _soundPlayer = new UnlockSoundPlayer(_config);
-        _notificationQueue = new NotificationQueue(_gameCache, _config, _soundPlayer);
+        _soundPlayer = new UnlockSoundPlayer();
+        _notificationQueue = new NotificationQueue(_gameCache, _config, _soundPlayer, overlayReader: new GbeOverlaySettingsReader());
 
         var validSavesPaths = ValidGseSavesPaths();
         if (validSavesPaths.Length == 0)

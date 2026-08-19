@@ -4,49 +4,95 @@ namespace AchievementOverlay;
 
 /// <summary>
 /// Plays achievement unlock sounds. Uses System.Media.SoundPlayer for .wav files.
-/// Supports a custom sound file path from config, falling back to an embedded default.
+/// Supports a custom sound file path, falling back to an embedded default.
 /// </summary>
 public sealed class UnlockSoundPlayer : IDisposable
 {
-    private readonly AppConfig _config;
+    /// <summary>
+    /// How many loaded files to keep. Per-game sounds make alternation normal — two games unlocking
+    /// in one session would otherwise re-read a wav from disk on every notification, synchronously,
+    /// on the dispatcher thread.
+    /// </summary>
+    private const int MaxCachedPlayers = 8;
+
     private System.Media.SoundPlayer? _defaultPlayer;
-    private System.Media.SoundPlayer? _customPlayer;
-    private string? _customPlayerPath;
-
-    public UnlockSoundPlayer(AppConfig config)
-    {
-        _config = config;
-    }
+    private readonly Dictionary<string, System.Media.SoundPlayer> _customPlayers = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Plays the unlock sound if sound is enabled in config.
-    /// Fire-and-forget, non-blocking. Errors are logged and swallowed.
+    /// Plays a resolved choice rather than reading config here, so the real unlock, the recent panel
+    /// and the settings window's "Show me" all go through one implementation and a preview can never
+    /// sound different from the thing it previews. Fire-and-forget; errors are logged and swallowed.
     /// </summary>
-    public void Play() => Play(_config.SoundEnabled, _config.SoundPath);
-
-    /// <summary>
-    /// Plays a specific choice rather than the saved one, so the settings window's "Show me" can
-    /// preview a sound that hasn't been saved yet. The single implementation behind both, so a
-    /// preview can never sound different from the real unlock.
-    /// </summary>
-    public void Play(bool enabled, string? customPath)
+    /// <param name="fallBackToDefaultOnError">
+    /// Set for a file the <em>game</em> supplied: an override must never leave the user worse off
+    /// than no override. A path the user typed deliberately does not fall back — silence is the
+    /// honest report that the file they chose is wrong.
+    /// </param>
+    public void Play(bool enabled, string? customPath, bool fallBackToDefaultOnError = false)
     {
         if (!enabled)
             return;
 
+        var hasCustom = !string.IsNullOrEmpty(customPath);
+        if (hasCustom && TryPlayFile(customPath!))
+            return;
+
+        if (hasCustom && !fallBackToDefaultOnError)
+            return;
+
+        TryPlayEmbeddedDefault();
+    }
+
+    private bool TryPlayFile(string path)
+    {
         try
         {
-            if (!string.IsNullOrEmpty(customPath))
+            if (!File.Exists(path))
             {
-                if (File.Exists(customPath))
-                    PlayFile(customPath);
-                else
-                    Logger.Warn($"Custom sound file not found: '{customPath}'");
+                Logger.Warn($"Sound file not found: '{path}'");
+                return false;
             }
-            else
+
+            if (!_customPlayers.TryGetValue(path, out var player))
             {
-                PlayEmbeddedDefault();
+                if (_customPlayers.Count >= MaxCachedPlayers)
+                    ClearCustomPlayers();
+
+                player = new System.Media.SoundPlayer(path);
+                player.Load(); // throws here for anything that isn't a PCM wav
+                _customPlayers[path] = player;
             }
+
+            player.Play();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Could not play sound '{path}': {ex.Message}");
+            return false;
+        }
+    }
+
+    private void TryPlayEmbeddedDefault()
+    {
+        try
+        {
+            if (_defaultPlayer == null)
+            {
+                var stream = typeof(UnlockSoundPlayer).Assembly
+                    .GetManifestResourceStream("AchievementOverlay.achievement_sound.wav");
+
+                if (stream == null)
+                {
+                    Logger.Warn("Embedded default sound not found");
+                    return;
+                }
+
+                _defaultPlayer = new System.Media.SoundPlayer(stream);
+                _defaultPlayer.Load();
+            }
+
+            _defaultPlayer.Play();
         }
         catch (Exception ex)
         {
@@ -54,43 +100,17 @@ public sealed class UnlockSoundPlayer : IDisposable
         }
     }
 
-    private void PlayFile(string path)
+    private void ClearCustomPlayers()
     {
-        if (_customPlayer == null || _customPlayerPath != path)
-        {
-            _customPlayer?.Dispose();
-            _customPlayer = new System.Media.SoundPlayer(path);
-            _customPlayerPath = path;
-            _customPlayer.Load();
-        }
-        _customPlayer.Play();
-    }
-
-    private void PlayEmbeddedDefault()
-    {
-        if (_defaultPlayer == null)
-        {
-            var stream = typeof(UnlockSoundPlayer).Assembly
-                .GetManifestResourceStream("AchievementOverlay.achievement_sound.wav");
-
-            if (stream == null)
-            {
-                Logger.Warn("Embedded default sound not found");
-                return;
-            }
-
-            _defaultPlayer = new System.Media.SoundPlayer(stream);
-            _defaultPlayer.Load();
-        }
-
-        _defaultPlayer.Play();
+        foreach (var player in _customPlayers.Values)
+            player.Dispose();
+        _customPlayers.Clear();
     }
 
     public void Dispose()
     {
         _defaultPlayer?.Dispose();
         _defaultPlayer = null;
-        _customPlayer?.Dispose();
-        _customPlayer = null;
+        ClearCustomPlayers();
     }
 }
