@@ -36,8 +36,11 @@ public class GbeOverlaySettingsReaderTests : IDisposable
         return path;
     }
 
-    /// <summary>One folder is the common case; the multi-folder tests pass their own order.</summary>
-    private static GameOverlaySettings? Read(params string[] steamSettingsDirs) =>
+    /// <summary>
+    /// One folder is the common case; the multi-folder tests pass their own order. Nullable because
+    /// "no folders at all" is a case the reader is meant to answer, not a mistake.
+    /// </summary>
+    private static GameOverlaySettings? Read(params string[]? steamSettingsDirs) =>
         new GbeOverlaySettingsReader().Read(steamSettingsDirs);
 
     [Fact]

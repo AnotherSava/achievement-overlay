@@ -255,3 +255,9 @@ keep the encrypted files for what genuinely can't be public.
 dotnet build src/AchievementOverlay.csproj -c Release
 dotnet test tests/AchievementOverlay.Tests.csproj
 ```
+
+`.claude/commit-checks.sh` is the gate `/commit` runs before it will propose a commit, and it is
+stricter than either line above on purpose. It builds the **test** project (which pulls in `src`
+through the project reference, so warnings in test code are seen at all), with `-warnaserror` and
+`--no-incremental` — MSBuild skips analysis for unchanged projects, so a cached build reports no
+warnings even when the code still has them. A `CS8625` in a test reached a release that way once.
