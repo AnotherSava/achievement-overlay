@@ -320,12 +320,19 @@ Three things bite here:
 
 - `.gitignore` ignores `docs/*` and re-includes the site by name, so a **new top-level file or
   folder under `docs/` is invisible to git until its `!` line exists**. Nothing warns you.
-- The empty `_includes/footer_custom.html` is what removes the theme's "This site uses Just the
-  Docs" line. It shadows a theme include; there is no config option for it.
+- `_includes/nav_footer_custom.html` is what removes the theme's footer attribution, and every
+  obvious guess about it is wrong. Not `footer_custom.html` (that is a `site.footer_content` hook).
+  Not an *empty* file — the theme guards on `!= ""` and ships a 0-byte copy, so empty prints the
+  line. And nothing in it may contain `{%` or `{{`, even inside a comment: an include is parsed as
+  Liquid, so quoting the theme's own guard there fails the Pages build outright.
 - The site runs at the theme's own `$content-width` deliberately. Overriding it is not a width
   knob: `md` and `lg` in the theme's `$media-queries` are *derived* from it, so raising it also
   raises the window width at which the sidebar stops being a mobile header — and it can't be
   decoupled, because `.main`'s `lg` margin is computed from the same variable.
+- `remote_theme` is **pinned** to a release tag. Unpinned it resolves to the theme's default-branch
+  HEAD on every rebuild, so an upstream commit changes this site with nothing changing here — and
+  the footer include above depends on the exact shape of two theme partials. Bump it deliberately,
+  and check what the site relies on still exists at the new tag.
 
 ## Documentation screenshots
 
