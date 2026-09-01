@@ -1,0 +1,51 @@
+{
+  "screenshots": [
+    {
+      "id": "sample-notification",
+      "files": ["sample-notification.png"],
+      "shows": "A single popup as it appears over a game — icon, achievement name, description, and the game line the recent achievements panel adds",
+      "policy": "confirm",
+      "verifiedAt": "b616066",
+      "capture": {
+        "steps": [
+          "Deploy the current build so the shot matches the working tree, not the installed release",
+          "python scripts/test-achievements.py backup, then unlock one achievement to fire a real popup",
+          "Capture through lib/window-capture.ps1 WITHOUT -CropToOpaque: this popup is translucent by design, so a plain screen grab bakes the wallpaper into it and cropping cannot separate them",
+          "python scripts/test-achievements.py restore"
+        ]
+      }
+    },
+    {
+      "id": "tray-menu",
+      "files": ["tray-menu.png"],
+      "shows": "The system tray context menu: Show recent achievements, Add game, Pause notifications, Settings, Open config/logs location, Exit",
+      "policy": "confirm",
+      "verifiedAt": "b616066",
+      "capture": {
+        "command": "bash docs/screenshots/capture/tray-menu.sh",
+        "steps": [
+          "Deploy the current build so the menu shown is the working tree's",
+          "Right-click the tray icon; poll for the menu rather than assuming a delay, because synthetic right-clicks on the tray open it only sometimes — re-run on failure",
+          "Capture the menu window whole; its client area excludes the border, and the border is part of the menu"
+        ]
+      }
+    },
+    {
+      "id": "settings-window",
+      "files": ["settings.png"],
+      "shows": "The Settings window on its Notifications page, with the nav rail and the footer visible",
+      "policy": "auto",
+      "verifiedAt": "b616066",
+      "capture": {
+        "command": "bash docs/screenshots/capture/settings-window.sh",
+        "steps": [
+          "Deploy the current build so the shot matches the working tree, not the installed release",
+          "Open the tray menu and click Settings...",
+          "Select the Notifications page in the nav rail",
+          "Capture the client area, not the window: the window rect carries Windows 11's 2px border, which is dark when the OS is in dark mode even though this window is light",
+          "Use -CropToOpaque: this window is opaque, so its rounded bottom corners are its own dark border curving into the client rectangle — chrome, which alpha recovery preserves rather than removes"
+        ]
+      }
+    }
+  ]
+}
