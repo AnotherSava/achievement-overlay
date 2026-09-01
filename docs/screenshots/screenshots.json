@@ -5,7 +5,7 @@
       "files": ["sample-notification.png"],
       "shows": "A single popup as it appears over a game — icon, achievement name, description, and the game line the recent achievements panel adds",
       "policy": "confirm",
-      "verifiedAt": "b616066",
+      "verifiedAt": "8133d50",
       "capture": {
         "steps": [
           "Deploy the current build so the shot matches the working tree, not the installed release",
