@@ -1,6 +1,9 @@
 title: Achievement Overlay
 description: Steam-style achievement popups for games running in the Goldberg Steam Emulator.
-remote_theme: just-the-docs/just-the-docs
+# Pinned: an unpinned remote_theme resolves to the theme's default branch HEAD on every
+# rebuild, so an upstream commit changes this site with nothing changing here. Bump this
+# deliberately, like any other dependency.
+remote_theme: just-the-docs/just-the-docs@v0.12.0
 baseurl: /achievement-overlay
 plugins:
   - jekyll-remote-theme
