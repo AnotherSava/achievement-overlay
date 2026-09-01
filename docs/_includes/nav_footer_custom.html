@@ -1,7 +1,9 @@
-<!-- Suppresses the theme's "This site uses Just the Docs" line, which both
-     components/sidebar.html (desktop) and components/footer.html (mobile) print
-     as the *else* branch of `{% if nav_footer_custom != "" %}`.
+<!-- Suppresses the theme's "This site uses Just the Docs" line, printed by both
+     components/sidebar.html (desktop) and components/footer.html (mobile) as the
+     else-branch of a test for whether this include renders as an empty string.
 
-     So this file must be non-empty and render nothing — an empty file makes the
-     capture "" and prints the attribution, which is the opposite of how the
-     sibling footer_custom.html hook behaves. A comment satisfies both. -->
+     So the file must be non-empty and render nothing. An empty file makes the
+     capture empty and prints the attribution, which is the opposite of how the
+     sibling footer_custom.html hook behaves. And nothing here may contain Liquid
+     tag delimiters, even inside this comment: an include is parsed as Liquid, so
+     quoting that test verbatim once broke the build with an unclosed if tag. -->
