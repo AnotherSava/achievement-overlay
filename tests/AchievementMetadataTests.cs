@@ -258,9 +258,10 @@ public class AchievementMetadataTests : IDisposable
         """;
         var defs = AchievementMetadata.ParseDefinitions(json);
 
-        var found = AchievementMetadata.FindDefinition(defs, "ACH02");
+        var found = AchievementMetadata.FindDefinition(defs, "ACH02", out var matchedExactly);
         Assert.NotNull(found);
         Assert.Equal("ACH02", found!.Name);
+        Assert.True(matchedExactly);
     }
 
     [Fact]
@@ -269,8 +270,9 @@ public class AchievementMetadataTests : IDisposable
         var json = """[{"name": "ACH01", "displayName": "First"}]""";
         var defs = AchievementMetadata.ParseDefinitions(json);
 
-        var found = AchievementMetadata.FindDefinition(defs, "ach01");
+        var found = AchievementMetadata.FindDefinition(defs, "ach01", out var matchedExactly);
         Assert.NotNull(found);
+        Assert.True(matchedExactly);
     }
 
     [Fact]
@@ -279,8 +281,137 @@ public class AchievementMetadataTests : IDisposable
         var json = """[{"name": "ACH01", "displayName": "First"}]""";
         var defs = AchievementMetadata.ParseDefinitions(json);
 
-        var found = AchievementMetadata.FindDefinition(defs, "MISSING");
+        var found = AchievementMetadata.FindDefinition(defs, "MISSING", out _);
         Assert.Null(found);
+    }
+
+    // --- FindDefinition: leading-zero fallback for digits-only names (issue #7) ---
+
+    /// <summary>Runs a name against a schema built from the given names, all icon-less.</summary>
+    private static (AchievementDefinition? Found, bool MatchedExactly) Find(string achievementName, params string[] schemaNames)
+    {
+        var defs = schemaNames.Select(n => new AchievementDefinition { Name = n }).ToList();
+        var found = AchievementMetadata.FindDefinition(defs, achievementName, out var matchedExactly);
+        return (found, matchedExactly);
+    }
+
+    [Fact]
+    public void FindDefinition_ZeroPaddedSchemaName_MatchesBareNumericKey()
+    {
+        // Issue #7 verbatim: AC Odyssey's schema names "001".."093" against the emulator's "1".
+        var (found, matchedExactly) = Find("1", "001", "002", "003");
+
+        Assert.Equal("001", found?.Name);
+        Assert.False(matchedExactly);
+    }
+
+    [Fact]
+    public void FindDefinition_BareNumericSchemaName_MatchesZeroPaddedKey()
+    {
+        // The reverse direction is real: Anno 1800 names its achievements "1".."215", so a writer
+        // that pads would miss a schema that does not.
+        var (found, matchedExactly) = Find("001", "1", "2");
+
+        Assert.Equal("1", found?.Name);
+        Assert.False(matchedExactly);
+    }
+
+    [Fact]
+    public void FindDefinition_BothSidesPaddedToDifferentWidths_Matches()
+    {
+        // No pad-and-probe ladder from the key would find this; folding both sides does.
+        Assert.Equal("001", Find("01", "001").Found?.Name);
+    }
+
+    [Fact]
+    public void FindDefinition_ExactMatchWinsOverZeroPadded()
+    {
+        // The padded entry is listed first, so only an exact-first pass can answer "1" with "1".
+        var (found, matchedExactly) = Find("1", "001", "1");
+
+        Assert.Equal("1", found?.Name);
+        Assert.True(matchedExactly);
+    }
+
+    [Fact]
+    public void FindDefinition_TwoEntriesDifferOnlyInPadding_ReturnsNull()
+    {
+        // Picking one would be picking whichever the schema's author typed first.
+        Assert.Null(Find("1", "001", "0001").Found);
+    }
+
+    [Fact]
+    public void FindDefinition_DuplicateIdenticalNames_StillMatches()
+    {
+        // Two entries spelled the same are one achievement listed twice, not an ambiguity.
+        Assert.Equal("001", Find("1", "001", "001").Found?.Name);
+    }
+
+    [Fact]
+    public void FindDefinition_AllZeroNames_Match()
+    {
+        // Pins the one-character floor: stripping "000" to "" would fold it onto a nameless entry.
+        Assert.Equal("000", Find("0", "000").Found?.Name);
+    }
+
+    [Theory]
+    [InlineData("01", "10")]      // same digits, different number
+    [InlineData("ACH1", "ACH01")] // digits-only is the whole rule, so a shared prefix does not count
+    [InlineData("1", "ACH_1")]
+    [InlineData("+1", "001")]     // excluded by construction, where long.TryParse would have accepted it
+    [InlineData(" 1", "001")]
+    public void FindDefinition_NotEquivalentNames_ReturnsNull(string achievementName, string schemaName)
+    {
+        Assert.Null(Find(achievementName, schemaName).Found);
+    }
+
+    [Fact]
+    public void FindDefinition_NonAsciiDigitBehindAsciiZero_ReturnsNull()
+    {
+        // The one case that separates char.IsAsciiDigit from char.IsDigit, using Arabic-Indic one
+        // (U+0661). TrimStart('0') strips only the ASCII zero, so under IsDigit the schema name is
+        // all-digits and folds onto the key; under IsAsciiDigit it is not numeric at all. Escaped
+        // rather than written literally: the file carries no BOM, and what this asserts must not
+        // rest on how the compiler reads a raw byte sequence.
+        Assert.Null(Find("\u0661", "0\u0661").Found);
+    }
+
+    [Fact]
+    public void FindDefinition_NameLongerThanInt64_Matches()
+    {
+        // 25 digits: any numeric parse would fail outright, and double would equate distinct ids.
+        Assert.Equal("0001234567890123456789012", Find("1234567890123456789012", "0001234567890123456789012").Found?.Name);
+    }
+
+    [Fact]
+    public void FindDefinition_SchemaEntryWithNullName_ReturnsNullWithoutThrowing()
+    {
+        // System.Text.Json writes null into Name despite the non-nullable declaration, and an
+        // exception here would leave the tray through a Recent-panel open that has no try/catch.
+        var defs = AchievementMetadata.ParseDefinitions("""[{"name": null, "displayName": "Nameless"}]""");
+
+        Assert.Null(AchievementMetadata.FindDefinition(defs, "0", out _));
+    }
+
+    [Fact]
+    public void FindDefinition_EmptyAchievementName_MatchesOnlyExactly()
+    {
+        // "" is a legal JSON key and an entry with no name parses to "", so the two match exactly —
+        // but "" must not acquire a folded form and start answering numeric keys.
+        Assert.Equal("", Find("", "").Found?.Name);
+        Assert.Null(Find("", "000").Found);
+    }
+
+    [Fact]
+    public void FindDefinition_SingleUseSequence_MatchesByPadding()
+    {
+        // The parameter is an IEnumerable; a two-pass implementation would find nothing here.
+        static IEnumerable<AchievementDefinition> OneShot()
+        {
+            yield return new AchievementDefinition { Name = "001" };
+        }
+
+        Assert.Equal("001", AchievementMetadata.FindDefinition(OneShot(), "1", out _)?.Name);
     }
 
     // --- ResolveIconPath tests ---
@@ -402,7 +533,7 @@ public class AchievementMetadataTests : IDisposable
         """;
 
         var defs = AchievementMetadata.ParseDefinitions(json);
-        var def = AchievementMetadata.FindDefinition(defs, "ACH01");
+        var def = AchievementMetadata.FindDefinition(defs, "ACH01", out _);
 
         Assert.NotNull(def);
         Assert.Equal("First Blood", AchievementMetadata.GetDisplayText(def!.DisplayName, "english"));
@@ -595,7 +726,9 @@ public class AchievementMetadataTests : IDisposable
     [Fact]
     public void ResolvePreferringSchema_AchievementAbsentFromSchema_FallsBackToInlineText()
     {
-        // The appid-collision case: a schema cached under a colliding id defines other achievements.
+        // The appid-collision case: a schema cached under a colliding id defines other achievements,
+        // whose names share nothing with this one. Bare digits are the exception — see
+        // ResolvePreferringSchema_NumericSchemaUnderCollidingAppId_KeepsInlineText below.
         var states = AchievementMetadata.ParseUnlockStates(UplayJson);
         var definitions = AchievementMetadata.ParseDefinitions(
             """[{"name": "ACH01", "displayName": "A different game's achievement"}]""");
@@ -649,6 +782,146 @@ public class AchievementMetadataTests : IDisposable
         Assert.NotNull(resolved);
         Assert.Equal("Homecoming", resolved.DisplayName);
         Assert.Equal("Schema description.", resolved.Description);
+    }
+
+    // --- ResolvePreferringSchema: what a leading-zero match may supply (issue #7) ---
+
+    /// <summary>The reporter's AC Odyssey entry: a bare numeric key carrying its own english text.</summary>
+    private const string OdysseyUnlockJson = """
+    {
+      "1": {
+        "earned": 1,
+        "earned_time": 1785988975,
+        "displayName": "This is Sparta!",
+        "description": "Complete the Battle of 300."
+      }
+    }
+    """;
+
+    /// <summary>Writes an icon into the metadata dir and returns a schema entry named for it.</summary>
+    private string PaddedSchemaWithIcon(string iconFileName = "001.jpg")
+    {
+        File.WriteAllBytes(Path.Combine(_tempDir, iconFileName), new byte[] { 0xFF, 0xD8 });
+        return $$"""
+        [{"name": "001", "displayName": {"english": "This is Sparta!", "german": "Das ist Sparta!"},
+          "description": {"english": "Complete the Battle of 300."}, "icon": "{{iconFileName}}"}]
+        """;
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_ZeroPaddedSchemaName_SuppliesIcon()
+    {
+        // The reported symptom: the popup already carried the right text and only lacked an icon.
+        var states = AchievementMetadata.ParseUnlockStates(OdysseyUnlockJson);
+        var definitions = AchievementMetadata.ParseDefinitions(PaddedSchemaWithIcon());
+
+        var resolved = AchievementMetadata.ResolvePreferringSchema(
+            states["1"], definitions, _tempDir, "1", "english");
+
+        Assert.NotNull(resolved);
+        Assert.Equal(Path.Combine(_tempDir, "001.jpg"), resolved.IconPath);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_ZeroPaddedSchemaName_KeepsInlineTextOverSchemaText()
+    {
+        // A padding match is an inference about which achievement a number denotes. It may add the
+        // icon, but text the unlock file carried must survive it — a wrong icon beside right text is
+        // visible, where wrong text reads as correct.
+        var states = AchievementMetadata.ParseUnlockStates(
+            """{"1": {"earned": 1, "displayName": "Inline name", "description": "Inline description."}}""");
+        var definitions = AchievementMetadata.ParseDefinitions(PaddedSchemaWithIcon());
+
+        var resolved = AchievementMetadata.ResolvePreferringSchema(
+            states["1"], definitions, _tempDir, "1", "english");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("Inline name", resolved.DisplayName);
+        Assert.Equal("Inline description.", resolved.Description);
+        Assert.NotNull(resolved.IconPath);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_ZeroPaddedSchemaName_FillsBlanksTheUnlockFileLeft()
+    {
+        // The legitimate Ubisoft client writes no inline text at all, so there is nothing to protect
+        // and the schema supplies everything — which is the difference between a notification and none.
+        var states = AchievementMetadata.ParseUnlockStates("""{"1": {"earned": 1, "earned_time": 1}}""");
+        var definitions = AchievementMetadata.ParseDefinitions(PaddedSchemaWithIcon());
+
+        var resolved = AchievementMetadata.ResolvePreferringSchema(
+            states["1"], definitions, _tempDir, "1", "english");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("This is Sparta!", resolved.DisplayName);
+        Assert.Equal("Complete the Battle of 300.", resolved.Description);
+        Assert.NotNull(resolved.IconPath);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_ZeroPaddedSchemaName_DescriptionOnlyInline_TakesSchemaDisplayName()
+    {
+        // Per field, not per source: the unlock file described the achievement but did not name it.
+        var states = AchievementMetadata.ParseUnlockStates(
+            """{"1": {"earned": 1, "description": "Inline description."}}""");
+        var definitions = AchievementMetadata.ParseDefinitions(PaddedSchemaWithIcon());
+
+        var resolved = AchievementMetadata.ResolvePreferringSchema(
+            states["1"], definitions, _tempDir, "1", "english");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("This is Sparta!", resolved.DisplayName);
+        Assert.Equal("Inline description.", resolved.Description);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_ZeroPaddedSchemaNameWithEmptyDescription_KeepsInlineDescription()
+    {
+        // Steam redacts hidden achievements' descriptions, and 31 of AC Odyssey's 93 are hidden, so
+        // this is the common shape rather than an edge case.
+        var states = AchievementMetadata.ParseUnlockStates(OdysseyUnlockJson);
+        var definitions = AchievementMetadata.ParseDefinitions(
+            """[{"name": "001", "displayName": "Schema Name", "description": ""}]""");
+
+        var resolved = AchievementMetadata.ResolvePreferringSchema(
+            states["1"], definitions, _tempDir, "1", "english");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("Complete the Battle of 300.", resolved.Description);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_NumericSchemaUnderCollidingAppId_KeepsInlineText()
+    {
+        // Bare digits are the one name shape the appid-collision guard cannot help with: a real
+        // installed game names its achievements "01".."54", so a colliding save folder can reach it.
+        // The relaxed precedence is what keeps that costing an icon rather than the text as well.
+        var states = AchievementMetadata.ParseUnlockStates(OdysseyUnlockJson);
+        var definitions = AchievementMetadata.ParseDefinitions(
+            """[{"name": "01", "displayName": "A different game's achievement", "description": "Its description."}]""");
+
+        var resolved = AchievementMetadata.ResolvePreferringSchema(
+            states["1"], definitions, _tempDir, "1", "english");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("This is Sparta!", resolved.DisplayName);
+        Assert.Equal("Complete the Battle of 300.", resolved.Description);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_ExactMatch_StillLeadsOverInlineText()
+    {
+        // The exact path is unchanged: it is the schema speaking about this achievement by name, and
+        // it is what supplies localised text a self-describing writer cannot.
+        var states = AchievementMetadata.ParseUnlockStates(
+            """{"001": {"earned": 1, "displayName": "Inline name", "description": "Inline description."}}""");
+        var definitions = AchievementMetadata.ParseDefinitions(PaddedSchemaWithIcon());
+
+        var resolved = AchievementMetadata.ResolvePreferringSchema(
+            states["001"], definitions, _tempDir, "001", "german");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("Das ist Sparta!", resolved.DisplayName);
     }
 
     // --- Resolve: how hard the schema is looked for ---

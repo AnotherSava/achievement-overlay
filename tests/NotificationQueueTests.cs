@@ -82,6 +82,31 @@ public class NotificationQueueTests : IDisposable
     }
 
     [Fact]
+    public void ResolveMetadata_ZeroPaddedSchemaName_ResolvesIcon()
+    {
+        // Issue #7 through the popup's own route: the emulator writes "1" where the Steam schema
+        // says "001". The Recent panel reaches the matcher separately, so both need a case.
+        SetupTestGame("812140", "PaddedGame", new[]
+        {
+            new { name = "001", displayName = "This is Sparta!", description = "Complete the Battle of 300.", icon = "001.jpg" }
+        });
+        File.WriteAllBytes(Path.Combine(_gamesDir, "PaddedGame", "steam_settings", "001.jpg"), new byte[] { 0xFF, 0xD8 });
+        _gameCache.ScanAll();
+        var queue = new NotificationQueue(_gameCache, _config);
+
+        var item = queue.ResolveMetadata(new NewAchievementEventArgs
+        {
+            AppId = "812140",
+            AchievementName = "1",
+            EarnedTime = 1700000000
+        });
+
+        Assert.NotNull(item);
+        Assert.Equal("This is Sparta!", item.AchievementName);
+        Assert.NotNull(item.IconPath);
+    }
+
+    [Fact]
     public void ResolveMetadata_UnknownGame_ReturnsNull()
     {
         var queue = new NotificationQueue(_gameCache, _config);

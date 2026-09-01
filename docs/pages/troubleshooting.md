@@ -44,6 +44,8 @@ The icon path in the game's `steam_settings/achievements.json` does not match an
 
 For a game tracked through a non-GBE emulator, the default icon also means no schema was found for it — see [Getting icons and the game name back](usage/other-emulators#getting-icons-and-the-game-name-back).
 
+A third cause is that the emulator and the schema spell the same achievement differently, so the schema entry is never found. Compare a name in `%appdata%\GSE Saves\<app_id>\achievements.json` with the `name` fields in the game's `steam_settings/achievements.json`. Differences in capitalisation and in leading zeros are bridged automatically; anything else — a prefix the emulator adds or drops, a different separator — is not, and there is nothing to configure for it. If the log says an achievement `matches both '...' and '...' in the schema once leading zeros are ignored`, the schema lists that number under two spellings and the overlay declines to guess between them; delete the one that does not belong.
+
 ## Wrong language
 
 The log shows `[WARN] Language '...' not available, falling back to english`. Pick a different **Achievement text** language in [Settings](usage/settings) — the list offers the ones your installed games actually carry, though a single game can still be missing any of them.

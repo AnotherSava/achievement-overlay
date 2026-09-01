@@ -44,14 +44,15 @@ public class AchievementHistoryTests : IDisposable
         return new AppConfig(configPath);
     }
 
-    private void CreateGame(string appId, string gameName)
+    private void CreateGame(string appId, string gameName, string? schemaJson = null)
     {
         var gameDir = Path.Combine(_gamesDir, gameName);
         Directory.CreateDirectory(gameDir);
         File.WriteAllText(Path.Combine(gameDir, "steam_appid.txt"), appId);
         var ssDir = Path.Combine(gameDir, "steam_settings");
         Directory.CreateDirectory(ssDir);
-        File.WriteAllText(Path.Combine(ssDir, "achievements.json"), """[{"name": "ACH01", "displayName": "Test Achievement", "description": "Test Desc"}]""");
+        File.WriteAllText(Path.Combine(ssDir, "achievements.json"),
+            schemaJson ?? """[{"name": "ACH01", "displayName": "Test Achievement", "description": "Test Desc"}]""");
     }
 
     private void CreateSaveFile(string appId, string json)
@@ -93,6 +94,26 @@ public class AchievementHistoryTests : IDisposable
         Assert.True(recent.Count >= 2);
         // Most recent first (synthetic will have a recent timestamp)
         Assert.Equal("Achievement Connoisseur", recent[0].AchievementName);
+    }
+
+    [Fact]
+    public void GetRecent_ZeroPaddedSchemaName_ResolvesFromSchema()
+    {
+        // The Recent panel calls ResolvePreferringSchema directly rather than through Resolve, so the
+        // leading-zero fallback has to be visible on this route too — otherwise the panel and the
+        // popup could disagree about the same unlock.
+        CreateGame("812140", "PaddedGame",
+            """[{"name": "001", "displayName": "This is Sparta!", "description": "Complete the Battle of 300."}]""");
+        CreateSaveFile("812140", """{"1": {"earned": true, "earned_time": 1000}}""");
+
+        var config = CreateConfig();
+        var cache = new GameCache(new[] { _gamesDir });
+        cache.ScanAll();
+        var history = new AchievementHistory(config, cache);
+
+        var recent = history.GetRecent(5);
+
+        Assert.Contains(recent, e => e.AchievementName == "This is Sparta!");
     }
 
     [Fact]

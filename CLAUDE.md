@@ -28,7 +28,25 @@ gives such a game icons and localised text: the reporter's Uplay emulator is con
 game's real Steam achievement names, so a game that also has a `steam_settings/` config under
 `gamesPaths` is just a Steam game with an unusual writer. Matching on the achievement name is the
 appid-collision guard that inline-first used to be — a schema cached under a colliding Ubisoft id
-defines other achievements, so it doesn't match and the inline text stands. Both the popup path
+defines other achievements, so it doesn't match and the inline text stands.
+
+One exception lives in `FindDefinition`: names written entirely in ASCII digits also match once
+leading zeros are stripped, because an emulator handed a bare integer id cannot reproduce a
+zero-padded Steam name — AC Odyssey's schema says `001` where the emulator writes `1`
+([issue #7](https://github.com/AnotherSava/achievement-overlay/issues/7)). Padding is the only part
+of such a name its writer cannot fix at its own end (a key-prefix setting concatenates a literal
+string ahead of the raw id and cannot pad), which is why padding gets a fallback and a differing
+prefix does not. The exact match still wins wherever it sits in the list, so nothing that resolved
+before resolves differently. A padding match is an *inference* about which achievement a number
+denotes rather than the schema naming it, so it supplies the icon and fills fields the unlock file
+left blank but never overwrites text that file carries — a wrong icon beside right text is visible,
+where wrong text reads as correct. That precedence is the whole mitigation, because for a
+digits-only schema the collision guard is worth nothing either way: real Steam games ship
+achievements named `1`..`29` and `01`..`54`, so a colliding save folder can already reach them.
+Two differently spelled entries folding onto one form match nothing, rather than being decided by
+the order their author typed them in.
+
+Both the popup path
 (`Resolve`) and the Recent panel call it, so the two can't disagree about an achievement's text;
 `Resolve` adds the cache lookup: a full rescan on a miss when there is no inline text (no schema means
 no notification at all), and `GameCache.LookupScanningOnce` — one rescan per appid — when there is,

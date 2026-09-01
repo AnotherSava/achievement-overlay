@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -275,8 +276,9 @@ public static class AchievementMetadata
                     return prop.Value.GetString() ?? "";
             }
 
-            // Fallback to english
-            Logger.Warn($"Language '{language}' not available, falling back to english");
+            // Fallback to english. Warned once per language: the message says nothing about which
+            // achievement it came from, and a schema that lacks the language lacks it for every entry.
+            WarnOnce($"Language '{language}' not available, falling back to english");
             if (language != "english"
                 && element.Value.TryGetProperty("english", out var engValue)
                 && engValue.ValueKind == JsonValueKind.String)
@@ -294,13 +296,93 @@ public static class AchievementMetadata
     }
 
     /// <summary>
-    /// Finds a definition by achievement internal name (case-insensitive).
+    /// Finds a definition by achievement internal name (case-insensitive), falling back to a
+    /// leading-zero-insensitive comparison when both names are written entirely in digits.
+    /// An emulator handed a bare integer id cannot reproduce a zero-padded Steam name — AC Odyssey's
+    /// schema calls an achievement "001" where the Uplay R2 emulator writes "1" — so without the
+    /// fallback that achievement gets no icon (issue #7). Padding is the one part of such a name its
+    /// writer cannot fix at its own end: a key-prefix setting concatenates a literal string ahead of
+    /// the raw id and cannot pad. That is why padding gets a fallback and a differing prefix does not.
+    /// The exact match wins wherever it sits in the list, so nothing that resolves today resolves
+    /// differently, and <paramref name="matchedExactly"/> reports which pass answered — a padding
+    /// match is an inference, and the caller must not let it overwrite text the unlock file carries.
+    /// Two differently spelled entries folding onto one form match nothing rather than being decided
+    /// by the order their author happened to type them in.
     /// </summary>
     public static AchievementDefinition? FindDefinition(
-        IEnumerable<AchievementDefinition> definitions, string achievementName)
+        IEnumerable<AchievementDefinition> definitions, string achievementName, out bool matchedExactly)
     {
-        return definitions.FirstOrDefault(
-            d => string.Equals(d.Name, achievementName, StringComparison.OrdinalIgnoreCase));
+        var unpadded = UnpaddedNumericName(achievementName);
+        AchievementDefinition? candidate = null;
+        string? collision = null;
+
+        // One pass over the parameter: it is an IEnumerable, and a sequence that can only be walked
+        // once would silently find nothing on a second.
+        foreach (var definition in definitions)
+        {
+            if (string.Equals(definition.Name, achievementName, StringComparison.OrdinalIgnoreCase))
+            {
+                matchedExactly = true;
+                return definition;
+            }
+
+            if (unpadded == null || UnpaddedNumericName(definition.Name) != unpadded)
+                continue;
+
+            if (candidate == null)
+                candidate = definition;
+            // Two entries spelled the same are the same achievement, not a collision.
+            else if (!string.Equals(candidate.Name, definition.Name, StringComparison.OrdinalIgnoreCase))
+                collision ??= $"'{candidate.Name}' and '{definition.Name}'";
+        }
+
+        matchedExactly = false;
+
+        if (collision != null)
+        {
+            // Refusing costs only the icon — the caller still has the unlock file's own text — where
+            // guessing attaches another achievement's icon with nothing to say which one it picked.
+            WarnOnce($"Achievement '{achievementName}' matches both {collision} in the schema once leading zeros are ignored; resolving it without the schema");
+            return null;
+        }
+
+        return candidate;
+    }
+
+    /// <summary>
+    /// The name with its leading zeros removed, or null when it is not written entirely in ASCII
+    /// digits. Digits-only is deliberately the whole rule: any wider notion of the same name — a
+    /// shared prefix, a trailing run of digits — would spend the appid-collision guard described on
+    /// <see cref="ResolvePreferringSchema"/> to buy nothing this issue asked for.
+    /// Compared as text rather than parsed: long.TryParse would also accept "+1" and " 1 ", give up
+    /// past 19 digits, and through double equate two ids that differ in their last place.
+    /// Never strips to nothing, so "0", "00" and "000" fold together rather than onto an empty name;
+    /// null is tolerated because a schema carrying "name": null deserialises to it, and an exception
+    /// here would leave the tray through a Recent-panel open that has no try/catch.
+    /// </summary>
+    private static string? UnpaddedNumericName(string? name)
+    {
+        if (string.IsNullOrEmpty(name) || !name.All(char.IsAsciiDigit))
+            return null;
+
+        var unpadded = name.TrimStart('0');
+        return unpadded.Length > 0 ? unpadded : "0";
+    }
+
+    /// <summary>Messages already logged by <see cref="WarnOnce"/>, so each is written once.</summary>
+    private static readonly ConcurrentDictionary<string, byte> WarnedOnce = new();
+
+    /// <summary>
+    /// Logs a warning the first time this exact message is seen. Both callers sit on a path that runs
+    /// per achievement per render — the Recent panel re-resolves every earned achievement each time it
+    /// opens — and Logger auto-flushes, so an unconditional Warn is one synchronous disk write per
+    /// achievement per keypress. Concurrent because unlocks resolve on the watcher's fire-and-forget
+    /// tasks while the panel resolves on the UI thread.
+    /// </summary>
+    private static void WarnOnce(string message)
+    {
+        if (WarnedOnce.TryAdd(message, 0))
+            Logger.Warn(message);
     }
 
     /// <summary>
@@ -381,30 +463,45 @@ public static class AchievementMetadata
     /// The schema leads because it is the only source with icons and localised text — a self-describing
     /// emulator ships neither. Matching on the achievement name is itself the appid-collision guard
     /// (Ubisoft and Steam id ranges overlap): a schema cached under a colliding id defines other
-    /// achievements, so it does not match and the inline text stands.
+    /// achievements, so it does not match and the inline text stands. That guard is only as strong as
+    /// the names are distinctive, and for a schema named in bare digits it is no guard at all, with or
+    /// without the leading-zero fallback in <see cref="FindDefinition"/> — which is why that fallback
+    /// stops at digits and goes no further.
     /// Field by field rather than source by source, because a schema can name an achievement and still
     /// leave a field blank — Steam redacts hidden achievements' descriptions, and the Add game wizard
     /// writes them empty when no Firecrawl key fills them in. Choosing wholesale would then discard a
     /// description the unlock file did carry.
+    /// A definition found by the leading-zero fallback rather than by name leads for nothing: it
+    /// supplies the icon and fills fields the unlock file left blank, but never replaces text the
+    /// unlock entry carries. The fallback is an inference about which achievement a number denotes,
+    /// and a wrong one attaching a wrong icon beside right text is visible where wrong text reads as
+    /// correct. A file with no inline text has nothing to protect, so it still takes the schema's.
     /// </summary>
     public static ResolvedAchievement? ResolvePreferringSchema(
         AchievementUnlockState? state, IEnumerable<AchievementDefinition>? definitions,
         string metadataDir, string achievementName, string language)
     {
-        var definition = definitions != null ? FindDefinition(definitions, achievementName) : null;
+        var matchedExactly = false;
+        var definition = definitions != null ? FindDefinition(definitions, achievementName, out matchedExactly) : null;
         var inline = HasInlineText(state) ? state : null;
         if (definition == null && inline == null)
             return null;
 
+        // Order the two sources once rather than per field: reversing one field and not the other
+        // would be a silent bug, and this way they cannot disagree about which source leads.
+        (JsonElement? Name, JsonElement? Description) schema = (definition?.DisplayName, definition?.Description);
+        (JsonElement? Name, JsonElement? Description) inlineText = (inline?.DisplayName, inline?.Description);
+        var (leading, filling) = matchedExactly ? (schema, inlineText) : (inlineText, schema);
+
         return new ResolvedAchievement
         {
             DisplayName = FirstNonEmpty(
-                GetDisplayText(definition?.DisplayName, language),
-                GetDisplayText(inline?.DisplayName, language),
+                GetDisplayText(leading.Name, language),
+                GetDisplayText(filling.Name, language),
                 achievementName),
             Description = FirstNonEmpty(
-                GetDisplayText(definition?.Description, language),
-                GetDisplayText(inline?.Description, language)),
+                GetDisplayText(leading.Description, language),
+                GetDisplayText(filling.Description, language)),
             // Only the schema can supply an icon: writers that inline their text ship none, and the
             // GSE Saves folder is never probed for images.
             IconPath = definition != null ? ResolveIconPath(definition, metadataDir) : null

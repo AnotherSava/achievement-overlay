@@ -192,7 +192,7 @@ JSON array:
 
 | Field | Meaning |
 |---|---|
-| `name` | The internal Steam API name. Required — an entry without it is discarded, and it is the key the unlock file matches on |
+| `name` | The internal Steam API name. Required — GBE discards an entry without it, and it is the key the unlock file matches on. The overlay compares it case-insensitively, and for names written entirely in digits also ignores leading zeros, so a `001` here answers a `1` in the unlock file |
 | `displayName`, `description` | Either a string or a per-language object, e.g. `{"english": "…", "german": "…"}` |
 | `hidden` | `"0"` for a normal achievement, `"1"` for a secret one |
 | `icon`, `icongray` | Unlocked and locked icon paths, relative to `steam_settings/` |
