@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -10,6 +11,7 @@ using Microsoft.Win32;
 using WinFormsKeys = System.Windows.Forms.Keys;
 using Button = System.Windows.Controls.Button;
 using Orientation = System.Windows.Controls.Orientation;
+using RadioButton = System.Windows.Controls.RadioButton;
 using MessageBox = System.Windows.MessageBox;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 
@@ -53,11 +55,41 @@ public partial class SettingsWindow : Window
     /// </summary>
     private const double MaxScreenPercent = 30;
 
+    /// <summary>
+    /// Colours offered as a single click. The first restores the shipped look, which is why it is
+    /// labelled Default and why there is no separate Reset button — the way back is a visible control
+    /// rather than one whose meaning has to be inferred. The last is light on purpose: the text
+    /// colours are derived from the fill, so a pale popup is a real choice rather than a broken one.
+    /// </summary>
+    private static readonly (string Name, Color Colour)[] BackgroundPresets =
+    {
+        ("Default", Color.FromRgb(0x1A, 0x1A, 0x2E)),
+        ("Charcoal", Color.FromRgb(0x1C, 0x1C, 0x1C)),
+        ("Slate", Color.FromRgb(0x1E, 0x29, 0x3B)),
+        ("Plum", Color.FromRgb(0x2A, 0x1B, 0x2E)),
+        ("Paper", Color.FromRgb(0xF5, 0xF5, 0xF0))
+    };
+
     private readonly SettingsData _current;
+
+    /// <summary>
+    /// Pairs each cell of the position grid to the value it stands for, so loading and collecting read
+    /// the same table and cannot disagree about which cell means which corner.
+    /// </summary>
+    private readonly (RadioButton Cell, NotificationAnchor Anchor)[] _positionCells;
+
+    /// <summary>The whole colour choice, colour and opacity together, as one value the way config holds it.</summary>
+    private PopupBackground _background;
+    private readonly List<Button> _presetSwatches = new();
+    private Button _customSwatch = null!;
+    private Color? _customColour;
     private readonly UnlockSoundPlayer? _soundPlayer;
     /// <summary>Previews still on screen, newest last — so repeated Show me clicks stack rather than overlap.</summary>
     private readonly List<NotificationWindow> _previews = new();
-    private double _previewAnchorTop;
+    /// <summary>Near edge of the first preview's slot — where a real unlock rests; the stack grows away from it.</summary>
+    private double _previewEdge;
+    /// <summary>The anchor the previews on screen were placed against, which a new choice invalidates.</summary>
+    private NotificationAnchor _previewAnchor;
     private readonly List<string> _gameFolders;
     private readonly List<string> _savesFolders;
     private LowLevelKeyboardHook? _shortcutHook;
@@ -75,6 +107,16 @@ public partial class SettingsWindow : Window
     {
         InitializeComponent();
         _soundPlayer = soundPlayer;
+        _positionCells = new[]
+        {
+            (PosTopLeft, NotificationAnchor.TopLeft),
+            (PosTopCenter, NotificationAnchor.TopCenter),
+            (PosTopRight, NotificationAnchor.TopRight),
+            (PosBottomLeft, NotificationAnchor.BottomLeft),
+            (PosBottomCenter, NotificationAnchor.BottomCenter),
+            (PosBottomRight, NotificationAnchor.BottomRight)
+        };
+        BuildBackgroundSwatches();
 
         // Snapshot: AppConfig replaces its settings object wholesale on every write, so this keeps
         // showing what the window was opened against.
@@ -89,6 +131,7 @@ public partial class SettingsWindow : Window
         _loaded = true;
         UpdateScaleState();
         UpdateSoundState();
+        UpdateBackgroundState();
         UpdateFooter();
 
         // The percent bounds and the footer's width both depend on the display, and in the
@@ -192,6 +235,17 @@ public partial class SettingsWindow : Window
             FontBox.Items.Add(font);
         FontBox.Text = configuredFont;
 
+        foreach (var (cell, anchor) in _positionCells)
+            cell.IsChecked = anchor == _current.NotificationPosition;
+
+        _background = _current.NotificationBackground;
+        // The slider's unit is the alpha byte, not a percentage. 93 of the 154 alphas in range do not
+        // survive a whole-percent round trip — the shipped 0xDD is one of them (221 → 87% → 222) — so a
+        // percent slider would rewrite the user's colour every time settings were opened and saved.
+        OpacitySlider.Minimum = PopupBackground.MinAlpha;
+        OpacitySlider.Maximum = byte.MaxValue;
+        OpacitySlider.Value = _background.A;
+
         var scale = _current.Scale;
         ScaleUnitBox.SelectedIndex = scale.Unit == ScaleUnit.ScreenPercent ? 0 : 1;
         ApplyScaleSliderRange(scale.Unit);
@@ -220,6 +274,8 @@ public partial class SettingsWindow : Window
         Language = LanguageBox.Text.Trim(),
         Font = FontBox.Text.Trim(),
         Scale = CollectScale(),
+        NotificationPosition = CollectPosition(),
+        NotificationBackground = _background,
         SoundEnabled = SoundToggle.IsChecked == true,
         // Selecting the built-in sound clears the path rather than remembering it, so config says
         // plainly which of the two is in use.
@@ -256,6 +312,101 @@ public partial class SettingsWindow : Window
     }
 
     // --- Notifications page ---
+
+    /// <summary>
+    /// The checked cell. Falls back to what the window opened with rather than to the enum's default,
+    /// so a grid that somehow has nothing checked reports no change instead of silently moving the
+    /// popup to bottom-right on save.
+    /// </summary>
+    private NotificationAnchor CollectPosition()
+    {
+        foreach (var (cell, anchor) in _positionCells)
+        {
+            if (cell.IsChecked == true)
+                return anchor;
+        }
+
+        return _current.NotificationPosition;
+    }
+
+    // --- Background colour ---
+
+    /// <summary>
+    /// Draws the preset swatches and the custom slot. Generated rather than written out in the XAML so
+    /// the colours live in one table, next to the code that matches the current value against them.
+    /// </summary>
+    private void BuildBackgroundSwatches()
+    {
+        foreach (var (name, colour) in BackgroundPresets)
+        {
+            var swatch = NewSwatch(name);
+            swatch.Background = new SolidColorBrush(colour);
+            swatch.Click += (_, _) => ChooseBackgroundColour(colour);
+            _presetSwatches.Add(swatch);
+        }
+
+        _customSwatch = NewSwatch("Custom colour");
+        _customSwatch.Click += OnPickCustomBackground;
+    }
+
+    private Button NewSwatch(string name)
+    {
+        var swatch = new Button { Style = (Style)Resources["Swatch"], ToolTip = name };
+        AutomationProperties.SetName(swatch, name);
+        BackgroundSwatches.Children.Add(swatch);
+        return swatch;
+    }
+
+    private void OnPickCustomBackground(object sender, RoutedEventArgs e)
+    {
+        var picked = DialogControls.PickColor(_background.ToColor());
+        if (picked == null)
+            return; // cancelled: the current choice stands
+
+        ChooseBackgroundColour(picked.Value);
+    }
+
+    private void ChooseBackgroundColour(Color colour)
+    {
+        _background = _background.WithColour(colour);
+        UpdateBackgroundState();
+    }
+
+    private void OnOpacityChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!_loaded)
+            return;
+
+        _background = _background.WithAlpha((byte)OpacitySlider.Value);
+        UpdateBackgroundState();
+    }
+
+    /// <summary>
+    /// Rings whichever swatch the current colour is, and keeps the custom slot showing it. Everything
+    /// here is derived from <see cref="_background"/>, so the display cannot disagree with the value.
+    /// </summary>
+    private void UpdateBackgroundState()
+    {
+        if (!_loaded)
+            return;
+
+        var matched = false;
+        for (var i = 0; i < BackgroundPresets.Length; i++)
+        {
+            var isCurrent = _background.IsColour(BackgroundPresets[i].Colour);
+            _presetSwatches[i].Tag = isCurrent ? "selected" : null;
+            matched |= isCurrent;
+        }
+
+        if (!matched)
+            _customColour = Color.FromRgb(_background.R, _background.G, _background.B);
+
+        _customSwatch.Background = _customColour is { } colour ? new SolidColorBrush(colour) : null;
+        _customSwatch.Content = _customColour == null ? "+" : null;
+        _customSwatch.Tag = matched ? null : "selected";
+
+        OpacityValueText.Text = $"{Math.Round(OpacitySlider.Value / 2.55)}%";
+    }
 
     private NotificationScale CollectScale() =>
         ScaleUnitBox.SelectedIndex == 0
@@ -386,10 +537,11 @@ public partial class SettingsWindow : Window
         var edited = Collect();
         var width = NotificationWindow.ComputeWidth(edited.Scale, AppUtilities.GetForegroundLogicalWidth());
 
-        // Popups of different widths can't stack into a tidy column — the right edge would stay put
-        // but the left would step in and out — so a size change clears what's on screen first.
-        // Same width stacks instead, exactly as several unlocks arriving together do.
-        if (_previews.Count > 0 && Math.Abs(_previews[0].RenderedWidth - width) > 0.5)
+        // Popups of different widths can't stack into a tidy column — the aligned edge would stay put
+        // but the other would step in and out — so a size change clears what's on screen first, and so
+        // does a position change, which would otherwise leave a stack orphaned in the old corner.
+        // Same width and place stacks instead, exactly as several unlocks arriving together do.
+        if (_previews.Count > 0 && (Math.Abs(_previews[0].RenderedWidth - width) > 0.5 || edited.NotificationPosition != _previewAnchor))
             DismissPreviews();
 
         // Same order as a real unlock: sound first, then the popup.
@@ -398,11 +550,11 @@ public partial class SettingsWindow : Window
         var window = new NotificationWindow(NotificationAppearance.From(edited));
         window.Closed += (_, _) =>
         {
-            // Popups expire oldest-first, so it is the bottom of the stack that empties. Without
-            // re-anchoring, the survivors would hang detached from the corner for the rest of their
+            // Popups expire oldest-first, so it is the slot nearest the anchor that empties. Without
+            // re-seating, the survivors would hang detached from the corner for the rest of their
             // duration — every toast stack closes that gap instead.
             _previews.Remove(window);
-            RestackPreviews();
+            LayoutPreviews(null);
         };
         window.ShowNotification(
             "Connoisseur",
@@ -410,25 +562,40 @@ public partial class SettingsWindow : Window
             EmbeddedAssets.GetConnoisseurIconPath(),
             AppUtilities.GetForegroundWindowRect());
 
-        // The first sits where a real unlock would; each further one goes above the last and nothing
-        // already on screen moves — the recent panel's cascade. ShowNotification has just placed this
-        // one at the bottom, so its height is known and it can be lifted into the next free slot.
+        // ShowNotification has just placed this one where a real unlock goes, so when it is the first
+        // it defines the edge the whole stack is built on.
         if (_previews.Count == 0)
-            _previewAnchorTop = window.Top; // where a real unlock sits; the stack grows up from here
-        else
-            window.Top = _previews[^1].Top - NotificationWindow.SlotHeight(window.RenderedHeight);
+        {
+            _previewAnchor = edited.NotificationPosition;
+            _previewEdge = NotificationPlacement.EdgeOf(_previewAnchor, window.Top, window.RenderedHeight);
+        }
 
-        _previews.Add(window); // newest last, and therefore highest
+        _previews.Add(window); // newest last, and therefore furthest from the anchor
+        LayoutPreviews(window);
     }
 
-    /// <summary>Re-seats the stack on its anchor, oldest at the bottom, after one of them closes.</summary>
-    private void RestackPreviews()
+    /// <summary>
+    /// Seats the whole stack on its edge, oldest nearest the anchor. One walk for both jobs — adding a
+    /// popup and closing the gap a departed one left — because each slot's position depends on the
+    /// height of the popup <em>in</em> it, and two separate formulations disagreed about which
+    /// neighbour's height that was.
+    /// </summary>
+    /// <param name="newcomer">
+    /// The popup being added, if any. It jumps to its slot; everyone else slides, and only if they
+    /// actually move — sliding a window to where it already is plays a 220 ms animation of nothing.
+    /// </param>
+    private void LayoutPreviews(NotificationWindow? newcomer)
     {
-        var top = _previewAnchorTop;
+        var edge = _previewEdge;
         foreach (var preview in _previews)
         {
-            preview.SlideTo(top);
-            top -= NotificationWindow.SlotHeight(preview.RenderedHeight);
+            var top = NotificationPlacement.TopFor(_previewAnchor, edge, preview.RenderedHeight);
+            if (ReferenceEquals(preview, newcomer))
+                preview.Top = top;
+            else if (Math.Abs(preview.Top - top) > 0.5)
+                preview.SlideTo(top);
+
+            edge = NotificationPlacement.Advance(_previewAnchor, edge, preview.RenderedHeight);
         }
     }
 

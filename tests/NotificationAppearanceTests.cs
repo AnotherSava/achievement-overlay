@@ -36,6 +36,33 @@ public class NotificationAppearanceTests
     }
 
     [Fact]
+    public void Resolve_AnchorAlwaysComesFromTheApp()
+    {
+        // A position is not additive the way a sound or a font is: a game's ini must not move a popup
+        // the user has just placed deliberately, and the recent panel — app-owned by construction —
+        // would otherwise review an unlock in a different corner from the one it appeared in.
+        var app = App();
+        app.NotificationPosition = NotificationAnchor.TopCenter;
+
+        Assert.Equal(NotificationAnchor.TopCenter, NotificationAppearance.Resolve(app, null).Anchor);
+        Assert.Equal(NotificationAnchor.TopCenter,
+            NotificationAppearance.Resolve(app, Game(duration: 12, sound: @"C:\s.wav", font: @"C:\f.ttf")).Anchor);
+    }
+
+    [Fact]
+    public void Resolve_BackgroundAlwaysComesFromTheApp()
+    {
+        // The popup's look is the app's identity over a game, not something a game's ini restyles —
+        // and the derived text colours would have to be re-derived per game to stay readable.
+        var app = App();
+        app.NotificationBackground = PopupBackground.Parse("#FFF5F5F0");
+
+        Assert.Equal(app.NotificationBackground, NotificationAppearance.Resolve(app, null).Background);
+        Assert.Equal(app.NotificationBackground,
+            NotificationAppearance.Resolve(app, Game(duration: 12, font: @"C:\f.ttf")).Background);
+    }
+
+    [Fact]
     public void Resolve_PartialGameSettings_LeavesTheOtherFieldsAtAppValues()
     {
         var appearance = NotificationAppearance.Resolve(App(), Game(font: @"C:\Games\Example\steam_settings\fonts\poppins.ttf"));

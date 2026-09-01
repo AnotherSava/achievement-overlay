@@ -12,6 +12,29 @@ namespace AchievementOverlay;
 internal static class DialogControls
 {
     /// <summary>
+    /// Opens the system colour picker, seeded with the current colour, and returns the chosen one or
+    /// null if the user cancelled. The System.Drawing conversion happens here so it happens once.
+    /// </summary>
+    /// <remarks>
+    /// WPF ships no colour picker, so this is WinForms' dialog — which cannot carry alpha, since its
+    /// result is a 24-bit COLORREF. That is why opacity is a separate control and the two are
+    /// recombined into one value, rather than the picker owning the whole colour.
+    /// </remarks>
+    public static System.Windows.Media.Color? PickColor(System.Windows.Media.Color current)
+    {
+        using var dialog = new ColorDialog
+        {
+            Color = Color.FromArgb(current.R, current.G, current.B),
+            FullOpen = true,
+            AnyColor = true
+        };
+
+        return dialog.ShowDialog() == DialogResult.OK
+            ? System.Windows.Media.Color.FromRgb(dialog.Color.R, dialog.Color.G, dialog.Color.B)
+            : null;
+    }
+
+    /// <summary>
     /// A frameless square button carrying the OS's own folder glyph. Its height is left to the host
     /// form's OnLoad, which matches it to the text box it sits next to.
     /// </summary>

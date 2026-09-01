@@ -41,6 +41,30 @@ public class SettingsDiffTests
     }
 
     [Fact]
+    public void Compute_NotificationPositionChanged_IsReported()
+    {
+        // Without this line the user picks a corner, clicks Save, and nothing is written and nothing
+        // is reported — the failure a new setting invites most.
+        var edited = Sample();
+        edited.NotificationPosition = NotificationAnchor.TopRight;
+
+        var changed = SettingsDiff.Compute(Sample(), edited);
+
+        Assert.Equal(NotificationAnchor.TopRight, changed[nameof(SettingsData.NotificationPosition)]);
+    }
+
+    [Fact]
+    public void Compute_NotificationBackgroundChanged_IsReported()
+    {
+        var edited = Sample();
+        edited.NotificationBackground = PopupBackground.Parse("#FF102030");
+
+        var changed = SettingsDiff.Compute(Sample(), edited);
+
+        Assert.Equal(PopupBackground.Parse("#FF102030"), changed[nameof(SettingsData.NotificationBackground)]);
+    }
+
+    [Fact]
     public void Compute_UseGameOverlaySettingsChanged_IsReported()
     {
         var edited = Sample();

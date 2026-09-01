@@ -39,8 +39,6 @@ public sealed class AppConfig
     public string[] GamesPaths { get { Reload(); return _gamesPaths ??= ParseGamesPaths(_settings.GamesPaths); } }
     public string[] GseSavesPaths { get { Reload(); return _gseSavesPaths ??= ParseGamesPaths(_settings.GseSavesPaths); } }
     public string Language { get { Reload(); return _settings.Language; } }
-    public string Font { get { Reload(); return _settings.Font; } }
-    public NotificationScale Scale { get { Reload(); return _settings.Scale; } }
     public bool SoundEnabled { get { Reload(); return _settings.SoundEnabled; } }
     public string SoundPath { get { Reload(); return _settings.SoundPath; } }
     public int DisplayDuration { get { Reload(); return _settings.DisplayDuration; } }
@@ -364,6 +362,22 @@ public sealed class SettingsData
     /// <summary>Absent reads as the default share of the screen. The converter is on the type.</summary>
     [JsonPropertyName("scale")]
     public NotificationScale Scale { get; set; }
+
+    /// <summary>
+    /// Which corner or edge popups appear at. Absent reads as bottom-right — the enum's member 0 —
+    /// so an existing install keeps the only position the app has ever had. The converter is on the
+    /// type; the name has to camel-case to the JSON key, because that is how
+    /// <see cref="AppConfig.UpdateConfigValues"/> derives it when the settings window saves.
+    /// </summary>
+    [JsonPropertyName("notificationPosition")]
+    public NotificationAnchor NotificationPosition { get; set; }
+
+    /// <summary>
+    /// The colour behind the popup's text, alpha included. Absent, or unreadable, is the shipped
+    /// <c>#DD1A1A2E</c>. The text colours are derived from it rather than configured beside it.
+    /// </summary>
+    [JsonPropertyName("notificationBackground")]
+    public PopupBackground NotificationBackground { get; set; } = PopupBackground.Default;
 
     [JsonPropertyName("soundEnabled")]
     public bool SoundEnabled { get; set; }

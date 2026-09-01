@@ -397,6 +397,92 @@ public class AppConfigTests : IDisposable
     }
 
     [Fact]
+    public void UpdateConfigValues_RoundTripsAPositionSavedFromTheSettingsWindow()
+    {
+        // Same trap as the scale above: the value is boxed into the object dictionary and serialized
+        // on its own, so only a type-level converter applies. Without one a bare enum writes 3.
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+
+        var config = new AppConfig(_settingsPath);
+        config.UpdateConfigValues(new Dictionary<string, object?> { ["NotificationPosition"] = NotificationAnchor.TopRight }, _settingsPath);
+
+        Assert.Equal(NotificationAnchor.TopRight, config.GetCurrent().NotificationPosition);
+        Assert.Contains("\"top_right\"", File.ReadAllText(_settingsPath));
+    }
+
+    [Fact]
+    public void UpdateConfigValues_RoundTripsABackgroundSavedFromTheSettingsWindow()
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+
+        var config = new AppConfig(_settingsPath);
+        config.UpdateConfigValues(new Dictionary<string, object?> { ["NotificationBackground"] = PopupBackground.Parse("#FFF5F5F0") }, _settingsPath);
+
+        Assert.Equal("#FFF5F5F0", config.GetCurrent().NotificationBackground.ToString());
+        Assert.Contains("\"#FFF5F5F0\"", File.ReadAllText(_settingsPath));
+    }
+
+    [Theory]
+    [InlineData("\"nonsense\"")]
+    [InlineData("true")]
+    [InlineData("17")]
+    [InlineData("{}")]
+    public void HandEditedBackgroundJunk_StillStarts(string value)
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson(extra: $"\"notificationBackground\": {value},"));
+
+        Assert.Equal(PopupBackground.Default, new AppConfig(_settingsPath).GetCurrent().NotificationBackground);
+    }
+
+    [Fact]
+    public void MissingBackground_ReadsAsTheShippedFill()
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+
+        Assert.Equal(PopupBackground.Default, new AppConfig(_settingsPath).GetCurrent().NotificationBackground);
+    }
+
+    [Fact]
+    public void MissingPosition_ReadsAsBottomRight()
+    {
+        // Every config that exists today is missing the key, and none of those installs may move.
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+
+        Assert.Equal(NotificationAnchor.BottomRight, new AppConfig(_settingsPath).GetCurrent().NotificationPosition);
+    }
+
+    [Theory]
+    [InlineData("\"sideways\"")]
+    [InlineData("true")]
+    [InlineData("7")]
+    [InlineData("{}")]
+    public void HandEditedPositionJunk_StillStarts(string value)
+    {
+        // The path this guards is TrayApplicationContext's constructor catch, which turns a JsonException
+        // out of the load into the config-error dialog and no app at all.
+        File.WriteAllText(_settingsPath, MinimalConfigJson(extra: $"\"notificationPosition\": {value},"));
+
+        var config = new AppConfig(_settingsPath);
+
+        Assert.Equal(NotificationAnchor.BottomRight, config.GetCurrent().NotificationPosition);
+    }
+
+    private string MinimalConfigJson(string extra = "") =>
+        $$"""
+        {
+          {{extra}}
+          "gseSavesPaths": "{{_gseSavesDir.Replace("\\", "\\\\")}}",
+          "gamesPaths": "C:\\Games",
+          "language": "english",
+          "soundEnabled": true,
+          "soundPath": "",
+          "displayDuration": 7,
+          "recentAchievementsShortcut": "Ctrl+Shift+H",
+          "recentAchievementsCount": 5
+        }
+        """;
+
+    [Fact]
     public void UpdateConfigValues_PreservesAppManagedState()
     {
         // trackingConfigured isn't editable in the settings dialog, so a save must leave it alone.

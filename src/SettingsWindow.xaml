@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         ThemeMode="System"
         Title="Achievement Overlay — Settings"
-        Width="720" Height="1045" MinWidth="620" MinHeight="420"
+        Width="900" Height="1140" MinWidth="720" MinHeight="420"
         WindowStartupLocation="CenterScreen">
     <!-- ThemeMode="System" gives the Fluent control styles and follows the OS light/dark setting,
          so combo boxes, sliders and buttons need no styling of their own. Only the chrome the
@@ -69,6 +69,77 @@
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A colour choice. The ring is always drawn, so a swatch that happens to match the card
+             behind it is still a visible control. -->
+        <Style x:Key="Swatch" TargetType="Button">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Ring" CornerRadius="4" BorderThickness="1"
+                                BorderBrush="{DynamicResource CardBorder}"
+                                Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            </Trigger>
+                            <Trigger Property="Tag" Value="selected">
+                                <Setter TargetName="Ring" Property="BorderThickness" Value="2" />
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- One region of the display. The bar standing for the popup is aligned to the corner or edge
+             the cell means, so the six of them inside one frame are a picture of where a popup lands —
+             six identically centred bars would have left the highlight doing all the work. The cell
+             itself is drawn only on hover and selection: resting boxes made the frame read as six
+             buttons rather than as one screen. -->
+        <Style x:Key="PositionCell" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Cell" CornerRadius="3" Background="Transparent" Padding="4">
+                            <!-- 27 × 8 is the popup's own 322 × 95 proportion, and the small radius
+                                 echoes its CornerRadius="8" — so these read as notifications rather
+                                 than as generic markers. -->
+                            <Rectangle x:Name="Bar" Width="27" Height="8" RadiusX="2" RadiusY="2"
+                                       Fill="{DynamicResource SwitchKnobOff}" Opacity="0.5"
+                                       HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                       VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Cell" Property="Background" Value="{DynamicResource NavHover}" />
+                                <Setter TargetName="Bar" Property="Opacity" Value="1" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Cell" Property="Background" Value="{DynamicResource NavHover}" />
+                            </Trigger>
+                            <!-- Every popup is drawn the same size, so the frame stays an honest picture
+                                 of the display: the chosen one differs by being the accent colour at
+                                 full strength against the others' half-strength grey. No cell fill —
+                                 a filled rectangle behind one bar reads as a floating panel and breaks
+                                 the frame's "this is your display" reading. -->
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bar" Property="Fill" Value="{DynamicResource Accent}" />
+                                <Setter TargetName="Bar" Property="Opacity" Value="1" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -204,7 +275,7 @@
                         <StackPanel x:Name="NotificationsPage" Visibility="Collapsed">
                             <TextBlock Style="{StaticResource PageTitle}" Text="Notifications" />
                             <TextBlock Style="{StaticResource PageIntro}"
-                                       Text="What a popup says, how it's drawn, how long it stays. Show me fires a real one bottom-right of the display. Saving applies everything at once — no restart." />
+                                       Text="What a popup says, how it's drawn, and how long it stays. Show me fires a real one; saving applies everything at once." />
 
                             <TextBlock Style="{StaticResource SectionHeading}" Text="Text &amp; appearance" />
 
@@ -215,7 +286,7 @@
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource CardTitle}" Text="Achievement text" />
                                         <TextBlock Style="{StaticResource CardDescription}"
-                                                   Text="Language for the name and description. Only what your installed games carry is listed; a game missing this one falls back to english." />
+                                                   Text="Lists only the languages your games carry. Anything missing falls back to english." />
                                     </StackPanel>
                                 </DockPanel>
                             </Border>
@@ -227,7 +298,7 @@
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource CardTitle}" Text="Font" />
                                         <TextBlock Style="{StaticResource CardDescription}"
-                                                   Text="Name, description and game line. A shortlist of families that cover the languages above." />
+                                                   Text="A shortlist of families that cover the languages above." />
                                     </StackPanel>
                                 </DockPanel>
                             </Border>
@@ -244,7 +315,7 @@
                                         <StackPanel>
                                             <TextBlock Style="{StaticResource CardTitle}" Text="Popup size" />
                                             <TextBlock Style="{StaticResource CardDescription}"
-                                                       Text="Scales the whole popup — text, icon, padding and wrap width together. Reach for this if notifications read too small. A share of the screen keeps the same apparent size on any monitor; pixels pin it to one width everywhere." />
+                                                       Text="Scales text, icon and padding together — reach for this if notifications read too small. A share of the screen adapts to the monitor; pixels pin one width." />
                                         </StackPanel>
                                     </DockPanel>
                                     <Border BorderBrush="{DynamicResource CardBorder}" BorderThickness="0,1,0,0" Padding="14,10">
@@ -257,6 +328,67 @@
                                         </DockPanel>
                                     </Border>
                                 </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}" Padding="0">
+                                <StackPanel>
+                                    <DockPanel Margin="14,12">
+                                        <StackPanel x:Name="BackgroundSwatches" DockPanel.Dock="Right"
+                                                    Orientation="Horizontal" Margin="18,0,0,0" VerticalAlignment="Center" />
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource CardTitle}" Text="Popup background" />
+                                            <TextBlock Style="{StaticResource CardDescription}"
+                                                       Text="The panel behind the text. Text colours are derived from it, so a light background flips them to dark." />
+                                        </StackPanel>
+                                    </DockPanel>
+                                    <Border BorderBrush="{DynamicResource CardBorder}" BorderThickness="0,1,0,0" Padding="14,10">
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Left" Text="Opacity" VerticalAlignment="Center"
+                                                       FontSize="13" Width="66" />
+                                            <TextBlock x:Name="OpacityValueText" DockPanel.Dock="Right" Width="76"
+                                                       TextAlignment="Right" VerticalAlignment="Center" FontSize="13" Opacity="0.75" />
+                                            <Slider x:Name="OpacitySlider" IsSnapToTickEnabled="True" TickFrequency="1"
+                                                    VerticalAlignment="Center" Margin="0,0,8,0"
+                                                    ValueChanged="OnOpacityChanged" />
+                                        </DockPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}">
+                                <DockPanel>
+                                    <!-- The frame is the display, at roughly a display's proportions. -->
+                                    <Border DockPanel.Dock="Right" Width="156" Height="88" Margin="18,0,0,0"
+                                            VerticalAlignment="Center" CornerRadius="4" Padding="2"
+                                            Background="{DynamicResource WindowBackground}"
+                                            BorderBrush="{DynamicResource CardBorder}" BorderThickness="1">
+                                        <UniformGrid Rows="2" Columns="3">
+                                            <RadioButton x:Name="PosTopLeft" GroupName="Position" Style="{StaticResource PositionCell}"
+                                                         HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
+                                                         ToolTip="Top left" AutomationProperties.Name="Top left" />
+                                            <RadioButton x:Name="PosTopCenter" GroupName="Position" Style="{StaticResource PositionCell}"
+                                                         HorizontalContentAlignment="Center" VerticalContentAlignment="Top"
+                                                         ToolTip="Top centre" AutomationProperties.Name="Top centre" />
+                                            <RadioButton x:Name="PosTopRight" GroupName="Position" Style="{StaticResource PositionCell}"
+                                                         HorizontalContentAlignment="Right" VerticalContentAlignment="Top"
+                                                         ToolTip="Top right" AutomationProperties.Name="Top right" />
+                                            <RadioButton x:Name="PosBottomLeft" GroupName="Position" Style="{StaticResource PositionCell}"
+                                                         HorizontalContentAlignment="Left" VerticalContentAlignment="Bottom"
+                                                         ToolTip="Bottom left" AutomationProperties.Name="Bottom left" />
+                                            <RadioButton x:Name="PosBottomCenter" GroupName="Position" Style="{StaticResource PositionCell}"
+                                                         HorizontalContentAlignment="Center" VerticalContentAlignment="Bottom"
+                                                         ToolTip="Bottom centre" AutomationProperties.Name="Bottom centre" />
+                                            <RadioButton x:Name="PosBottomRight" GroupName="Position" Style="{StaticResource PositionCell}"
+                                                         HorizontalContentAlignment="Right" VerticalContentAlignment="Bottom"
+                                                         ToolTip="Bottom right" AutomationProperties.Name="Bottom right" />
+                                        </UniformGrid>
+                                    </Border>
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource CardTitle}" Text="Popup position" />
+                                        <TextBlock Style="{StaticResource CardDescription}"
+                                                   Text="Where popups appear, and where the recent achievements panel stacks from. Relative to the display, not to the game's own window." />
+                                    </StackPanel>
+                                </DockPanel>
                             </Border>
 
                             <TextBlock Style="{StaticResource SectionHeading}" Text="Timing &amp; sound" Margin="0,22,0,8" />
@@ -314,7 +446,7 @@
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource CardTitle}" Text="Use each game's own overlay settings" />
                                         <TextBlock Style="{StaticResource CardDescription}"
-                                                   Text="Some games arrive with an unlock sound, a font or a display duration already set in their steam_settings folder. When one does, that game uses them; everything above still covers the rest, and Show me still previews this page." />
+                                                   Text="Some games arrive with an unlock sound, font or duration already set in their steam_settings folder. Those are used for that game; everything above still covers the rest." />
                                     </StackPanel>
                                 </DockPanel>
                             </Border>

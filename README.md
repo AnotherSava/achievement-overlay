@@ -14,7 +14,7 @@ Achievement names and descriptions normally come from the game's own `steam_sett
 
 ## Features
 
-- **Steam-style notifications** — achievement icon, name, and description slide in at the bottom-right of the game window
+- **Steam-style notifications** — achievement icon, name, and description slide in at the corner of the display you choose (bottom-right by default)
 - **Non-invasive** — works even with particularly sensitive games like Red Dead Redemption
 - **Recent achievements** — press Ctrl+Shift+H (shortcut is configurable) to review recent achievements. Also the easiest way to test that the overlay is working. Press again or Esc to dismiss
 - **Automatic game detection** — scans configured directories for games with achievement metadata
@@ -23,7 +23,7 @@ Achievement names and descriptions normally come from the game's own `steam_sett
 - **Multi-monitor support** — notifications appear on the monitor with the foreground window, with correct DPI scaling across mixed-DPI setups
 - **Unlock sound** — plays a default or user-defined sound on achievement unlock
 - **Per-game settings** — a game that arrived with its own `steam_settings/` can supply its unlock sound, display duration and font, used for that game only (see [Per-game settings](#per-game-settings))
-- **Adjustable popup** — set how wide the notification is drawn (a share of the screen, or a fixed pixel width) and which font it uses, with a **Show me** preview
+- **Adjustable popup** — set where it appears (any of six corners and edges), how wide it's drawn (a share of the screen, or a fixed pixel width), its background colour and opacity, and its font — with a **Show me** preview. Text colours are worked out from the background you pick, so a light popup flips to dark text rather than becoming unreadable
 - **Configurable** — a [Settings](#settings) window covers every option, and saving applies it immediately
 - **Start with Windows** option
 
@@ -60,7 +60,7 @@ Right-click the tray icon for these options:
 Four pages:
 
 - **General** — start with Windows, and the shortcut and count for the recent achievements panel.
-- **Notifications** — everything about the popup: language, font, size, duration, sound, and whether a game's own settings may override them. **Show me** fires a real notification with the settings as they stand, and the footer states the popup's computed width and duration.
+- **Notifications** — everything about the popup: language, font, size, background colour, position, duration, sound, and whether a game's own settings may override them. **Show me** fires a real notification with the settings as they stand, and the footer states the popup's computed width and duration.
 - **Folders** — game folders and GSE Saves folders, one card each, with a live status line saying what's actually there (how many games were found, or that a drive isn't connected).
 - **Advanced** — the Steam Web API and Firecrawl keys.
 
@@ -69,6 +69,8 @@ A few fields are worth a note:
 - **Achievement text** picks the language achievement names and descriptions appear in. The list holds the languages your installed games actually provide; a game that doesn't have the chosen one falls back to english.
 - **Shortcut** is captured rather than typed — click it and press the combination you want. Backspace clears it, leaving **Show recent achievements** in the tray menu as the way in. While the field has focus, the combination you press is recorded instead of running whatever normally owns it, so you can reassign a shortcut that's already taken — by this app, by another program, or by a desktop shortcut's **Shortcut key**. Nothing is intercepted once you click away from the field.
 - **Popup size** scales the whole popup — text, icon, padding and wrap width grow together — so this is the setting to reach for if notifications read too small. It never draws smaller than the popup's design size, so the text stays legible whatever unit you pick. Pick the unit: **% of screen width** keeps the popup the same apparent size on any monitor (the default 15% is what the overlay has always used), while **Pixels** pins it to one width everywhere. The footer states the width it actually works out to.
+- **Popup position** is a grid standing for your display: pick any of the six corners and edges GBE itself names, and the recent achievements panel stacks from the same place. Positions are relative to the *display* the game is on, not to the game's own window — that has always been true of the bottom-right default, and it's most noticeable if you play windowed and pick a centre position.
+- **Popup background** sets the panel behind the text, with **Opacity** beside it. The text colours are worked out from whatever you pick rather than left fixed, so a light background flips the text to dark and the secondary lines are lifted until they stay legible; the first swatch restores the shipped colour. Backgrounds close to mid-grey are the hard case — nothing gets far past 4.6:1 contrast there — so the smaller lines read lower whatever the app does.
 - **Game folders** and **GSE Saves folders** are edited a folder at a time with **Add folder**, **Change** and **Remove**. A folder you pick is stored with an environment variable where one fits — choosing your AppData GSE Saves folder is saved as `%appdata%\GSE Saves`, not as your user profile's full path — so the config stays portable between machines even after editing it here.
 - **Use each game's own overlay settings** lets a game that arrived with a `steam_settings/` folder of its own supply its unlock sound, its display duration and its font, for that game only. See [Per-game settings](#per-game-settings).
 - **Metadata providers** holds the two keys the [Add game](#adding-a-game) wizard asks for and reuses: the Steam Web API key that fetches achievement schemas and icons, and the optional Firecrawl key that fills in hidden-achievement descriptions.
@@ -79,7 +81,7 @@ Two entries are refused because they would fail silently: a **GSE Saves folders*
 
 ## Configuration
 
-Every setting below has a field in the [Settings](#settings) window, which is the easiest way to change one. The `config.json` file that ships next to the executable can also be edited by hand: `language`, `font`, `scale`, `soundEnabled`, `soundPath`, `displayDuration`, `useGameOverlaySettings`, and `recentAchievementsCount` are picked up automatically, while `gamesPaths`, `gseSavesPaths`, and `recentAchievementsShortcut` are only re-read on the next start. Saving from the window applies all of them at once.
+Every setting below has a field in the [Settings](#settings) window, which is the easiest way to change one. The `config.json` file that ships next to the executable can also be edited by hand: `language`, `font`, `scale`, `notificationPosition`, `notificationBackground`, `soundEnabled`, `soundPath`, `displayDuration`, `useGameOverlaySettings`, and `recentAchievementsCount` are picked up automatically, while `gamesPaths`, `gseSavesPaths`, and `recentAchievementsShortcut` are only re-read on the next start. Saving from the window applies all of them at once.
 
 ### Settings
 
@@ -90,6 +92,8 @@ Every setting below has a field in the [Settings](#settings) window, which is th
 | `language` | Preferred language for achievement display text (**Achievement text** in the settings window). Falls back to english. | `english` |
 | `font` | Font family for the popup's name, description and game line. Empty uses the built-in default; an unavailable family falls back to it too. | `Segoe UI` |
 | `scale` | How wide the popup is drawn: `"15%"` is a share of the display's width, `"384px"` an absolute width. Clamped to a readable range either way, and never below the popup's design width. | `15%` |
+| `notificationPosition` | Which corner or edge of the display popups appear at: `bot_right`, `bot_center`, `bot_left`, `top_right`, `top_center` or `top_left` — the same spellings GBE's `PosAchievement` uses. Anything else reads as `bot_right`. | `bot_right` |
+| `notificationBackground` | The colour behind the popup's text, as `#AARRGGBB` (`#RRGGBB`, `#ARGB` and `#RGB` are also accepted, and the `#` is optional). The text colours are derived from it. Opacity is clamped to at least `66` so the popup can't be made invisible. | `#DD1A1A2E` |
 | `soundEnabled` | Play a sound on achievement unlock. | `true` |
 | `soundPath` | Custom `.wav` sound file path. Empty is the **Built-in sound** choice in the dialog. | (empty) |
 | `displayDuration` | How long the unlock notification stays on screen, in seconds. | `7` |
@@ -108,6 +112,8 @@ Every setting below has a field in the [Settings](#settings) window, which is th
   "language": "english",
   "font": "Segoe UI",
   "scale": "15%",
+  "notificationPosition": "bot_right",
+  "notificationBackground": "#DD1A1A2E",
   "soundEnabled": true,
   "soundPath": "",
   "displayDuration": 7,
@@ -158,11 +164,14 @@ of the three is unaffected. **Play a sound on unlock** stays in charge: with it 
 whatever a game ships. A game's sound file that can't be played falls back to the built-in one rather
 than to silence.
 
-Deliberately not honoured: position, colours, rounding, margins, and font/icon *sizes*. The popup's
-look is this app's, not the emulator's, and GBE's sizes are measured against a differently shaped
-notification, so copying the numbers across would not reproduce the layout — use **Popup size**
-instead. Nothing in a game's config can suppress a notification either, even though the equivalent
-key does exactly that in GBE's own overlay.
+Deliberately not read from a game's config: position (`PosAchievement`), colours, rounding, margins,
+and font/icon *sizes*. Position and background colour are yours to set app-wide under
+[Settings](#settings) instead — a game's ini quietly moving or recolouring a popup you just placed
+deliberately would be worse than not reading it, and GBE measures its position against the game's
+render surface where this app measures against the display, so the same key would not mean the same
+thing. GBE's sizes are likewise measured against a differently shaped notification, so copying the
+numbers across would not reproduce the layout — use **Popup size**. Nothing in a game's config can
+suppress a notification either, even though the equivalent key does exactly that in GBE's own overlay.
 
 A game often has **more than one** `steam_settings` folder — a repack drops a decorated copy at the
 game root while the emulator reads a plainer one beside its DLL (`bin/coldclient/`,

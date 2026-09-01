@@ -27,6 +27,21 @@ public sealed record NotificationAppearance
 
     public required NotificationScale Scale { get; init; }
 
+    /// <summary>
+    /// Which edge the popup is drawn against. App-owned with no per-game override: a position is not
+    /// additive the way a sound or a font is, so a game's ini must not silently move a popup the user
+    /// has just placed deliberately — and the recent panel, which is app-owned by construction, would
+    /// then review an unlock in a different corner from the one it appeared in.
+    /// </summary>
+    public required NotificationAnchor Anchor { get; init; }
+
+    /// <summary>
+    /// The colour behind the popup's text. App-owned for the same reason as <see cref="Anchor"/>, and
+    /// because the popup's look is the app's identity over a game rather than something an emulator
+    /// config should restyle.
+    /// </summary>
+    public required PopupBackground Background { get; init; }
+
     /// <summary>A TrueType file the game supplies, which wins over <see cref="Font"/> when it loads.</summary>
     public string? FontFilePath { get; init; }
 
@@ -60,6 +75,8 @@ public sealed record NotificationAppearance
             : app.DisplayDuration,
         Font = app.Font,
         Scale = app.Scale,
+        Anchor = app.NotificationPosition,
+        Background = app.NotificationBackground,
         FontFilePath = game?.FontFilePath,
         // The master switch stays app-owned: 'no sound' means no sound, whatever a game ships. Only
         // the file is overridable.

@@ -4,6 +4,8 @@
   "language": "english",
   "font": "Segoe UI",
   "scale": "15%",
+  "notificationPosition": "bot_right",
+  "notificationBackground": "#DD1A1A2E",
   "soundEnabled": true,
   "soundPath": "",
   "displayDuration": 7,

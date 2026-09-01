@@ -85,6 +85,66 @@ Both live in `[overlay::appearance]`:
 
 Alongside them, `steam_settings/sounds/overlay_achievement_notification.wav` is played on unlock.
 
+### What GBE's own notification actually looks like
+
+Worth knowing before reaching for any of its appearance keys, because the two notifications are less
+alike than the key names suggest. Verified against `gbe_fork` source rather than against its docs.
+
+- **Position.** One key per notification type: `PosAchievement` (`settings_parser.cpp:390`), plus
+  `PosInvitation` and `PosChatMsg` for the other two. All go through
+  `translate_notification_position` (`:125-136`), which takes six **case-sensitive** literals —
+  `top_left`, `top_center`, `top_right`, `bot_left`, `bot_center`, `bot_right`. Anything else logs
+  *Invalid position* and returns `default_pos = top_right` (`settings.h:128`), which is **not** the
+  field's own initial value `ach_earned_pos = bot_right` (`settings.h:185`) — so a typo lands the
+  notification top-right, somewhere an unset file would never put it.
+  `Notification_Margin_x` / `_y` offset from the anchor, defaulting to 5.0.
+- **Colour.** There are 28 colour keys — seven colours × four float channels, where a negative
+  channel means "unset" — and **only four of them reach the notification**: `Notification_R/G/B/A`
+  (`settings_parser.cpp:275-290`), which set one thing, the window fill, via
+  `get_notification_bg_rgba_safe` pushed as `ImGuiCol_WindowBg` (`steam_overlay.cpp:1047-1069, :1101`).
+  The other 24 belong elsewhere: `Background_*` and the three `Element*_*` sets colour the shift+tab
+  main window through `apply_global_style_color`, called only from `render_main_window`;
+  `Stats_Background_*` and `Stats_Text_*` colour the FPS window.
+- **The notification's text colour is not configurable at all.** Line `:1102` pushes
+  `ImGuiCol_Text = ImVec4(255, 255, 255, settings_noti_alpha * 2)` unconditionally. `Stats_Text_*`, on
+  the FPS counter, is the only text colour GBE exposes anywhere.
+- **`Notification_A` does double duty**: the fill's alpha, and `settings_noti_alpha` (`:1096`), which
+  drives the border (`:1100`) and that hardcoded text (`:1102`).
+- **The body is one string.** `ach.title + "\n" + ach.description` (`:1275`), drawn by a single
+  `TextWrapped`. GBE has no title/description distinction and no game-name line.
+
+### Keys the overlay app deliberately does not read
+
+Neither `PosAchievement` nor `Notification_R/G/B/A` is read, even though the app now has settings of
+its own for both. Set those in **Settings → Notifications** instead.
+
+For position, the survey is what decides it. Across the ten installs on the development machine,
+`PosAchievement` appears in three `configs.overlay.ini` files and every one says `bot_right` — which
+is at once GBE's own default for an earned achievement, the value in the shipped
+`configs.overlay.EXAMPLE.ini`, and this app's default. The key's presence therefore expresses no
+preference, so honouring it changes nothing today and does the wrong thing the moment someone uses the
+app's setting: those three games would stay bottom-right while every other game moved. A sound and a
+font have no such trap, because nobody ships a *default* wav or `Font_Override` — the file's presence
+is itself the intent. Two lesser reasons hold as well: a position is not additive the way a sound, a
+duration or a font is, and the recent achievements panel is app-owned by construction, so an unlock
+shown in one corner would be reviewed in another; and GBE positions against `io.DisplaySize`, the
+game's render surface, where this app positions against the display's work area, so the same key would
+not mean the same thing.
+
+For colour the case is closer, and the argument against is narrower than it looks. Readability is
+**not** the reason — `PopupPalette` derives every foreground from whatever fill it is handed, so an
+unreadable result is unreachable whoever chooses the colour. The reasons are that one GBE key would
+drive six colours here, two of which (the game line and the recent panel's dismiss hint) have no
+counterpart over there, which is reinterpretation rather than mirroring — the same objection that
+dropped `Font_Size`; that `Notification_A` means two things over there and would mean a third here;
+and that, like position, a per-game colour silently overrides an app-wide choice the user just made.
+
+The honest counter-argument, recorded because it has not been rebutted: the one config on the
+development machine that carries colour is a repack theme whose `Font_Override` and unlock wav this
+app **does** honour, from the same four lines of the same file. The line held is that a sound and a
+font are assets the game ships, while a position and a colour are presentation choices the user owns
+app-wide — not that the author had less of an opinion.
+
 ### Parsing quirks
 
 GBE uses SimpleIni in a narrow configuration, and a file written for it behaves accordingly:

@@ -7,13 +7,16 @@
         Topmost="True"
         ShowInTaskbar="False"
         ShowActivated="False"
-        SizeToContent="WidthAndHeight"
-        RenderTransformOrigin="0.5,1">
+        SizeToContent="WidthAndHeight">
+    <!-- No RenderTransformOrigin: a translate ignores it, and naming an origin of "0.5,1" would
+         state a bottom anchor this window no longer has. -->
     <Window.RenderTransform>
         <TranslateTransform x:Name="SlideTransform" Y="0" />
     </Window.RenderTransform>
+    <!-- The fill and every foreground below are assigned in the constructor from PopupPalette, so the
+         text colours are derived from the fill rather than hand-tuned for one of them. Leaving copies
+         here as design-time values is exactly what would drift. -->
     <Border x:Name="RootBorder"
-            Background="#DD1A1A2E"
             CornerRadius="8"
             Padding="12">
         <!-- The whole popup is laid out at a fixed design size and scaled uniformly so the
@@ -37,7 +40,6 @@
                        VerticalAlignment="Stretch">
                 <TextBlock x:Name="GameInfoText"
                            DockPanel.Dock="Bottom"
-                           Foreground="#99AAAAAA"
                            FontSize="10"
                            Width="230"
                            TextWrapping="Wrap"
@@ -46,13 +48,11 @@
                 <StackPanel DockPanel.Dock="Top"
                             VerticalAlignment="Top">
                     <TextBlock x:Name="AchievementName"
-                               Foreground="White"
                                FontWeight="Bold"
                                FontSize="14"
                                Width="230"
                                TextWrapping="Wrap" />
                     <TextBlock x:Name="AchievementDescription"
-                               Foreground="#CCAAAAAA"
                                FontSize="12"
                                Width="230"
                                TextWrapping="Wrap"

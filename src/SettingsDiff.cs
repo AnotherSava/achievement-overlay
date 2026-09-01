@@ -20,6 +20,8 @@ internal static class SettingsDiff
         AddIfChanged(changed, nameof(SettingsData.Language), current.Language, edited.Language);
         AddIfChanged(changed, nameof(SettingsData.Font), current.Font, edited.Font);
         AddIfChanged(changed, nameof(SettingsData.Scale), current.Scale, edited.Scale);
+        AddIfChanged(changed, nameof(SettingsData.NotificationPosition), current.NotificationPosition, edited.NotificationPosition);
+        AddIfChanged(changed, nameof(SettingsData.NotificationBackground), current.NotificationBackground, edited.NotificationBackground);
         AddIfChanged(changed, nameof(SettingsData.SoundEnabled), current.SoundEnabled, edited.SoundEnabled);
         AddIfChanged(changed, nameof(SettingsData.SoundPath), current.SoundPath, edited.SoundPath);
         AddIfChanged(changed, nameof(SettingsData.DisplayDuration), current.DisplayDuration, edited.DisplayDuration);

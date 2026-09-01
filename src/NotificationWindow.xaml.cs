@@ -9,8 +9,6 @@ namespace AchievementOverlay;
 
 public partial class NotificationWindow : Window
 {
-    private const double MarginFraction = 0.02;
-    private const double SlideDistanceFraction = 0.015;
     // Fixed design width (DIU) at scale 1: padding 24 + icon 56 + icon margin 12 + text 230.
     // Every popup is this width (× scale), so notifications never vary in width.
     private const double BaseOuterWidth = NotificationScale.DesignWidth;
@@ -18,16 +16,8 @@ public partial class NotificationWindow : Window
     private const double MinScale = NotificationScale.MinFactor;
     private const double MaxScale = NotificationScale.MaxFactor;
 
-    /// <summary>Vertical gap between stacked popups, shared by the recent panel and the settings preview.</summary>
-    public const double StackGap = 6;
-
-    /// <summary>
-    /// Vertical space one popup occupies in a stack, gap included. The single expression of the
-    /// stacking rule: the recent panel walks a bottom edge up by this per entry, and the settings
-    /// preview shifts what is already on screen by it when a new popup takes the bottom slot. Two
-    /// separate formulations of the same spacing would be free to drift apart.
-    /// </summary>
-    public static double SlotHeight(double popupHeight) => popupHeight + StackGap;
+    /// <summary>Which edge this popup is drawn against.</summary>
+    private NotificationAnchor Anchor => _appearance.Anchor;
 
     private static readonly Duration SlideToDuration = new(TimeSpan.FromMilliseconds(220));
     private double _slideTarget;
@@ -39,13 +29,17 @@ public partial class NotificationWindow : Window
     /// </summary>
     public void SlideTo(double top)
     {
+        // Read before the animation takes the property over, or this asks the animation where it is.
+        var falling = top > Top;
         _slideTarget = top;
-        // Falls under constant acceleration from rest: s = ½at² is displacement ∝ t², which is
-        // exactly a quadratic ease-in. It arrives at full speed and stops, the way a dropped thing
-        // lands — an ease-out would start fast and glide, which reads as sliding, not falling.
+        // Falling, it is under constant acceleration from rest: s = ½at² is displacement ∝ t², which
+        // is exactly a quadratic ease-in. It arrives at full speed and stops, the way a dropped thing
+        // lands — an ease-out would start fast and glide, which reads as sliding, not falling. Rising,
+        // which is what closing a gap means at a top anchor, that same acceleration reads as a glitch,
+        // so the ease is taken from the direction rather than assumed.
         var animation = new DoubleAnimation(top, SlideToDuration)
         {
-            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn },
+            EasingFunction = new QuadraticEase { EasingMode = falling ? EasingMode.EaseIn : EasingMode.EaseOut },
             FillBehavior = FillBehavior.Stop
         };
         animation.Completed += (_, _) =>
@@ -60,23 +54,34 @@ public partial class NotificationWindow : Window
         BeginAnimation(TopProperty, animation);
     }
 
-    /// <summary>Outer size as drawn, known once the popup has been shown and placed.</summary>
+    /// <summary>
+    /// Outer size as drawn, set by <see cref="ShowNotification"/> when it places a single popup.
+    /// Both stay 0 for a window shown through <see cref="ShowRecent"/> or <see cref="ShowFooter"/>:
+    /// those are placed at a top their caller has already worked out, so nothing here measures them,
+    /// and the caller reads <c>ActualHeight</c> after the render instead.
+    /// </summary>
     public double RenderedHeight { get; private set; }
     public double RenderedWidth { get; private set; }
 
     private static readonly Duration SlideDuration = new(TimeSpan.FromMilliseconds(300));
     private static readonly Duration FadeDuration = new(TimeSpan.FromMilliseconds(500));
     private readonly DispatcherTimer _holdTimer;
-    private double _slideDistance;
+    /// <summary>Signed: away from the anchored edge, so it carries the direction as well as the distance.</summary>
+    private double _slideOffset;
     private bool _recentMode;
 
     private readonly NotificationAppearance _appearance;
+    private readonly PopupPalette _palette;
 
     public NotificationWindow(NotificationAppearance appearance)
     {
         InitializeComponent();
         _appearance = appearance;
         Opacity = 0;
+        // The fill is the user's; every foreground is derived from it, so no choice of colour can
+        // leave the text unreadable.
+        _palette = PopupPalette.For(appearance.Background.ToColor());
+        ApplyPalette();
         // Set on the window so every TextBlock inherits it — one assignment, no per-element drift.
         // An unknown family is not an error: WPF falls back rather than rendering nothing. A font
         // file the game supplies wins when it loads; when it doesn't, the configured family is a
@@ -91,7 +96,26 @@ public partial class NotificationWindow : Window
     }
 
     /// <summary>
-    /// Shows the notification window positioned at the bottom-right of the given game window rectangle.
+    /// Paints the fill and every foreground. Done here rather than in the XAML because the recent
+    /// panel's dismiss hint is set in code, and a XAML-only version would leave that one line behind.
+    /// </summary>
+    private void ApplyPalette()
+    {
+        RootBorder.Background = Frozen(_palette.Background);
+        AchievementName.Foreground = Frozen(_palette.Title);
+        AchievementDescription.Foreground = Frozen(_palette.Description);
+        GameInfoText.Foreground = Frozen(_palette.GameLine);
+    }
+
+    private static SolidColorBrush Frozen(Color colour)
+    {
+        var brush = new SolidColorBrush(colour);
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>
+    /// Shows the notification window at the configured corner or edge of the given rectangle.
     /// </summary>
     /// <param name="achievementName">Display name of the achievement.</param>
     /// <param name="description">Achievement description text.</param>
@@ -103,7 +127,7 @@ public partial class NotificationWindow : Window
         AchievementDescription.Text = description;
         AchievementDescription.Visibility = string.IsNullOrEmpty(description) ? Visibility.Collapsed : Visibility.Visible;
 
-        var scale = ApplyScale();
+        var scale = ApplyScale(gameWindowRect);
         LoadIcon(iconPath, scale);
         SizeAndPosition(gameWindowRect, scale);
         Show();
@@ -112,13 +136,13 @@ public partial class NotificationWindow : Window
 
     /// <summary>
     /// Applies a uniform scale to the whole popup, so font, icon, padding and text-wrap width always
-    /// keep the same proportions. Automatic derives it from the foreground display's logical width —
-    /// using that monitor's own DPI, not the primary's, so the popup is sized for the display it
-    /// appears on; a fixed setting uses the percentage as given.
+    /// keep the same proportions. A share of the screen is taken from the rect the popup is being
+    /// placed in — that rect is already this monitor's work area in its own DPI's units, so the popup
+    /// is sized for the display it appears on; a fixed setting uses the width as given.
     /// </summary>
-    private double ApplyScale()
+    private double ApplyScale(Rect area)
     {
-        var scale = ComputeScale(_appearance.Scale, AppUtilities.GetForegroundLogicalWidth());
+        var scale = ComputeScale(_appearance.Scale, area.Width);
         RootScale.ScaleX = scale;
         RootScale.ScaleY = scale;
         return scale;
@@ -138,54 +162,49 @@ public partial class NotificationWindow : Window
     /// <summary>
     /// Shows as a footer info bar — no icon, no title, just text. No auto-dismiss.
     /// </summary>
-    public void ShowFooter(string text, Rect gameWindowRect, double customTop, double slideUpDistance)
+    public void ShowFooter(string text, Rect gameWindowRect, double customTop, double slideOffset)
     {
         AchievementIcon.Visibility = Visibility.Collapsed;
         AchievementName.Text = text;
         AchievementName.FontWeight = FontWeights.Normal;
         AchievementName.FontSize = 11;
-        AchievementName.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF));
+        AchievementName.Foreground = Frozen(_palette.Footer);
         AchievementName.TextAlignment = TextAlignment.Center;
         // Span the full popup width (no icon column) so the footer matches the achievement windows.
         AchievementName.MaxWidth = BaseOuterWidth;
         AchievementName.Width = BaseOuterWidth - 24; // minus RootBorder padding (12 each side)
         AchievementDescription.Visibility = Visibility.Collapsed;
 
-        var scale = ApplyScale();
-        PlaceRightAligned(gameWindowRect, scale, customTop, slideUpDistance);
+        var scale = ApplyScale(gameWindowRect);
+        PlaceForStack(gameWindowRect, scale, customTop, slideOffset);
 
         Show();
         StartSlideIn();
     }
 
     /// <summary>
-    /// Measures the (already-scaled) content and places the window right-aligned to the game window
-    /// at the given top, in recent/footer mode (no auto-dismiss).
+    /// Places the window as one member of a stack: aligned to the anchored edge, at a top the caller
+    /// has worked out from the running edge. Width is deterministic (BaseOuterWidth × scale) — a
+    /// pre-Show Measure on a Window returns 0, and the content is all fixed-width, so the rendered
+    /// width is exactly this.
     /// </summary>
-    private void PlaceRightAligned(Rect gameWindowRect, double scale, double customTop, double slideUpDistance)
+    /// <remarks>
+    /// The <c>_recentMode</c> assignment is a lifetime decision rather than a placement one: it is the
+    /// only thing that stops the hold timer starting, so every popup placed through here stays on
+    /// screen until it is dismissed.
+    /// </remarks>
+    private void PlaceForStack(Rect area, double scale, double top, double slideOffset)
     {
-        Left = RightAlignedLeft(gameWindowRect, scale, out _);
-        Top = customTop;
-        _slideDistance = slideUpDistance;
+        Left = NotificationPlacement.LeftFor(Anchor, area, BaseOuterWidth * scale);
+        Top = top;
+        _slideOffset = slideOffset;
         _recentMode = true;
-    }
-
-    /// <summary>
-    /// Left coordinate that right-aligns the popup within the game rect at the given scale, plus the
-    /// edge margin used. Width is deterministic (BaseOuterWidth × scale): a pre-Show Measure on a
-    /// Window returns 0, and the content is all fixed-width, so the rendered width is exactly this.
-    /// Shared by the unlock popup and the recent cascade so their placement can never drift.
-    /// </summary>
-    private double RightAlignedLeft(Rect gameWindowRect, double scale, out double margin)
-    {
-        margin = Math.Min(gameWindowRect.Width, gameWindowRect.Height) * MarginFraction;
-        return gameWindowRect.Right - BaseOuterWidth * scale - margin;
     }
 
     /// <summary>
     /// Shows as a "recent" notification — custom slide distance, extra text lines, no auto-dismiss.
     /// </summary>
-    public void ShowRecent(string achievementName, string description, string? iconPath, Rect gameWindowRect, double customTop, double slideUpDistance, string? gameInfoLine)
+    public void ShowRecent(string achievementName, string description, string? iconPath, Rect gameWindowRect, double customTop, double slideOffset, string? gameInfoLine)
     {
         AchievementName.Text = achievementName;
         AchievementDescription.Text = description;
@@ -197,9 +216,9 @@ public partial class NotificationWindow : Window
             GameInfoText.Visibility = Visibility.Visible;
         }
 
-        var scale = ApplyScale();
+        var scale = ApplyScale(gameWindowRect);
         LoadIcon(iconPath, scale);
-        PlaceRightAligned(gameWindowRect, scale, customTop, slideUpDistance);
+        PlaceForStack(gameWindowRect, scale, customTop, slideOffset);
 
         Show();
         StartSlideIn();
@@ -241,10 +260,10 @@ public partial class NotificationWindow : Window
         }
 
         // Default trophy-like icon: a simple gold circle
-        AchievementIcon.Source = CreateDefaultIcon(renderSize);
+        AchievementIcon.Source = CreateDefaultIcon(renderSize, _palette.IconRing);
     }
 
-    private static BitmapSource CreateDefaultIcon(double size)
+    private static BitmapSource CreateDefaultIcon(double size, Color ring)
     {
         var visual = new DrawingVisual();
         using (var ctx = visual.RenderOpen())
@@ -253,7 +272,7 @@ public partial class NotificationWindow : Window
             var radius = size / 2 - 2;
             ctx.DrawEllipse(
                 new SolidColorBrush(Color.FromRgb(0xDA, 0xA5, 0x20)), // Goldenrod
-                new Pen(new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)), 2), // Gold border
+                new Pen(new SolidColorBrush(ring), 2), // gold, or the ink when gold would vanish into the fill
                 center, radius, radius);
 
             // Draw a star/trophy shape hint
@@ -278,26 +297,27 @@ public partial class NotificationWindow : Window
         return renderTarget;
     }
 
-    private void SizeAndPosition(Rect gameWindowRect, double scale)
+    private void SizeAndPosition(Rect area, double scale)
     {
-        _slideDistance = gameWindowRect.Height * SlideDistanceFraction;
-        Left = RightAlignedLeft(gameWindowRect, scale, out var margin);
-
-        // Bottom-anchor: measure the content (RootBorder), not the Window — a pre-Show Window Measure
-        // returns 0. RootBorder.DesiredSize includes the scale transform, matching the rect's DIPs.
+        // The height is needed before placing, so measure the content (RootBorder) rather than the
+        // Window — a pre-Show Window Measure returns 0. RootBorder.DesiredSize includes the scale
+        // transform, matching the rect's DIPs.
         RootBorder.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var height = RootBorder.DesiredSize.Height > 0 ? RootBorder.DesiredSize.Height : 80 * scale;
-        RenderedHeight = height;
+        RenderedHeight = RootBorder.DesiredSize.Height > 0 ? RootBorder.DesiredSize.Height : 80 * scale;
         RenderedWidth = BaseOuterWidth * scale;
-        Top = gameWindowRect.Bottom - height - margin - _slideDistance;
+
+        var placement = NotificationPlacement.Place(Anchor, area, RenderedWidth, RenderedHeight);
+        Left = placement.Left;
+        Top = placement.Top;
+        _slideOffset = placement.SlideOffset;
     }
 
     private void StartSlideIn()
     {
-        // Slide up from below
-        SlideTransform.Y = _slideDistance;
+        // Starts flush with the anchored edge and settles inward, whichever edge that is.
+        SlideTransform.Y = _slideOffset;
 
-        var slideAnim = new DoubleAnimation(_slideDistance, 0, SlideDuration)
+        var slideAnim = new DoubleAnimation(_slideOffset, 0, SlideDuration)
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
         };

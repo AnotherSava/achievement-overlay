@@ -4,9 +4,12 @@ namespace AchievementOverlay.GbeOverlay;
 
 /// <summary>
 /// What a game's GBE config says about the two things this app can honour. Deliberately narrow: the
-/// keys that were considered and rejected — position, colours, rounding, margins, font and icon sizes
-/// — are not parsed "for later", because a value nothing reads is a value nothing keeps correct.
-/// The reasoning for each is in docs/plans/2026-08-18-per-game-overlay-settings.md.
+/// keys that were rejected <em>as per-game overrides</em> — position, colours, rounding, margins, font
+/// and icon sizes — are not parsed "for later", because a value nothing reads is a value nothing keeps
+/// correct. Position and background colour are app settings in their own right; a game's ini still
+/// does not move or recolour a popup the user placed deliberately.
+/// The reasoning is in docs/plans/completed/2026-08-18-per-game-overlay-settings.md and
+/// docs/plans/2026-08-30-popup-position-and-background.md.
 /// </summary>
 public sealed record GameOverlayConfig(double? AchievementDurationSeconds, string? FontOverride)
 {

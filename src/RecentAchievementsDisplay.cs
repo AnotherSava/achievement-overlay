@@ -4,9 +4,9 @@ using System.Windows.Threading;
 namespace AchievementOverlay;
 
 /// <summary>
-/// Orchestrates displaying N recent achievements as stacked notification windows
-/// with sequential cascade animation. A footer notification with dismiss instructions
-/// appears first at the bottom, then achievements cascade upward above it.
+/// Orchestrates displaying N recent achievements as stacked notification windows with sequential
+/// cascade animation. A footer notification with dismiss instructions appears first, flush against the
+/// configured edge, then achievements cascade away from it.
 /// </summary>
 public sealed class RecentAchievementsDisplay : IDisposable
 {
@@ -59,14 +59,21 @@ public sealed class RecentAchievementsDisplay : IDisposable
         // The settings dialog allows clearing the shortcut, leaving the tray menu as the way in.
         var shortcut = _config.RecentAchievementsShortcut;
         var dismissHint = string.IsNullOrWhiteSpace(shortcut) ? "Press Esc to hide" : $"Press {shortcut} or Esc to hide";
-        var notificationWidth = Math.Max(250, gameWindowRect.Width * 0.15);
-        var margin = Math.Min(gameWindowRect.Width, gameWindowRect.Height) * 0.02;
-        var standardSlideDistance = gameWindowRect.Height * 0.015;
+
+        // Resolved once and shared by every window in the panel: a settings save mid-cascade must not
+        // be able to leave half the stack in one corner and half in another.
+        var appearance = NotificationAppearance.From(_config);
+        var anchor = appearance.Anchor;
+
+        // The footer alone sits flush against the anchored edge; an unlock popup rests one slide
+        // distance further in. The two have always differed by that much, and still do.
+        var flushEdge = NotificationPlacement.FlushEdge(anchor, gameWindowRect);
 
         // Show footer first (info bar with dismiss instructions)
-        var footer = new NotificationWindow(NotificationAppearance.From(_config));
-        var footerTop = gameWindowRect.Bottom - margin - 40; // rough estimate, corrected after render
-        footer.ShowFooter($"Achievement Overlay \u2014 Recent achievements\n\n{dismissHint}", gameWindowRect, footerTop, standardSlideDistance);
+        var footer = new NotificationWindow(appearance);
+        var footerTop = NotificationPlacement.TopFor(anchor, flushEdge, 40); // rough estimate, corrected after render
+        footer.ShowFooter($"Achievement Overlay \u2014 Recent achievements\n\n{dismissHint}", gameWindowRect, footerTop,
+            NotificationPlacement.SlideOffset(anchor, gameWindowRect));
         _windows.Add(footer);
 
         // After footer renders, position correctly and start cascading achievements
@@ -74,16 +81,14 @@ public sealed class RecentAchievementsDisplay : IDisposable
         {
             Entries = entries,
             GameWindowRect = gameWindowRect,
-            NotificationWidth = notificationWidth,
-            Margin = margin,
-            StandardSlideDistance = standardSlideDistance,
+            Appearance = appearance,
         };
 
         footer.Dispatcher.BeginInvoke(() =>
         {
             var footerHeight = footer.ActualHeight > 0 ? footer.ActualHeight : 40;
-            footer.Top = gameWindowRect.Bottom - footerHeight - margin;
-            ctx.NextBottomEdge = footer.Top - NotificationWindow.StackGap;
+            footer.Top = NotificationPlacement.TopFor(anchor, flushEdge, footerHeight);
+            ctx.NextEdge = NotificationPlacement.Advance(anchor, flushEdge, footerHeight);
 
             var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
             timer.Tick += (_, _) =>
@@ -99,10 +104,12 @@ public sealed class RecentAchievementsDisplay : IDisposable
     {
         public List<AchievementHistoryEntry> Entries { get; init; } = null!;
         public Rect GameWindowRect { get; init; }
-        public double NotificationWidth { get; init; }
-        public double Margin { get; init; }
-        public double StandardSlideDistance { get; init; }
-        public double NextBottomEdge { get; set; }
+
+        /// <summary>Shared by every window in the panel, so the whole stack agrees on one anchor.</summary>
+        public NotificationAppearance Appearance { get; init; } = null!;
+
+        /// <summary>Near edge of the next free slot, walked away from the anchor as entries are added.</summary>
+        public double NextEdge { get; set; }
     }
 
     private void ShowNext(int index, CascadeContext ctx)
@@ -117,23 +124,24 @@ public sealed class RecentAchievementsDisplay : IDisposable
         var timestamp = DateTimeOffset.FromUnixTimeSeconds(entry.EarnedTime).LocalDateTime.ToString("MMM dd, HH:mm");
         var gameInfoLine = $"{entry.GameName} \u2014 {timestamp}";
 
-        var window = new NotificationWindow(NotificationAppearance.From(_config));
+        var window = new NotificationWindow(ctx.Appearance);
+        var anchor = ctx.Appearance.Anchor;
 
         var estimatedHeight = 80.0;
-        var finalTop = ctx.NextBottomEdge - estimatedHeight;
-        double slideUpDistance = NotificationWindow.SlotHeight(estimatedHeight);
+        var finalTop = NotificationPlacement.TopFor(anchor, ctx.NextEdge, estimatedHeight);
+        var slideOffset = NotificationPlacement.StackSlideOffset(anchor, estimatedHeight);
 
         // App settings, never a game's: the panel stacks entries from several games at once, so no
         // one game's config can speak for the stack.
         _soundPlayer?.Play(_config.SoundEnabled, _config.SoundPath);
-        window.ShowRecent(entry.AchievementName, entry.Description, entry.IconPath, ctx.GameWindowRect, finalTop, slideUpDistance, gameInfoLine);
+        window.ShowRecent(entry.AchievementName, entry.Description, entry.IconPath, ctx.GameWindowRect, finalTop, slideOffset, gameInfoLine);
         _windows.Add(window);
 
         window.Dispatcher.BeginInvoke(() =>
         {
             var actualHeight = window.ActualHeight > 0 ? window.ActualHeight : estimatedHeight;
-            window.Top = ctx.NextBottomEdge - actualHeight;
-            ctx.NextBottomEdge -= NotificationWindow.SlotHeight(actualHeight);
+            window.Top = NotificationPlacement.TopFor(anchor, ctx.NextEdge, actualHeight);
+            ctx.NextEdge = NotificationPlacement.Advance(anchor, ctx.NextEdge, actualHeight);
 
             if (index + 1 < ctx.Entries.Count)
             {
