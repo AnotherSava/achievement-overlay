@@ -7,12 +7,15 @@ __pycache__/
 # Claude Code
 .claude/settings.local.json
 
-# Local docs — ignore all except plans and the pages the README links to
+# Local docs — ignore all except the published GitHub Pages site, its screenshots,
+# and the plans. A local Jekyll build (docs/_site/) stays ignored by the first rule.
 docs/*
+!docs/_config.yml
+!docs/_includes/
+!docs/index.md
+!docs/pages/
 !docs/plans/
 !docs/screenshots/
-!docs/gbe-reference.md
-!docs/playnite.md
 
 # Runtime config (generated on first run)
 config.json

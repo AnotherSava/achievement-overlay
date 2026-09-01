@@ -415,7 +415,7 @@ are that GBE's notification has one configurable colour under hardcoded white te
 line and the panel's dismiss hint, have no counterpart over there; that `Notification_A` is the fill's
 alpha *and* `settings_noti_alpha` for the border and text, so no single mapping is correct; and that a
 per-game colour overrides an app-wide choice the same way a position does. The verified detail behind
-each is in `docs/gbe-reference.md`.
+each is in `docs/pages/development/gbe-reference.md`.
 
 **The counter-arguments, recorded because they were not rebutted.** The single config carrying colour
 is a repack theme whose `Font_Override=poppins.ttf` and 153 KB unlock wav this app *does* honour, from

@@ -1,7 +1,14 @@
+---
+layout: default
+title: GBE reference
+parent: Development
+nav_order: 1
+---
+
 # GBE reference
 
 Background on how the Goldberg Steam Emulator stores achievements, for anyone configuring a game
-by hand or working out why the overlay stays quiet. The [Add game…](../README.md#adding-a-game)
+by hand or working out why the overlay stays quiet. The [Add game…](../usage/adding-a-game)
 wizard handles all of this for you — nothing here is required reading for normal use.
 
 ## Where unlocks are stored
@@ -66,10 +73,10 @@ name, Steam ID, language, country). Everything else arrives from somewhere else:
 - a repack or scene release that bundled a ready-made `steam_settings/` — by far the most common
 - an older config generator
 - `steam_settings.EXAMPLE/configs.overlay.EXAMPLE.ini` from a GBE release, renamed and edited by hand
-- the [Add game…](../README.md#adding-a-game) wizard, which writes only
+- the [Add game…](../usage/adding-a-game) wizard, which writes only
   `[overlay::general] enable_experimental_overlay=0`
 
-This matters for [Per-game settings](../README.md#per-game-settings): the wizard installs the
+This matters for [Per-game settings](../usage/per-game-settings): the wizard installs the
 **regular** GBE build, which has no overlay code and ignores this file entirely. So when the app reads
 it, it is not mirroring anything the user sees in-game — it is reading a standard place where someone
 has already written down what they wanted.
@@ -116,7 +123,7 @@ alike than the key names suggest. Verified against `gbe_fork` source rather than
 ### Keys the overlay app deliberately does not read
 
 Neither `PosAchievement` nor `Notification_R/G/B/A` is read, even though the app now has settings of
-its own for both. Set those in **Settings → Notifications** instead.
+its own for both. Set those in [Settings → Notifications](../usage/settings) instead.
 
 For position, the survey is what decides it. Across the ten installs on the development machine,
 `PosAchievement` appears in three `configs.overlay.ini` files and every one says `bot_right` — which
@@ -198,7 +205,7 @@ reads whatever path is written:
 - Some other generators write `images/` with `<name>.jpg` and `<name>_gray.jpg`
 
 If notifications show the default icon rather than the real one, the paths in the JSON and the files
-on disk have drifted apart — see [Troubleshooting](../README.md#notification-shows-default-icon-instead-of-achievement-icon).
+on disk have drifted apart — see [Troubleshooting](../troubleshooting#the-notification-shows-the-default-icon).
 
 ## Why hidden descriptions come back blank
 

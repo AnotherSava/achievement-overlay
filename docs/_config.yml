@@ -1,0 +1,18 @@
+title: Achievement Overlay
+description: Steam-style achievement popups for games running in the Goldberg Steam Emulator.
+remote_theme: just-the-docs/just-the-docs
+baseurl: /achievement-overlay
+plugins:
+  - jekyll-remote-theme
+color_scheme: light
+search_enabled: true
+heading_anchors: true
+
+aux_links:
+  GitHub:
+    - https://github.com/AnotherSava/achievement-overlay
+
+exclude:
+  - plans/
+  - screenshots/capture/
+  - screenshots/screenshots.json

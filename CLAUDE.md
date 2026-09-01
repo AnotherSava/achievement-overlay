@@ -208,7 +208,7 @@ app's own wizard writes a two-line stub and installs the *regular* GBE build, wh
 code and never reads the file. So the feature is not mirroring what the user sees in-game — it reads
 that file as *a standard place where someone has already written down what they want*. Any wording
 stronger than that is a fidelity claim it cannot make, which is why the settings card and
-`docs/gbe-reference.md` both say it plainly.
+`docs/pages/development/gbe-reference.md` both say it plainly.
 
 The chain is `GbeOverlaySettingsReader.Read` (the only IO and the only cache) → an `IniFile.Parse` per
 config file per folder, folded with `WithFallback` → `GameOverlayConfig.Parse` → `GameOverlaySettings`
@@ -288,8 +288,8 @@ discovers a skill by its literal `SKILL.md` name, which leaves no room for the m
 
 A fresh clone reads those files as base64 and the skill won't register until the repo is unlocked with
 transcrypt and the shared passphrase. Everything the runbook covers that is safe to publish lives in
-`docs/gbe-reference.md` and `docs/playnite.md` instead — put new findings there by preference, and
-keep the encrypted files for what genuinely can't be public.
+`docs/pages/development/gbe-reference.md` and `docs/pages/usage/playnite.md` instead — put new
+findings there by preference, and keep the encrypted files for what genuinely can't be public.
 
 ## Build & Test
 
@@ -303,6 +303,29 @@ stricter than either line above on purpose. It builds the **test** project (whic
 through the project reference, so warnings in test code are seen at all), with `-warnaserror` and
 `--no-incremental` — MSBuild skips analysis for unchanged projects, so a cached build reports no
 warnings even when the code still has them. A `CS8625` in a test reached a release that way once.
+
+## Documentation site
+
+User-facing documentation is a GitHub Pages site under `docs/`, built by Jekyll with the
+`just-the-docs` remote theme. The sidebar is generated from each page's `nav_order` / `parent` /
+`has_children` front matter — never write a manual nav strip — and internal links carry no `.md`
+extension, because GitHub Pages serves `pages/usage/settings.html` at `pages/usage/settings`.
+
+The README is an entry point, not a manual: tagline, hero screenshot, feature list, licence, and a
+footer indexing every page. Its tagline, context paragraph and feature bullets must match
+`docs/index.md` word for word, and no capability may appear in both the context paragraph and a
+feature bullet. Anything longer than a paragraph belongs on a page instead.
+
+Three things bite here:
+
+- `.gitignore` ignores `docs/*` and re-includes the site by name, so a **new top-level file or
+  folder under `docs/` is invisible to git until its `!` line exists**. Nothing warns you.
+- The empty `_includes/footer_custom.html` is what removes the theme's "This site uses Just the
+  Docs" line. It shadows a theme include; there is no config option for it.
+- The site runs at the theme's own `$content-width` deliberately. Overriding it is not a width
+  knob: `md` and `lg` in the theme's `$media-queries` are *derived* from it, so raising it also
+  raises the window width at which the sidebar stops being a mobile header — and it can't be
+  decoupled, because `.main`'s `lg` margin is computed from the same variable.
 
 ## Documentation screenshots
 

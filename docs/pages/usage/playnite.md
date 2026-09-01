@@ -1,3 +1,10 @@
+---
+layout: default
+title: Playnite
+parent: Usage
+nav_order: 7
+---
+
 # Playnite and SuccessStory
 
 If you launch your games through [Playnite](https://playnite.link) and track completion with the

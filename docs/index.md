@@ -1,12 +1,14 @@
-# Achievement Overlay
-
-[![Build](https://github.com/AnotherSava/achievement-overlay/actions/workflows/build.yml/badge.svg)](https://github.com/AnotherSava/achievement-overlay/actions/workflows/build.yml)
+---
+layout: default
+title: Home
+nav_order: 1
+---
 
 *Steam-style achievement popups for games running in the Goldberg Steam Emulator.*
 
 A Windows background app that sits in the system tray. The emulator records every unlock in a JSON file; Achievement Overlay watches those files and slides a Steam-style popup over the game the moment one changes. It never touches the game process — no hooking, no injection — so it works even with games that reject an in-game overlay, such as Red Dead Redemption.
 
-![Achievement notification](docs/screenshots/sample-notification.png)
+<a href="screenshots/sample-notification.png"><img src="screenshots/sample-notification.png" alt="Achievement notification" width="1000"></a>
 
 ## Features
 
@@ -23,24 +25,10 @@ A Windows background app that sits in the system tray. The emulator records ever
 - **Settings window** — every option has a field, and saving applies it straight away without a restart
 - **Start with Windows** option
 
-## License
+## Next steps
 
-[GPL-3.0](LICENSE)
-
----
-
-See full project documentation at **[anothersava.github.io/achievement-overlay](https://anothersava.github.io/achievement-overlay/)**:
-
-- [Installation](https://anothersava.github.io/achievement-overlay/pages/installation)
-- [Usage](https://anothersava.github.io/achievement-overlay/pages/usage)
-  - [Tray menu](https://anothersava.github.io/achievement-overlay/pages/usage/tray-menu)
-  - [Settings](https://anothersava.github.io/achievement-overlay/pages/usage/settings)
-  - [Configuration](https://anothersava.github.io/achievement-overlay/pages/usage/configuration)
-  - [Adding a game](https://anothersava.github.io/achievement-overlay/pages/usage/adding-a-game)
-  - [Per-game settings](https://anothersava.github.io/achievement-overlay/pages/usage/per-game-settings)
-  - [Other emulators](https://anothersava.github.io/achievement-overlay/pages/usage/other-emulators)
-  - [Playnite](https://anothersava.github.io/achievement-overlay/pages/usage/playnite)
-- [Troubleshooting](https://anothersava.github.io/achievement-overlay/pages/troubleshooting)
-- [Development](https://anothersava.github.io/achievement-overlay/pages/development)
-  - [GBE reference](https://anothersava.github.io/achievement-overlay/pages/development/gbe-reference)
-- [Privacy](https://anothersava.github.io/achievement-overlay/pages/privacy)
+- **[Installation](pages/installation)** — download a release, or build it yourself
+- **[Usage](pages/usage)** — the tray menu, the settings window, adding a game, and what other emulators need
+- **[Troubleshooting](pages/troubleshooting)** — reading the log when nothing appears
+- **[Developer guide](pages/development)** — building from source, project layout, and how the emulator stores achievements
+- **[Privacy](pages/privacy)** — what leaves your machine, and when
