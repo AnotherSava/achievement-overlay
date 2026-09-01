@@ -1,0 +1,7 @@
+<!-- Suppresses the theme's "This site uses Just the Docs" line, which both
+     components/sidebar.html (desktop) and components/footer.html (mobile) print
+     as the *else* branch of `{% if nav_footer_custom != "" %}`.
+
+     So this file must be non-empty and render nothing — an empty file makes the
+     capture "" and prints the attribution, which is the opposite of how the
+     sibling footer_custom.html hook behaves. A comment satisfies both. -->
