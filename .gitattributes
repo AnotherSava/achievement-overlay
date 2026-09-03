@@ -1,10 +1,14 @@
 # Transcrypt: these files are stored encrypted in git and stay plaintext in the
 # working tree. A fresh clone reads them as base64 until it is unlocked with the
 # shared key — see "Encrypted files" in CLAUDE.md.
+#
+# The `text=auto eol=lf` on each rule below normalizes the base64 ciphertext on the way into the blob, which
+# is what stops a Windows clone and a macOS clone re-encrypting each other's commits forever. Never replace
+# it with `-text`, and do not drop it to match upstream's bare line — upstream has no Windows story.
 
-*.secret.* filter=crypt diff=crypt merge=crypt
+*.secret.* filter=crypt diff=crypt merge=crypt text=auto eol=lf
 
 # The track-achievements skill is encrypted whole rather than per-file: Claude
 # Code discovers a skill by its literal SKILL.md name, so the entry point cannot
 # carry the *.secret.* marker.
-.claude/skills/track-achievements/** filter=crypt diff=crypt merge=crypt
+.claude/skills/track-achievements/** filter=crypt diff=crypt merge=crypt text=auto eol=lf
