@@ -22,5 +22,11 @@ echo "=== Capturing ==="
 CAPTURE_OUT="$(cygpath -w "$OUT" 2>/dev/null || echo "$OUT")" \
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$DRIVER" 2>/dev/null || echo "$DRIVER")"
 
+# The window's own edge is near-white and the docs page is white, so the shot has no visible
+# boundary without this. Part of the capture, not a manual step: applied by hand it would be
+# silently lost the next time this script runs.
+echo "=== Adding the hairline ==="
+python "$REPO/docs/screenshots/capture/lib/docborder.py" "$OUT"
+
 echo "=== Wrote $OUT ==="
 file "$OUT"

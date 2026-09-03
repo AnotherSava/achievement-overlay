@@ -30,6 +30,12 @@ function Enable-CaptureDpiAwareness {
 .SYNOPSIS
   First element of the given control type whose Name matches a wildcard pattern, searched from the
   desktop root.
+.DESCRIPTION
+  Searched one top-level window at a time rather than as a single Descendants sweep of the desktop.
+  The sweep is what the obvious implementation does, and it throws RPC_E_SERVERFAULT outright when
+  any one running application's automation provider misbehaves - which takes down every capture
+  script on this machine, for a window none of them care about. Per-window, that application is
+  skipped and the rest are still searched.
 #>
 function Find-ByName {
   param(
@@ -38,9 +44,17 @@ function Find-ByName {
   )
 
   $ua = [System.Windows.Automation.AutomationElement]
+  $scope = [System.Windows.Automation.TreeScope]
   $condition = New-Object System.Windows.Automation.PropertyCondition($ua::ControlTypeProperty, $ControlType)
-  foreach ($element in $ua::RootElement.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
-    if ($element.Current.Name -like $Name) { return $element }
+
+  foreach ($top in $ua::RootElement.FindAll($scope::Children, [System.Windows.Automation.Condition]::TrueCondition)) {
+    try {
+      foreach ($element in $top.FindAll($scope::Descendants, $condition)) {
+        if ($element.Current.Name -like $Name) { return $element }
+      }
+    } catch {
+      continue
+    }
   }
   return $null
 }
