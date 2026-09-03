@@ -4,8 +4,6 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using Microsoft.Win32;
 // The project enables WinForms implicit usings for the tray, so the WPF types this window uses have
 // to be named explicitly wherever the two frameworks collide.
 using WinFormsKeys = System.Windows.Forms.Keys;
@@ -124,9 +122,9 @@ public partial class SettingsWindow : Window
         _gameFolders = AppConfig.SplitRawPaths(_current.GamesPaths).ToList();
         _savesFolders = AppConfig.SplitRawPaths(_current.GseSavesPaths).ToList();
 
-        ApplyThemeBrushes();
-        ClampToScreen();
-        LoadWindowIcon();
+        DialogChrome.ApplyThemeBrushes(Resources);
+        DialogChrome.ClampToScreen(this);
+        DialogChrome.LoadWindowIcon(this);
         LoadValues(startWithWindows, availableLanguages);
         _loaded = true;
         UpdateScaleState();
@@ -143,71 +141,6 @@ public partial class SettingsWindow : Window
             ScaleSlider.Value = _current.Scale.Value;
             UpdateScaleState();
         };
-    }
-
-    /// <summary>
-    /// The window's height is set so Notifications — much the tallest page — fits without scrolling.
-    /// On a screen too short for that (a laptop, or high display scaling) it is capped to the work
-    /// area instead of opening off-screen, and the ScrollViewer does its job.
-    /// </summary>
-    private void ClampToScreen()
-    {
-        var available = SystemParameters.WorkArea.Height - 40;
-        if (Height > available)
-            Height = Math.Max(MinHeight, available);
-    }
-
-    /// <summary>WPF wants an ImageSource, so the embedded .ico is decoded rather than reused as a GDI icon.</summary>
-    private void LoadWindowIcon()
-    {
-        try
-        {
-            using var stream = typeof(SettingsWindow).Assembly.GetManifestResourceStream("AchievementOverlay.icon.ico");
-            if (stream != null)
-                Icon = BitmapFrame.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
-        }
-        catch (Exception ex)
-        {
-            Logger.Warn($"Could not load the settings window icon: {ex.Message}");
-        }
-    }
-
-    // --- Theme ---
-
-    /// <summary>
-    /// Supplies the handful of colours the Fluent theme has no key for — page, card and nav chrome —
-    /// matched to whichever mode Windows is in. Everything else comes from ThemeMode="System".
-    /// </summary>
-    private void ApplyThemeBrushes()
-    {
-        var dark = IsSystemInDarkMode();
-        void Set(string key, string hex) =>
-            Resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)!);
-
-        Set("WindowBackground", dark ? "#202020" : "#F3F3F3");
-        Set("PageBackground", dark ? "#272727" : "#FBFBFB");
-        Set("CardBackground", dark ? "#2D2D2D" : "#FDFDFD");
-        Set("CardBorder", dark ? "#3A3A3A" : "#E5E5E5");
-        Set("NavSelected", dark ? "#333333" : "#EBEBEB");
-        Set("NavHover", dark ? "#2F2F2F" : "#F0F0F0");
-        Set("Accent", dark ? "#60CDFF" : "#005FB8");
-        Set("SwitchOff", dark ? "#333333" : "#FFFFFF");
-        Set("SwitchKnobOff", dark ? "#CCCCCC" : "#5D5D5D");
-        Set("StatusGood", dark ? "#6CCB5F" : "#0F7B0F");
-        Set("StatusWarn", dark ? "#FFC83D" : "#9A6A00");
-    }
-
-    private static bool IsSystemInDarkMode()
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-            return key?.GetValue("AppsUseLightTheme") is int light && light == 0;
-        }
-        catch
-        {
-            return false; // unreadable registry is not a reason to fail to open settings
-        }
     }
 
     // --- Values ---
