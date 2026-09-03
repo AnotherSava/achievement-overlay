@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
-using System.Reflection;
 using System.Text.Json;
 using System.Windows.Forms;
 using AchievementOverlay.GbeConfig;
@@ -35,6 +34,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private Icon? _pausedIcon;
     private AddGameForm? _addGameForm;
     private SettingsWindow? _settingsWindow;
+    private DiagnosticReportWindow? _reportWindow;
     private bool _startWithWindowsEnabled;
     private bool _disposed;
 
@@ -46,9 +46,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         Logger.Init();
 
-        var infoVersion = typeof(TrayApplicationContext).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0];
-        var versionLabel = infoVersion != null && infoVersion != "1.0.0" ? $"v{infoVersion}" : "dev version";
-        Logger.Info($"Achievement Overlay: {versionLabel}");
+        Logger.Info($"Achievement Overlay: {AppUtilities.VersionLabel}");
 
         try
         {
@@ -56,8 +54,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
         catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException)
         {
-            var configPath = Path.Combine(AppContext.BaseDirectory, "config.json");
-            Logger.Error($"Config error: '{configPath}': {ex.Message}");
+            Logger.Error($"Config error: '{AppConfig.ConfigFilePath}': {ex.Message}");
             var heading = ex is FileNotFoundException ? "Config file not found" : "Config file is invalid";
             var detail = ex switch
             {
@@ -126,12 +123,14 @@ public sealed class TrayApplicationContext : ApplicationContext
         var settingsItem = new ToolStripMenuItem("Settings…");
         settingsItem.Click += (_, _) => OpenSettingsDialog();
 
+        var reportItem = new ToolStripMenuItem("Report a problem…");
+        reportItem.Click += (_, _) => OpenDiagnosticReport();
+
         var openConfigItem = new ToolStripMenuItem("Open config/logs location");
         openConfigItem.Click += (_, _) =>
         {
-            var settingsPath = Path.Combine(AppContext.BaseDirectory, "config.json");
-            if (File.Exists(settingsPath))
-                Process.Start("explorer.exe", $"/select,\"{settingsPath}\"");
+            if (File.Exists(AppConfig.ConfigFilePath))
+                Process.Start("explorer.exe", $"/select,\"{AppConfig.ConfigFilePath}\"");
             else
                 Process.Start("explorer.exe", AppContext.BaseDirectory);
         };
@@ -156,6 +155,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             new ToolStripSeparator(),
             settingsItem,
             openConfigItem,
+            reportItem,
             new ToolStripSeparator(),
             exitItem
         });
@@ -364,6 +364,51 @@ public sealed class TrayApplicationContext : ApplicationContext
         NotifyTrackingConfiguredForExistingFolders();
     }
 
+    /// <summary>
+    /// Opens the per-game diagnostic report for review. The list is drawn from the game cache
+    /// <em>and</em> the GSE Saves folders, because a game tracked only through a self-describing
+    /// unlock file has no cache entry — and that is the configuration most likely to be reported.
+    /// </summary>
+    private void OpenDiagnosticReport()
+    {
+        if (_reportWindow != null)
+        {
+            _reportWindow.Activate();
+            return;
+        }
+
+        var choices = new List<DiagnosticGameChoice>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var game in _gameCache.GetAll())
+        {
+            if (seen.Add(game.AppId))
+                choices.Add(new DiagnosticGameChoice { AppId = game.AppId, Game = game });
+        }
+
+        foreach (var appId in _watcher.GetExistingAppIdFolders())
+        {
+            // GBE keeps its own 'settings' folder alongside the per-appid ones; an appid is digits.
+            if (appId.Length > 0 && appId.All(char.IsAsciiDigit) && seen.Add(appId))
+                choices.Add(new DiagnosticGameChoice { AppId = appId, Game = _gameCache.LookupCached(appId) });
+        }
+
+        choices.Sort((a, b) => string.Compare(a.ToString(), b.ToString(), StringComparison.CurrentCultureIgnoreCase));
+
+        // Constructed fresh every time: ShowDialog on a closed WPF Window throws, so the instance
+        // cannot be cached across opens. A Window is not IDisposable either, so the finally only says
+        // "nothing is open now", exactly as the settings window's does.
+        _reportWindow = new DiagnosticReportWindow(choices, _config.GseSavesPaths, _config.GamesPaths);
+        try
+        {
+            _reportWindow.ShowDialog();
+        }
+        finally
+        {
+            _reportWindow = null;
+        }
+    }
+
     private void OpenSettingsDialog()
     {
         if (_settingsWindow != null)
@@ -535,10 +580,8 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private static void ShowConfigError(string heading, string detail)
     {
-        var logPath = Path.Combine(AppContext.BaseDirectory, "overlay.log");
+        var logContent = Logger.ReadAll();
         Logger.Close();
-        var logContent = "";
-        try { logContent = File.ReadAllText(logPath); } catch { }
         var page = new TaskDialogPage
         {
             Heading = heading,

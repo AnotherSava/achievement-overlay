@@ -16,6 +16,7 @@ Right-click the tray icon to reach everything the app can do.
 - **Pause notifications** — suppress popups while checked. Unlocks are still recorded by the emulator; only the popup is withheld. The setting resets on restart, which is why it is a tray toggle rather than something in [Settings](settings).
 - **Settings…** — open the [Settings](settings) window.
 - **Open config/logs location** — opens Explorer with `config.json` selected. `overlay.log` sits in the same folder.
+- **Report a problem…** — builds a diagnostic report for one game, shows it to you part by part, and saves it as a single `.json` file you can attach to an issue. See [Reporting a problem](../troubleshooting#reporting-a-problem).
 - **Exit** — stops watching and closes the app.
 
 If the icon is not visible, Windows has probably tucked it into the overflow flyout — click the chevron beside the clock, or drag the icon out to pin it.

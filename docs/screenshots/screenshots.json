@@ -2,7 +2,9 @@
   "screenshots": [
     {
       "id": "sample-notification",
-      "files": ["sample-notification.png"],
+      "files": [
+        "sample-notification.png"
+      ],
       "shows": "A single popup as it appears over a game — icon, achievement name, description, and the game line the recent achievements panel adds",
       "policy": "confirm",
       "verifiedAt": "8133d50",
@@ -17,10 +19,11 @@
     },
     {
       "id": "tray-menu",
-      "files": ["tray-menu.png"],
-      "shows": "The system tray context menu: Show recent achievements, Add game, Pause notifications, Settings, Open config/logs location, Exit",
-      "policy": "confirm",
-      "verifiedAt": "b616066",
+      "files": [
+        "tray-menu.png"
+      ],
+      "shows": "The system tray context menu: Show recent achievements, Add game, Pause notifications, Settings, Open config/logs location, Report a problem, Exit",
+      "policy": "auto",
       "capture": {
         "command": "bash docs/screenshots/capture/tray-menu.sh",
         "steps": [
@@ -32,10 +35,11 @@
     },
     {
       "id": "settings-window",
-      "files": ["settings.png"],
+      "files": [
+        "settings.png"
+      ],
       "shows": "The Settings window on its Notifications page, with the nav rail and the footer visible",
       "policy": "auto",
-      "verifiedAt": "b616066",
       "capture": {
         "command": "bash docs/screenshots/capture/settings-window.sh",
         "steps": [
@@ -43,7 +47,26 @@
           "Open the tray menu and click Settings...",
           "Select the Notifications page in the nav rail",
           "Capture the client area, not the window: the window rect carries Windows 11's 2px border, which is dark when the OS is in dark mode even though this window is light",
-          "Use -CropToOpaque: this window is opaque, so its rounded bottom corners are its own dark border curving into the client rectangle — chrome, which alpha recovery preserves rather than removes"
+          "Use -CropToOpaque: this window is opaque, so its rounded bottom corners are its own dark border curving into the client rectangle — chrome, which alpha recovery preserves rather than removes",
+          "Add the hairline with lib/docborder.py, which the capture script already calls: this window's own edge is near-white (measured 243) and the docs page is white, so the shot has no visible boundary without it. Applied by hand it would be silently lost on the next capture"
+        ]
+      }
+    },
+    {
+      "id": "report-window",
+      "files": [
+        "report-window.png"
+      ],
+      "shows": "The Report a problem window on its App config page: the notice, the nav rail of parts, one part's line and Include switch, and an API key shown redacted",
+      "policy": "auto",
+      "capture": {
+        "command": "bash docs/screenshots/capture/report-window.sh",
+        "steps": [
+          "Deploy the current build so the shot matches the working tree, not the installed release",
+          "Open the tray menu and click Report a problem...",
+          "Select the App config page in the nav rail: it is the part whose line, switch and a redacted key are all visible at once, so the shot shows what the window is for",
+          "Use -CropToOpaque: this window is opaque, so its rounded bottom corners are its own border curving into the client rectangle, which alpha recovery preserves rather than removes",
+          "Add the hairline with lib/docborder.py, which the capture script already calls: this window's own edge is near-white (measured 243) and the docs page is white, so the shot has no visible boundary without it. Applied by hand it would be silently lost on the next capture"
         ]
       }
     }

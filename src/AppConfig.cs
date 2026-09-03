@@ -16,6 +16,9 @@ public sealed class AppConfig
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
+    /// <summary>The config file a default-constructed <see cref="AppConfig"/> reads, next to the executable.</summary>
+    public static string ConfigFilePath => SettingsPath;
+
     private DateTime _lastWriteTimeUtc;
     private SettingsData _settings = null!;
     private readonly object _lock = new();
@@ -264,6 +267,35 @@ public sealed class AppConfig
         }
 
         return bestVariable == null ? path : bestVariable + path[bestLength..];
+    }
+
+    /// <summary>
+    /// The same substitution applied to every known folder <em>inside</em> a longer string, for text
+    /// that is not itself a path — a log line, a message quoting a file. A diagnostic report runs its
+    /// log through this so the Windows account name stops riding along inside
+    /// <c>C:\Users\Sam\AppData\Roaming\GSE Saves</c>, which is a fact about the person rather than
+    /// about the problem. Longest expansion first, so <c>%appdata%</c> claims a path before
+    /// <c>%userprofile%</c> can take the front of it.
+    /// </summary>
+    public static string CollapseEnvironmentVariablesInText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return text;
+
+        var byDepth = CollapsibleVariables
+            .Select(variable => (Variable: variable, Expanded: Path.TrimEndingDirectorySeparator(ExpandEnvironmentVariables(variable))))
+            .Where(pair => pair.Expanded != pair.Variable && !string.IsNullOrEmpty(pair.Expanded))
+            .OrderByDescending(pair => pair.Expanded.Length);
+
+        foreach (var (variable, expanded) in byDepth)
+        {
+            text = text.Replace(expanded, variable, StringComparison.OrdinalIgnoreCase);
+            // Also the forward-slash spelling: Windows accepts it, so a hand-edited config or a
+            // third-party file can carry 'C:/Users/Sam/...' where nothing this app writes would.
+            text = text.Replace(expanded.Replace('\\', '/'), variable, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return text;
     }
 
     /// <summary>

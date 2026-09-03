@@ -6,7 +6,9 @@ nav_order: 4
 
 # Troubleshooting
 
-The app writes a log file, `overlay.log`, next to the config file — the tray menu's **Open config/logs location** takes you there. Almost everything below is diagnosed from it, so start by looking for `[WARN]` and `[ERROR]` lines.
+The app writes a log file, `overlay.log`, next to the config file — the tray menu's **Open config/logs location** takes you there. Almost everything below is diagnosed from it, so start by looking for `[WARN]` and `[ERROR]` lines. Each run appends to the file and begins with a `===== session started` banner, so the run you are investigating is still there after a restart. Once the file passes 1 MB it is renamed to `overlay.log.1` and a fresh one begins.
+
+To send a diagnosis rather than read one, use [Report a problem](#reporting-a-problem).
 
 ## The app will not start
 
@@ -68,8 +70,28 @@ If one game sounds different from the rest, it is supplying its own — see [Per
 
 If a change made in the [Settings](usage/settings) window does not persist, the log shows `[WARN] Config file is malformed, could not update` or `[WARN] Could not write config`. Fix the JSON syntax in `config.json`, or check file permissions on it.
 
+## Reporting a problem
+
+The tray menu's **Report a problem…** gathers what a diagnosis usually needs for one game into a single file. Pick the game, read the report, then **Save as…** and attach the `.json` to an issue.
+
+<a href="../screenshots/report-window.png"><img src="../screenshots/report-window.png" alt="The Report a problem window"></a>
+
+Read it before you send it. Attaching it to an issue publishes it: on a public repository an uploaded file can be read by anyone without a GitHub account, and GitHub uploads it the moment you drop it into the comment box, before you post the comment.
+
+The report is split into parts listed down the side, so you can read one without scrolling past the rest. Each part has an **Include this part** switch; turning one off marks it **left out** in the list and the file records that you left it out, so it stays clear the part was withheld rather than missing. Every part shows exactly what the saved file will contain.
+
+The app sends nothing anywhere. It writes a file and you decide what happens to it. The parts are:
+
+- The app version, including the exact build it was made from.
+- Your `config.json`, with any API key replaced by `xxxxxx`. Folder paths are included, because which folder a game was found in is often the answer, but they are written in the portable form (`%appdata%\GSE Saves`) so your Windows account name does not travel with them.
+- The log for the last five runs of the app, narrowed to the game you picked. Lines about your other games are removed and counted, so reporting one game does not publish your library. A run that logged exactly what the run before it logged is listed by its start time alone, since restarts usually repeat the same startup lines. The file itself keeps more runs; five covers hitting a problem, restarting, and trying again.
+- Every `steam_settings` folder found for that game, deepest first. The first is where achievement text and icons come from, and a game having more than one is worth knowing.
+- That game's `steam_settings/achievements.json` and its GSE Saves unlock file, or a note saying which was missing or unreadable.
+
+If a game is missing from the list, the app cannot see it at all. That is itself the diagnosis, and the sections above cover it.
+
 ## Still stuck?
 
-[Create a GitHub issue](https://github.com/AnotherSava/achievement-overlay/issues/new) describing the problem, and attach your log file. Misleading documentation is worth reporting too.
+[Create a GitHub issue](https://github.com/AnotherSava/achievement-overlay/issues/new) describing the problem, and attach a report from **Report a problem…** (or just your log file). Misleading documentation is worth reporting too.
 
 This is a hobby project, built to work around Red Dead Redemption's incompatibility with gbe_fork's built-in overlay. It may not work in every situation, but if it helps you as much as it helped me, it was definitely worth the effort.

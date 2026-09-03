@@ -12,7 +12,9 @@ Short version: watching for achievements is entirely local, and the only feature
 
 There is no telemetry, no analytics, no crash reporting and no update check. Nothing about you, your games, your unlocks or your machine is sent anywhere as part of normal operation. Watching for unlocks and showing notifications transfers no information to other networked systems at all.
 
-Everything the app knows lives in two files next to the executable — `config.json` and `overlay.log` — both readable and both yours to delete. The tray menu's **Open config/logs location** opens the folder.
+Everything the app knows lives in two files next to the executable — `config.json` and `overlay.log` — both readable and both yours to delete. The tray menu's **Open config/logs location** opens the folder. The log keeps every run rather than only the current one, so that a problem is still described after a restart; it rolls over to `overlay.log.1` past 1 MB, and deleting either file is safe.
+
+The tray menu's **Report a problem…** collects some of that into one file for you to attach to an issue. It uploads nothing: the report is shown to you in full, saved only where you choose, and API keys are replaced with `xxxxxx` before you see it. It covers the one game you pick, and log lines about your other games are removed, so reporting a problem does not publish what else you have installed. [What it contains](troubleshooting#reporting-a-problem).
 
 ## What the app reads locally
 

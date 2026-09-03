@@ -194,6 +194,90 @@ exists, and a missing custom sound file — and switches to the page that needs 
 
 The folder picker and browse button are shared with `AddGameForm` via `src/DialogControls.cs`;
 `PickFolder` takes a nullable owner so the WPF window, which has no `IWin32Window`, uses the same one.
+
+## Report a problem window
+
+The tray menu's **Report a problem…** opens `DiagnosticReportWindow` — a per-game diagnostic bundle
+the user reads before attaching it to an issue. It is WPF and built to the same shape as
+`SettingsWindow`: `ThemeMode="System"`, a nav rail, cards. That is not only for consistency. A stock
+WinForms `TabControl` gives the open part almost no contrast against its neighbours on Windows 11, and
+which part is open is the thing the control most needs to say; owning the row template is what fixes
+it, and `SettingsWindow` had already solved that.
+
+The two windows share `src/DialogStyles.xaml` (the styles) and `src/DialogChrome.cs` (the theme
+brushes, the icon, the work-area clamp). A second window carrying its own copy of those colours is a
+copy that drifts: a shade corrected in one dialog would leave the other wrong with nothing to say why.
+
+**One page, not five.** Unlike the settings pages, these five parts differ only in the data they show,
+so the rail picks a part and the single page is written from it.
+
+**One line of text per part, computed.** A part gets its name, its switch, and a single sentence
+folding the description together with its live figures. What that replaced said the same things twice:
+a static intro reading "API keys are replaced before you see them" over a summary reading "API keys
+hidden", inside a card titled "Include this part" that labelled a switch which already says what it
+does. `Describe` builds the one sentence, so a wording change cannot leave two halves disagreeing, and
+the removed card gave its height to the pane.
+
+**The panes are sliced out of the saved document.** `Compose` runs once, the result is parsed, and
+each pane renders its own top-level key — so what is reviewed is provably what is written. That is
+also why the report's five parts are five top-level keys: nesting the schema under the game identity
+put the bulk of the file inside the pane meant to show a handful of lines.
+
+**The pane wraps rather than scrolling sideways.** Its longest lines are the paths and the log lines,
+which is the content this window exists to have read, and a horizontal scrollbar hides their ends
+behind an interaction. It also sidesteps the Fluent horizontal scrollbar, which reserves 12 DIP and
+paints 4 physical pixels of it at rest. The scrollbar that remains needs `Cursor="Arrow"` set on it
+explicitly: `Cursor` is an inherited property in WPF, so the pane's I-beam otherwise follows onto its
+own scrollbar, where every other Windows app shows the arrow.
+
+**The pane carries its own `ControlTemplate`**, holding nothing but `PART_ContentHost`. It is a text
+pane, not an input field, and the Fluent `TextBox` draws an accent underline when focused — which says
+nothing on something read-only and makes it look like an edit box waiting to be typed in. The bare
+template keeps selection and scrolling and drops every bit of input chrome; the card around it already
+supplies the border.
+
+**The one warning is drawn as one.** A banded row above both columns, at full opacity. It previously
+sat in `CardDescription` — 12px at 75% opacity, the faintest text in the window — while opening with
+the words "Read this", and it repeated the reassurances the per-part lines now carry.
+
+It says the two things about GitHub that are not obvious, both quoted from docs.github.com "Attaching
+files": *"For public repositories, uploaded files can be accessed without authentication"*, and *"When
+you attach a file, it is uploaded immediately to GitHub"*. The second earns the space — dropping the
+file into the comment box has already published it, whether or not the comment is ever posted. It says
+nothing about deleting an attachment, because GitHub's documentation does not.
+
+It leads with the instruction and follows with the reason. Two drafts got that wrong in opposite
+directions: one opened "whoever you send it to can see everything in it", which asks for something but
+justifies it with a tautology; its replacement opened straight onto the GitHub facts, and never asked
+for anything at all.
+
+Its mark is a **badge, not a bar**, and the band has its own `NoticeBackground` rather than
+`NavSelected`. The first attempt reused the rail's accent marker and its selected-row colour, on the
+reasoning that reusing an idiom beats inventing one. That is backwards for a marker: it sat directly
+above the rail, so two identical marks a few pixels apart meant "this row is selected" and "this is
+important". A marker means something only by being unlike the others. The glyph is a plain character
+in a drawn circle, not an icon font, so it cannot depend on Segoe Fluent Icons being installed.
+
+**A part left out is recorded, not dropped** (`"status": "not included"`), because "they withheld
+this" and "the app could not find it" are different answers to a bug report. The rail marks it twice,
+struck through *and* with a chip, since strike-through carries nothing to a screen reader — which is
+also why each row gets an `AutomationProperties.Name` rather than being read as
+`System.Windows.Controls.ListBoxItem`.
+
+What the report carries, and the redaction rules, are in `docs/pages/troubleshooting.md`. The pieces
+that keep it safe to publish live in `DiagnosticReport`: credentials matched by key *name*,
+`KeepLinesForGame` dropping every log line about another game, and `SplitSessions` blanking a run that
+repeated the one before it.
+
+**Paths are collapsed over the whole finished document**, by `CollapseKnownFolders` walking every
+string, not by a call at each field that looks like it holds one. Paths turn up in more places than
+are obvious — `soundPath` is an absolute file the user picks from a dialog, `gamesPaths` can sit under
+the profile, a third-party schema can carry an absolute icon path — and a per-site list has to be
+remembered every time a field is added. One sweep cannot miss one. It runs *after*
+`KeepLinesForGame`, which matches against the expanded paths the log was actually written with;
+collapsing first would leave every path starting with a `%` that those rules do not recognise, and the
+whole log would be dropped as belonging to another game.
+
 ## Popup position and background colour
 
 Both are app settings, both read live per popup, and neither has a per-game override. The placement

@@ -23,6 +23,7 @@ A Windows background app that sits in the system tray. The emulator records ever
 - **Unlock sound** — the built-in sound, or a `.wav` of your own
 - **Per-game settings** — a game that arrived with its own `steam_settings/` can supply its unlock sound, display duration and font, for that game only
 - **Settings window** — every option has a field, and saving applies it straight away without a restart
+- **Report a problem** — collects one game's settings, log and achievement files into a single file you read before attaching it to an issue, with your other games and any API keys left out
 - **Start with Windows** option
 
 ## Next steps

@@ -538,4 +538,30 @@ public class AppConfigTests : IDisposable
         var ex = Assert.Throws<InvalidOperationException>(() => new AppConfig(_settingsPath));
         Assert.Contains("gamesPaths", ex.Message);
     }
+
+    [Fact]
+    public void CollapseEnvironmentVariablesInText_HidesTheAccountNameInsideALogLine()
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var line = $"[INFO] Watching for achievements in '{appData}" + @"\GSE Saves'";
+
+        var collapsed = AppConfig.CollapseEnvironmentVariablesInText(line);
+
+        Assert.Equal(@"[INFO] Watching for achievements in '%appdata%\GSE Saves'", collapsed);
+        Assert.DoesNotContain(Environment.UserName, collapsed, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CollapseEnvironmentVariablesInText_PrefersTheDeepestFolder()
+    {
+        // %appdata% sits under %userprofile%; taking the shallower one would leave the account name in.
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+        Assert.StartsWith("%appdata%", AppConfig.CollapseEnvironmentVariablesInText(appData + @"\GSE Saves"));
+    }
+
+    [Fact]
+    public void CollapseEnvironmentVariablesInText_LeavesUnrelatedTextAlone() =>
+        Assert.Equal(@"[INFO] Cached: appid=812140, path='C:\Games\Odyssey'",
+            AppConfig.CollapseEnvironmentVariablesInText(@"[INFO] Cached: appid=812140, path='C:\Games\Odyssey'"));
 }
