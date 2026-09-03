@@ -9,10 +9,36 @@ using System.Windows.Forms;
 namespace AchievementOverlay;
 
 /// <summary>
-/// Shared utilities: icon management, screen geometry.
+/// Shared utilities: app version, icon management, screen geometry.
 /// </summary>
 public static class AppUtilities
 {
+    // --- App version ---
+
+    /// <summary>The SDK's default version, which is what a build with no version passed in carries.</summary>
+    private const string DevVersion = "1.0.0";
+
+    /// <summary>
+    /// The assembly's informational version, commit suffix included (e.g. <c>1.9.1+3d0303b</c>).
+    /// Only a release passes a real version in, so a local build reports <see cref="DevVersion"/>.
+    /// </summary>
+    public static string InformationalVersion =>
+        typeof(AppUtilities).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? DevVersion;
+
+    /// <summary>
+    /// The same version as a label for people: <c>v1.9.1</c>, or <c>dev version</c> for a local build.
+    /// The commit suffix is dropped here and kept in <see cref="InformationalVersion"/>, which is what
+    /// the log banner and a diagnostic report carry — <c>1.9.1</c> alone cannot say which build it was.
+    /// </summary>
+    public static string VersionLabel
+    {
+        get
+        {
+            var version = InformationalVersion.Split('+')[0];
+            return version == DevVersion ? "dev version" : $"v{version}";
+        }
+    }
+
     // --- Filesystem scanning ---
 
     /// <summary>
