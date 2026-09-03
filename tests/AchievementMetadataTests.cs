@@ -990,4 +990,44 @@ public class AchievementMetadataTests : IDisposable
 
         Assert.Equal("Schema Name", AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, "english")!.DisplayName);
     }
+
+    // --- Schema digest (for the log line that describes a game's schema) ---
+
+    [Theory]
+    [InlineData(new[] { "001", "002", "093" }, "digits, zero-padded to 3 (\"001\")")]
+    [InlineData(new[] { "01", "02" }, "digits, zero-padded to 2 (\"01\")")]
+    [InlineData(new[] { "1", "2", "93" }, "digits, unpadded (\"1\")")]
+    [InlineData(new[] { "ACH01", "ACH02" }, "identifiers")]
+    [InlineData(new[] { "TrophyTitle_00_fiber_Steam" }, "identifiers")]
+    public void DescribeNameStyle_NamesTheSpellingThatDecidesWhetherAMatchIsPossible(string[] names, string expected) =>
+        Assert.Equal(expected, AchievementMetadata.DescribeNameStyle(names));
+
+    [Fact]
+    public void DescribeNameStyle_ReportsBothWidthsWhenASchemaOverflowsItsOwnPadding()
+    {
+        // Real schemas do this: "000".."009" then "0010".
+        Assert.Equal("digits, zero-padded to 3/4 (\"000\")", AchievementMetadata.DescribeNameStyle(new[] { "000", "009", "0010" }));
+    }
+
+    [Fact]
+    public void DescribeNameStyle_HandlesAnEmptySchema() =>
+        Assert.Equal("none", AchievementMetadata.DescribeNameStyle(Array.Empty<string?>()));
+
+    [Fact]
+    public void DescribeTextShape_TellsSingleLanguageFromMultiLanguage()
+    {
+        var plain = AchievementMetadata.ParseDefinitions("""[{"name":"01","displayName":"Back Door"}]""");
+        var multi = AchievementMetadata.ParseDefinitions("""[{"name":"001","displayName":{"english":"Sparta","russian":"Sparta"}}]""");
+
+        Assert.Equal("string", AchievementMetadata.DescribeTextShape(plain.Select(d => d.DisplayName)));
+        Assert.Equal("object", AchievementMetadata.DescribeTextShape(multi.Select(d => d.DisplayName)));
+    }
+
+    [Fact]
+    public void DescribeTextShape_FlagsASchemaThatMixesBoth()
+    {
+        var mixed = AchievementMetadata.ParseDefinitions("""[{"name":"1","displayName":"Plain"},{"name":"2","displayName":{"english":"Object"}}]""");
+
+        Assert.Equal("mixed", AchievementMetadata.DescribeTextShape(mixed.Select(d => d.DisplayName)));
+    }
 }

@@ -142,7 +142,13 @@ public sealed class GameCache
             {
                 var appId = ReadAppId(appIdFile);
                 if (string.IsNullOrWhiteSpace(appId))
+                {
+                    // Skipping is right; doing it silently is not. An empty, whitespace-only or
+                    // UTF-16 steam_appid.txt reads as blank here, and the game then goes untracked
+                    // with nothing anywhere to say why — the shape of report issue #2 was closed on.
+                    Logger.Warn($"  Skipped: '{appIdFile}' holds no readable appid (empty, or not UTF-8/ASCII text)");
                     continue;
+                }
 
                 var gameDir = Path.GetDirectoryName(appIdFile)!;
                 // generate_emu_config places steam_appid.txt inside steam_settings/ — collapse to game root
@@ -190,9 +196,31 @@ public sealed class GameCache
 
             var extra = ordered.Count > 1 ? $" (+{ordered.Count - 1} more settings folder(s): {string.Join(", ", ordered.Skip(1).Select(d => $"'{d}'"))})" : "";
             Logger.Info($"  Cached: appid={appId}, game={gameName}, path='{ordered[0]}\\achievements.json'{extra}");
+            // Carries the appid so the line identifies its own game: a diagnostic report keeps the
+            // lines about one game and drops the rest, and it recognises them by the appid.
+            Logger.Info($"  Schema: appid={appId}, {DescribeSchema(_cache[appId])}");
         }
 
         return byGame.Count;
+    }
+
+    /// <summary>
+    /// A one-line digest of a game's schema: how many achievements, how their names are spelled, and
+    /// which languages the text carries. These are the questions every report about a wrong name,
+    /// a missing icon or an ignored language turns on, and answering them in the log means a reporter
+    /// no longer has to open the file and describe it by hand.
+    /// </summary>
+    private static string DescribeSchema(GameInfo game)
+    {
+        var definitions = LoadDefinitions(game);
+        if (definitions == null)
+            return "could not be read";
+
+        var languages = AchievementMetadata.CollectLanguages(definitions);
+        var shape = AchievementMetadata.DescribeTextShape(definitions.Select(d => d.DisplayName));
+        var names = AchievementMetadata.DescribeNameStyle(definitions.Select(d => d.Name));
+        var langs = languages.Count > 0 ? string.Join(",", languages.OrderBy(l => l, StringComparer.OrdinalIgnoreCase)) : "-";
+        return $"count={definitions.Count}, names={names}, text={shape}, langs=[{langs}]";
     }
 
     /// <summary>

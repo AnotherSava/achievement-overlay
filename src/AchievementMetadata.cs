@@ -228,6 +228,39 @@ public static class AchievementMetadata
     }
 
     /// <summary>
+    /// How a schema spells its achievement names, in a few words for the log. This is the fact that
+    /// decides whether an emulator writing bare integers can match at all, and it has so far only been
+    /// answerable by asking a reporter to open the file and look.
+    /// </summary>
+    public static string DescribeNameStyle(IEnumerable<string?> names)
+    {
+        var list = names.Where(n => !string.IsNullOrEmpty(n)).Select(n => n!).ToList();
+        if (list.Count == 0)
+            return "none";
+        if (!list.All(n => n.All(char.IsAsciiDigit)))
+            return "identifiers";
+
+        var padded = list.Where(n => n.Length > 1 && n[0] == '0').ToList();
+        if (padded.Count == 0)
+            return $"digits, unpadded (\"{list[0]}\")";
+
+        var widths = padded.Select(n => n.Length).Distinct().OrderBy(w => w).ToList();
+        var width = widths.Count == 1 ? widths[0].ToString() : string.Join("/", widths);
+        return $"digits, zero-padded to {width} (\"{padded[0]}\")";
+    }
+
+    /// <summary>Whether a schema's text is a plain string (one language) or a multi-language object.</summary>
+    public static string DescribeTextShape(IEnumerable<JsonElement?> texts)
+    {
+        var kinds = texts.Where(t => t != null).Select(t => t!.Value.ValueKind).ToList();
+        if (kinds.Count == 0)
+            return "none";
+        if (kinds.All(k => k == JsonValueKind.Object))
+            return "object";
+        return kinds.Any(k => k == JsonValueKind.Object) ? "mixed" : "string";
+    }
+
+    /// <summary>
     /// Steam's localization token (e.g. "NEW_ACHIEVEMENT_1_0_NAME") sits in the same object as the
     /// real languages, but selecting it would show that raw string as the achievement's name.
     /// </summary>
@@ -379,9 +412,16 @@ public static class AchievementMetadata
     /// achievement per keypress. Concurrent because unlocks resolve on the watcher's fire-and-forget
     /// tasks while the panel resolves on the UI thread.
     /// </summary>
-    private static void WarnOnce(string message)
+    private static void WarnOnce(string message) => WarnOnce(message, message);
+
+    /// <summary>
+    /// The same, keyed separately from the text. A message that names the achievement it came from is
+    /// a different string every time and would defeat the dedupe — 93 lines for one game — so a caller
+    /// wanting one line that still carries a worked example passes a fixed key and a specific message.
+    /// </summary>
+    private static void WarnOnce(string key, string message)
     {
-        if (WarnedOnce.TryAdd(message, 0))
+        if (WarnedOnce.TryAdd(key, 0))
             Logger.Warn(message);
     }
 
@@ -489,6 +529,18 @@ public static class AchievementMetadata
 
         // Order the two sources once rather than per field: reversing one field and not the other
         // would be a silent bug, and this way they cannot disagree about which source leads.
+        // The one fact about resolution that reaches neither the log nor the screen: that a definition
+        // was found only by folding leading zeros, which is what decides whether the schema's text or
+        // the unlock file's leads. Keyed so it is one line with an example, not one per achievement.
+        if (definition != null && !matchedExactly)
+        {
+            WarnOnce("leading-zero-match",
+                $"Matching achievement names by ignoring leading zeros (e.g. '{achievementName}' matched schema entry '{definition.Name}'). "
+                + (inline != null
+                    ? "The unlock file's own text leads for these, so the schema supplies the icon."
+                    : "The schema supplies both text and icon for these."));
+        }
+
         (JsonElement? Name, JsonElement? Description) schema = (definition?.DisplayName, definition?.Description);
         (JsonElement? Name, JsonElement? Description) inlineText = (inline?.DisplayName, inline?.Description);
         var (leading, filling) = matchedExactly ? (schema, inlineText) : (inlineText, schema);
