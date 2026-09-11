@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A maintainer-side tool, not part of the shipped app: it replays a diagnostic report through the
+    resolver so a bug report can be measured rather than reasoned about.
+
+    It is in the solution, and therefore in the commit gate, on purpose. A tool that calls the app's
+    own code has to break the build when that code changes shape, rather than rotting quietly until
+    the next time someone needs it.
+
+    The desktop switches mirror tests/AchievementOverlay.Tests.csproj: src is a WPF and WinForms
+    assembly, so a project referencing it resolves the same framework even when every type it
+    touches is plain.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>replay-report</AssemblyName>
+    <RootNamespace>AchievementOverlay.ReplayReport</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AchievementOverlay.csproj" />
+  </ItemGroup>
+
+</Project>

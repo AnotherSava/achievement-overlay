@@ -4,7 +4,7 @@
 # Why this exists: a compiler warning in the *test* project reached a release once, because the
 # checks run by hand were `dotnet build src/...` (which never compiles the test project) and
 # `dotnet test` filtered down to its pass/fail line (which hides warnings). CI surfaced it as a
-# build annotation after the tag was already pushed. Both projects are checked here, warnings are
+# build annotation after the tag was already pushed. Every project is checked here, warnings are
 # errors, and the build is forced to run rather than being served from the incremental cache —
 # MSBuild skips analysis for unchanged projects, so a cached build reports no warnings even when
 # the code still has them.
@@ -15,9 +15,12 @@ cd "$(dirname "$0")/.." || exit 1
 
 fail() { echo; echo "FAILED: $1"; exit 1; }
 
-# Building the test project also builds src through its project reference, so this covers both.
+# The whole solution rather than the test project alone. src comes in through the project reference
+# either way, but tools/ReplayReport calls the app's own resolver, and a tool that does that has to
+# break the build when the resolver changes shape rather than rotting unnoticed until the next time
+# someone needs it.
 echo "=== Build (Release, warnings as errors) ==="
-dotnet build tests/AchievementOverlay.Tests.csproj -c Release --no-incremental -warnaserror \
+dotnet build achievement-overlay.slnx -c Release --no-incremental -warnaserror \
     || fail "build produced errors or warnings"
 
 echo

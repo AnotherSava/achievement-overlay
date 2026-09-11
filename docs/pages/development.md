@@ -27,9 +27,10 @@ The executable lands in `src/bin/Debug/net10.0-windows/`, with `config.json` cop
 | `dotnet build src/AchievementOverlay.csproj` | Build the app |
 | `dotnet build src/AchievementOverlay.csproj -c Release` | Release build |
 | `dotnet test tests/AchievementOverlay.Tests.csproj` | Run the xUnit suite |
+| `dotnet run --project tools/ReplayReport -- <report.json>` | [Replay a diagnostic report](development/replaying-a-report) through the resolver |
 | `bash .claude/commit-checks.sh` | The gate: a clean-slate Release build with `-warnaserror`, then the tests |
 
-Prefer the last one before pushing. It builds the **test** project, which pulls in `src` through its project reference, so warnings in test code are seen at all — and it passes `--no-incremental`, because MSBuild skips analysis for unchanged projects and a cached build reports no warnings even when the code still has them.
+Prefer the last one before pushing. It builds the whole solution, so warnings in the test project and in `tools/` are seen at all — and it passes `--no-incremental`, because MSBuild skips analysis for unchanged projects and a cached build reports no warnings even when the code still has them.
 
 ## Configuration files
 
@@ -56,6 +57,7 @@ src/
   GbeConfig/                  the config generator engine behind the wizard
   GbeOverlay/                 reading a game's own configs.overlay.ini
 tests/                        xUnit tests, mirroring src/ file for file
+tools/ReplayReport/           maintainer tool: replays a diagnostic report through the resolver
 config/default.json           the config.json shipped next to the exe
 docs/                         this documentation site
 ```
@@ -77,3 +79,5 @@ Pushing a `v*` tag builds and publishes both archives — self-contained and fra
 ## Going deeper
 
 The [GBE reference](development/gbe-reference) documents the emulator itself: where it stores unlocks, how its overlay config files are parsed, the achievement schema format, and why hidden achievement descriptions come back blank. It is the background behind most of what `GbeConfig/` and `GbeOverlay/` do.
+
+[Replaying a report](development/replaying-a-report) covers the maintainer tool that feeds a user's diagnostic report back through the resolver, so a report of wrong achievement text can be measured rather than reasoned about.

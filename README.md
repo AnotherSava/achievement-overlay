@@ -44,4 +44,5 @@ See full project documentation at **[anothersava.github.io/achievement-overlay](
 - [Troubleshooting](https://anothersava.github.io/achievement-overlay/pages/troubleshooting)
 - [Development](https://anothersava.github.io/achievement-overlay/pages/development)
   - [GBE reference](https://anothersava.github.io/achievement-overlay/pages/development/gbe-reference)
+  - [Replaying a report](https://anothersava.github.io/achievement-overlay/pages/development/replaying-a-report)
 - [Privacy](https://anothersava.github.io/achievement-overlay/pages/privacy)

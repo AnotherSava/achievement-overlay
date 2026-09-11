@@ -401,10 +401,38 @@ dotnet test tests/AchievementOverlay.Tests.csproj
 ```
 
 `.claude/commit-checks.sh` is the gate `/commit` runs before it will propose a commit, and it is
-stricter than either line above on purpose. It builds the **test** project (which pulls in `src`
-through the project reference, so warnings in test code are seen at all), with `-warnaserror` and
-`--no-incremental` — MSBuild skips analysis for unchanged projects, so a cached build reports no
-warnings even when the code still has them. A `CS8625` in a test reached a release that way once.
+stricter than either line above on purpose. It builds the whole **solution** (so warnings in the test
+project and under `tools/` are seen at all), with `-warnaserror` and `--no-incremental` — MSBuild
+skips analysis for unchanged projects, so a cached build reports no warnings even when the code still
+has them. A `CS8625` in a test reached a release that way once.
+
+## Replaying a diagnostic report
+
+`tools/ReplayReport/` feeds a user's **Report a problem…** file back through the resolver and prints
+what they would have seen for every achievement — the display name, the description, which source
+supplied each, and under which language. It exists because text resolution is a pure function of four
+things a report already carries (the unlock state, the schema, the achievement's name, the configured
+language), so a report of wrong text is measurable rather than something to reason about. Run it with
+`dotnet run --project tools/ReplayReport -- <report.json>`; user-facing notes are in
+`docs/pages/development/replaying-a-report.md`.
+
+Three rules hold it together. **It calls the app's own code** — `ParseUnlockStates`, `ParseDefinitions`,
+`ResolvePreferringSchema`, all already public because the app calls them — and must never grow a copy
+of the precedence rules, which would answer "what does my copy do" rather than "what did they see"
+and would drift silently. **Which source won a field is observed, not asserted**: the tool compares
+what the resolver returned against what each source carries, so the attribution stays true when the
+rule changes, and `unclear` marks text matching no source rather than a confident wrong answer. The
+same discipline separates a refused match from an absent one — a name folding onto two schema entries
+is found by offering each definition to `FindDefinition` alone, not by re-deriving its padding rule.
+**It only reports what the reporter could have seen**: an entry the app discards before resolving is
+never resolved here either, and a section the app tolerates failing — `GameCache.LoadDefinitions`
+swallows an unreadable schema — is named in the header rather than ending the run.
+
+It is in the solution, and therefore in the commit gate, so a resolver signature change breaks the
+build instead of leaving the tool to rot. Nothing in `src/` exists for it, and nothing is added to the
+shipped app. Icons are out of scope: `ResolveIconPath` needs the image files and a report carries the
+schema's text but not its folder, so the tool passes a directory it never creates — the reporter's own
+path could exist on a maintainer's machine, and an icon off the wrong disk would read as theirs.
 
 ## Documentation site
 
