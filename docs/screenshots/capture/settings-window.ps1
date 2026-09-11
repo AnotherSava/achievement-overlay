@@ -36,17 +36,7 @@ $hwnd = [IntPtr]::Zero
 for ($i = 0; $i -lt 40; $i++) { Start-Sleep -Milliseconds 250; $hwnd = [SettingsWin]::Find([uint32]$proc); if ($hwnd -ne [IntPtr]::Zero) { break } }
 if ($hwnd -eq [IntPtr]::Zero) { throw "Settings window never appeared." }
 
-# FromHandle, not a global search: a Descendants sweep can hand back a stale element.
-$ua = [System.Windows.Automation.AutomationElement]
-$win = $ua::FromHandle($hwnd)
-$li = New-Object System.Windows.Automation.PropertyCondition($ua::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)
-$nav = $null
-foreach ($n in $win.FindAll([System.Windows.Automation.TreeScope]::Descendants, $li)) {
-  if ($n.Current.Name -eq "Notifications") { $nav = $n; break }
-}
-if (-not $nav) { throw "Notifications page not found in the nav rail." }
-$nav.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
-Start-Sleep -Milliseconds 900
+Select-NavPage -Hwnd $hwnd -Name "Notifications"
 
 # CropToOpaque: this window is opaque, so its rounded bottom corners are chrome curving into the
 # client rectangle, not background that alpha recovery can remove.

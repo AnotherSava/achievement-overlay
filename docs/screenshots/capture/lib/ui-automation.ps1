@@ -87,6 +87,41 @@ function Click-Element {
 
 <#
 .SYNOPSIS
+  Switches a dialog's nav rail to the page with the given name, then waits for it to render.
+.DESCRIPTION
+  Clicked, never SelectionItemPattern.Select(). Select() moves *keyboard* focus onto the row and WPF
+  then draws its dotted focus rectangle, which no mouse user ever sees - so a shot taken that way
+  documents a state the product does not normally show. That artifact reached a published screenshot
+  once, because one capture script clicked while its sibling selected, and it was caught only by
+  comparing two images side by side. Both scripts call this, so the two cannot diverge again.
+
+  Resolved from the window handle rather than searched for globally: a desktop-wide Descendants
+  sweep can hand back a stale element belonging to a window that has since closed.
+#>
+function Select-NavPage {
+  param(
+    [Parameter(Mandatory)] [IntPtr] $Hwnd,
+    [Parameter(Mandatory)] [string] $Name,
+    [int] $SettleMilliseconds = 900
+  )
+
+  $ua = [System.Windows.Automation.AutomationElement]
+  $scope = [System.Windows.Automation.TreeScope]
+  $window = $ua::FromHandle($Hwnd)
+  $condition = New-Object System.Windows.Automation.PropertyCondition($ua::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)
+
+  foreach ($row in $window.FindAll($scope::Descendants, $condition)) {
+    if ($row.Current.Name -eq $Name) {
+      Click-Element -Element $row
+      Start-Sleep -Milliseconds $SettleMilliseconds
+      return
+    }
+  }
+  throw "Page '$Name' not found in the nav rail."
+}
+
+<#
+.SYNOPSIS
   Right-clicks the tray icon and returns the menu's "Settings..." item once the menu is up.
 .DESCRIPTION
   Polls rather than sleeping a fixed interval: a synthetic right-click on the tray opens the menu only

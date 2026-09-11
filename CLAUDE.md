@@ -294,7 +294,7 @@ popup the user has just placed deliberately — and the recent panel, app-owned 
 then review that unlock in a different corner from the one it appeared in.
 
 Plan, with the measured contrast figures and the limits that are accepted rather than engineered
-around: `docs/plans/2026-08-30-popup-position-and-background.md`.
+around: `docs/plans/completed/2026-08-30-popup-position-and-background.md`.
 
 ## Per-game overlay settings
 
@@ -444,7 +444,14 @@ global `/documentation` skill reads it; nothing in the app does.
 
 `docs/screenshots/capture/<id>.sh` deploys the working tree, then drives the app through `<id>.ps1` —
 so a shot documents the code under review, not whatever release is installed. Shared pieces live in
-`capture/lib/`: `ui-automation.ps1` (tray icon and its menu) and `window-capture.ps1`.
+`capture/lib/`: `ui-automation.ps1` (the tray icon, its menu, and switching a dialog's nav rail to a
+named page), `window-capture.ps1`, and `docborder.py`.
+
+Anything two capture scripts both do belongs in `ui-automation.ps1`, not copied into each. The rule
+was bought: the settings and report scripts each selected a nav page their own way — one clicked, one
+called `SelectionItemPattern.Select()` — and `Select()` moves *keyboard* focus, so WPF drew its dotted
+focus rectangle into a published screenshot documenting a state no mouse user ever sees. Nothing
+caught it but comparing two images side by side. `Select-NavPage` now owns that step for both.
 
 The `window-capture.ps1` helper captures twice over known backdrops and solves `O = C*a + B*(1-a)` per
 pixel, producing a PNG with real alpha. That is not decoration: the popup is translucent by design, so

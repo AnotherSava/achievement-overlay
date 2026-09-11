@@ -33,7 +33,6 @@ $proc = (Get-Process AchievementOverlay).Id
 if ([ReportWin]::Find([uint32]$proc) -eq [IntPtr]::Zero) {
   # Open-TrayMenu returns the Settings item; the menu it opened holds every other item too.
   Open-TrayMenu | Out-Null
-  $ua = [System.Windows.Automation.AutomationElement]
   $item = Find-ByName -ControlType ([System.Windows.Automation.ControlType]::MenuItem) -Name "Report a problem*"
   if (-not $item) { throw "Report a problem item not found in the tray menu." }
   Click-Element -Element $item
@@ -43,23 +42,9 @@ $hwnd = [IntPtr]::Zero
 for ($i = 0; $i -lt 40; $i++) { Start-Sleep -Milliseconds 250; $hwnd = [ReportWin]::Find([uint32]$proc); if ($hwnd -ne [IntPtr]::Zero) { break } }
 if ($hwnd -eq [IntPtr]::Zero) { throw "Report a problem window never appeared." }
 
-# FromHandle, not a global search: a Descendants sweep can hand back a stale element.
-$ua = [System.Windows.Automation.AutomationElement]
-$win = $ua::FromHandle($hwnd)
-
 # App config rather than the first page: it is the part whose one line, its switch and a redacted
 # key are all visible at once, so the shot shows what the window is for.
-$li = New-Object System.Windows.Automation.PropertyCondition($ua::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)
-$nav = $null
-foreach ($n in $win.FindAll([System.Windows.Automation.TreeScope]::Descendants, $li)) {
-  if ($n.Current.Name -eq "App config") { $nav = $n; break }
-}
-if (-not $nav) { throw "App config page not found in the nav rail." }
-# Clicked, not Select()ed. SelectionItemPattern.Select() moves *keyboard* focus onto the row, and
-# WPF then draws its dotted focus rectangle - which no mouse user ever sees, so a shot taken that way
-# documents a state the product does not normally show.
-Click-Element -Element $nav
-Start-Sleep -Milliseconds 900
+Select-NavPage -Hwnd $hwnd -Name "App config"
 
 # CropToOpaque, for the same reason as the settings window: this one is opaque, so its rounded
 # bottom corners are its own border curving inward rather than background to be removed.
