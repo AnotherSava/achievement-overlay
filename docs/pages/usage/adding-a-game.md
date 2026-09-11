@@ -19,6 +19,8 @@ It only asks for what it cannot work out on its own, so a typical run is two or 
 4. **Hidden achievements** — shown only if the game actually has hidden achievements and you have not already saved a Firecrawl API key. Steam blanks out the descriptions of secret achievements; the real text lives on SteamDB, behind Cloudflare, so the tool fetches it through [Firecrawl](https://firecrawl.dev), a hosted scraper. Paste a free Firecrawl API key, or leave it blank to skip — those descriptions then stay as placeholders.
 5. **Ready** — review the summary and options (back up the original DLL, and an **Advanced** section for the GBE release folder), then click **Add game**.
 
+<a href="../../screenshots/add-game.png"><img src="../../screenshots/add-game.png" alt="The Add game wizard on its Ready page, showing the detected game folder and AppID, the backup option, and the Add game button"></a>
+
 ## What it then does
 
 It fetches the achievement icons from Steam, downloads the matching GBE release, backs up and replaces the Steam DLL, and writes a `steam_settings/` folder with GBE's own overlay disabled — this app replaces it. The final page shows live progress.

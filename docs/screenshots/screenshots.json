@@ -24,6 +24,7 @@
       ],
       "shows": "The system tray context menu: Show recent achievements, Add game, Pause notifications, Settings, Open config/logs location, Report a problem, Exit",
       "policy": "auto",
+      "verifiedAt": "07c6aa4",
       "capture": {
         "command": "bash docs/screenshots/capture/tray-menu.sh",
         "steps": [
@@ -40,6 +41,7 @@
       ],
       "shows": "The Settings window on its Notifications page, with the nav rail and the footer visible",
       "policy": "auto",
+      "verifiedAt": "3b49a22",
       "capture": {
         "command": "bash docs/screenshots/capture/settings-window.sh",
         "steps": [
@@ -53,12 +55,34 @@
       }
     },
     {
+      "id": "add-game-window",
+      "files": [
+        "add-game.png"
+      ],
+      "shows": "The Add game wizard on its Ready page: the detected game folder and Steam AppID, the back-up-the-original-library option with its explanation, the collapsed Advanced options section, and the Back / Cancel / Add game buttons",
+      "policy": "auto",
+      "capture": {
+        "command": "bash docs/screenshots/capture/add-game-window.sh",
+        "steps": [
+          "Deploy the current build so the shot matches the working tree, not the installed release",
+          "Open the tray menu and click Add game...",
+          "Keep the anchor: the driver points the wizard at a game with a Steam DLL and no steam_settings of its own, so the Ready page shows the ordinary run rather than the 'a configuration already exists' warning. A different game changes what the prose beside the image describes. The default is this machine's Horizon Zero Dawn Remastered install; set CAPTURE_GAME_DIR to the equivalent elsewhere rather than editing the script",
+          "Type the folder into the box rather than using Browse: FolderBrowserDialog is a native modal that blocks the driver thread and cannot be filled by name",
+          "Click Next until the button relabels itself 'Add game', then stop. That label IS the stop condition, not a step: pressing it backs up and replaces the game's steam_api64.dll. The driver reads the label before every click and closes the window afterwards, which is the wizard's cancel",
+          "Leave Advanced options collapsed: that is the state a user first sees",
+          "Use -CropToOpaque: this window is opaque, so its rounded bottom corners are its own border curving into the client rectangle, which alpha recovery preserves rather than removes",
+          "Add the hairline with lib/docborder.py, which the capture script already calls: this window's own edge is near-white and the docs page is white, so the shot has no visible boundary without it. Applied by hand it would be silently lost on the next capture"
+        ]
+      }
+    },
+    {
       "id": "report-window",
       "files": [
         "report-window.png"
       ],
       "shows": "The Report a problem window on its App config page: the notice, the nav rail of parts, one part's line and Include switch, and an API key shown redacted",
       "policy": "auto",
+      "verifiedAt": "07c6aa4",
       "capture": {
         "command": "bash docs/screenshots/capture/report-window.sh",
         "steps": [

@@ -28,3 +28,6 @@ config/local.json
 
 # Dev scripts
 /scripts/
+
+# Contact sheets and saved originals from the /documentation screenshot pass
+/tmp/
