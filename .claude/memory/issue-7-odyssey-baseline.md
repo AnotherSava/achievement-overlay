@@ -25,7 +25,8 @@ patch scoped to that branch would do nothing for him. The per-field rule as that
 fix him, but only because it replaces the `matchedExactly` ternary outright rather than amending one
 side of it — and those two readings are easy to confuse while implementing.
 
-**How to apply:** before claiming #7 is fixed, re-run the replay on his report rather than reasoning
-about it — `dotnet run --project tools/ReplayReport -- <report.json>`, whose summary counts are the
-before and the after. A fix that works shows `displayName schema 93` where the baseline shows
-`unlock 93`. Check which of the two readings of fix (2) is being built.
+**How to apply:** re-run the replay rather than reasoning about it —
+`dotnet run --project tools/ReplayReport -- <report.json>`, whose summary counts are the before and
+the after. The per-field language rule shipped on 2026-09-11 and measures `displayName schema 93 /
+unlock 0` against this baseline's `unlock 93`, with russian on screen for all 93. Keep the baseline
+as the comparison point for any later change to `Order`/`CarriesLanguage`.

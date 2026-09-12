@@ -36,15 +36,28 @@ zero-padded Steam name — AC Odyssey's schema says `001` where the emulator wri
 ([issue #7](https://github.com/AnotherSava/achievement-overlay/issues/7)). Padding is the only part
 of such a name its writer cannot fix at its own end (a key-prefix setting concatenates a literal
 string ahead of the raw id and cannot pad), which is why padding gets a fallback and a differing
-prefix does not. The exact match still wins wherever it sits in the list, so nothing that resolved
-before resolves differently. A padding match is an *inference* about which achievement a number
-denotes rather than the schema naming it, so it supplies the icon and fills fields the unlock file
-left blank but never overwrites text that file carries — a wrong icon beside right text is visible,
-where wrong text reads as correct. That precedence is the whole mitigation, because for a
-digits-only schema the collision guard is worth nothing either way: real Steam games ship
-achievements named `1`..`29` and `01`..`54`, so a colliding save folder can already reach them.
-Two differently spelled entries folding onto one form match nothing, rather than being decided by
-the order their author typed them in.
+prefix does not. The exact match still wins wherever it sits in the list, and a folded match then
+leads exactly like it — icon and text both. That reverses the first fix, which let a fold supply only
+the icon on the reasoning that it is an *inference* rather than the schema naming the achievement.
+Replaying the reporter's own file settled it: all 93 of his achievements match by folding and none by
+name, so the cautious rule left his fully-localised schema unused in every case it existed for, and
+the mitigation it bought was worth nothing anyway — for a digits-only schema the collision guard
+already fails, since real Steam games ship achievements named `1`..`29` and `01`..`54`, so an
+unpadded name reaches a colliding schema by exact match with or without folding. What still bounds it
+is that two differently spelled entries folding onto one form match nothing, rather than being decided
+by the order their author typed them in.
+
+**The one thing that outranks the schema is the selected language, decided per field.**
+`CarriesLanguage` asks whether a `displayName`/`description` is a multi-language object holding a
+non-empty value under the chosen key; `Order` puts the schema first unless it fails that test and the
+unlock file passes it. A plain string is deliberately *not* written in any nameable language — nothing
+in the file says which — so an emulator inlining english cannot displace a schema carrying russian,
+which is what [issue #7](https://github.com/AnotherSava/achievement-overlay/issues/7) needed, while an
+unlock file inlining `{english, russian}` does displace an english-only schema, which is a separate
+defect nobody reported. Per field because one field can pass while the other fails on the same
+achievement — a hidden achievement's description is redacted to an empty string, and an empty value
+does not count as carrying the language. The pair is returned ordered rather than picked, so a leading
+source that resolves blank still falls through to the other.
 
 Both the popup path
 (`Resolve`) and the Recent panel call it, so the two can't disagree about an achievement's text;

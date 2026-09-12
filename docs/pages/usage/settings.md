@@ -22,7 +22,7 @@ Clicking **Save** writes only the settings that changed and applies them straigh
 
 ## Fields worth a note
 
-**Achievement text** picks the language achievement names and descriptions appear in. The list holds the languages your installed games actually provide; a game that does not have the chosen one falls back to english.
+**Achievement text** picks the language achievement names and descriptions appear in. The list holds the languages your installed games actually provide; a game that does not have the chosen one falls back to english. Where a game has two sources of text — a `steam_settings/` schema and an emulator that writes its own text into the unlock file — whichever of them is written in the language you picked is used, field by field.
 
 **Shortcut** is captured rather than typed — click it and press the combination you want. Backspace clears it, leaving **Show recent achievements** in the tray menu as the way in. While the field has focus, the combination you press is recorded instead of running whatever normally owns it, so you can reassign a shortcut that is already taken — by this app, by another program, or by a desktop shortcut's **Shortcut key**. Nothing is intercepted once you click away from the field.
 

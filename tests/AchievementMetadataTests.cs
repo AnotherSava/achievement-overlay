@@ -728,7 +728,7 @@ public class AchievementMetadataTests : IDisposable
     {
         // The appid-collision case: a schema cached under a colliding id defines other achievements,
         // whose names share nothing with this one. Bare digits are the exception — see
-        // ResolvePreferringSchema_NumericSchemaUnderCollidingAppId_KeepsInlineText below.
+        // ResolvePreferringSchema_NumericSchemaUnderCollidingAppId_TakesSchemaText below.
         var states = AchievementMetadata.ParseUnlockStates(UplayJson);
         var definitions = AchievementMetadata.ParseDefinitions(
             """[{"name": "ACH01", "displayName": "A different game's achievement"}]""");
@@ -823,11 +823,11 @@ public class AchievementMetadataTests : IDisposable
     }
 
     [Fact]
-    public void ResolvePreferringSchema_ZeroPaddedSchemaName_KeepsInlineTextOverSchemaText()
+    public void ResolvePreferringSchema_ZeroPaddedSchemaName_LeadsLikeAnExactMatch()
     {
-        // A padding match is an inference about which achievement a number denotes. It may add the
-        // icon, but text the unlock file carried must survive it — a wrong icon beside right text is
-        // visible, where wrong text reads as correct.
+        // A folded match is used for text as well as the icon. The first fix for issue #7 let it
+        // supply only the icon, which left the reporter's localised schema unused: every one of his
+        // 93 achievements matches by folding zeros and none by name.
         var states = AchievementMetadata.ParseUnlockStates(
             """{"1": {"earned": 1, "displayName": "Inline name", "description": "Inline description."}}""");
         var definitions = AchievementMetadata.ParseDefinitions(PaddedSchemaWithIcon());
@@ -836,9 +836,34 @@ public class AchievementMetadataTests : IDisposable
             states["1"], definitions, _tempDir, "1", "english");
 
         Assert.NotNull(resolved);
-        Assert.Equal("Inline name", resolved.DisplayName);
-        Assert.Equal("Inline description.", resolved.Description);
+        Assert.Equal("This is Sparta!", resolved.DisplayName);
+        Assert.Equal("Complete the Battle of 300.", resolved.Description);
         Assert.NotNull(resolved.IconPath);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_ZeroPaddedSchemaName_HonoursLanguageOverInlineEnglish()
+    {
+        // The reporter's end-to-end shape (issue #7): a schema carrying russian, an unlock file
+        // inlining plain english, and the Achievement text setting on russian. The plain-string clause
+        // this leans on is pinned separately, by
+        // ResolvePreferringSchema_PlainInlineString_DoesNotOutrankSchemaLackingTheLanguage — here the
+        // schema carries the language, so that clause is never reached.
+        var states = AchievementMetadata.ParseUnlockStates(
+            """{"1": {"earned": 1, "displayName": "This is Sparta!", "description": "Complete the Battle of 300."}}""");
+        var definitions = AchievementMetadata.ParseDefinitions(
+            """
+            [{"name": "001",
+              "displayName": {"english": "This is Sparta!", "russian": "Это Спарта!"},
+              "description": {"english": "Complete the Battle of 300.", "russian": "Пройдите битву 300."}}]
+            """);
+
+        var resolved = AchievementMetadata.ResolvePreferringSchema(
+            states["1"], definitions, _tempDir, "1", "russian");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("Это Спарта!", resolved.DisplayName);
+        Assert.Equal("Пройдите битву 300.", resolved.Description);
     }
 
     [Fact]
@@ -859,19 +884,75 @@ public class AchievementMetadataTests : IDisposable
     }
 
     [Fact]
-    public void ResolvePreferringSchema_ZeroPaddedSchemaName_DescriptionOnlyInline_TakesSchemaDisplayName()
+    public void ResolvePreferringSchema_LanguagePreferenceIsPerField()
     {
-        // Per field, not per source: the unlock file described the achievement but did not name it.
+        // Per field, not per source. The schema names this achievement in german and describes it
+        // only in english, while the unlock file inlines both — so one field comes from each, which
+        // no whole-source choice can produce.
         var states = AchievementMetadata.ParseUnlockStates(
-            """{"1": {"earned": 1, "description": "Inline description."}}""");
-        var definitions = AchievementMetadata.ParseDefinitions(PaddedSchemaWithIcon());
+            """
+            {"A": {"earned": 1,
+                   "displayName": {"english": "Inline name", "german": "Inline-Name"},
+                   "description": {"english": "Inline description.", "german": "Inline-Beschreibung."}}}
+            """);
+        var definitions = AchievementMetadata.ParseDefinitions(
+            """
+            [{"name": "A",
+              "displayName": {"english": "Schema name", "german": "Schema-Name"},
+              "description": {"english": "Schema description."}}]
+            """);
 
         var resolved = AchievementMetadata.ResolvePreferringSchema(
-            states["1"], definitions, _tempDir, "1", "english");
+            states["A"], definitions, _tempDir, "A", "german");
 
         Assert.NotNull(resolved);
-        Assert.Equal("This is Sparta!", resolved.DisplayName);
-        Assert.Equal("Inline description.", resolved.Description);
+        Assert.Equal("Schema-Name", resolved.DisplayName);
+        Assert.Equal("Inline-Beschreibung.", resolved.Description);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_ExactMatch_EnglishOnlySchema_TakesInlineSelectedLanguage()
+    {
+        // The defect nobody reported, found while tracing issue #7: on an exact match the schema used
+        // to lead unconditionally, so a user whose emulator inlines the selected language against an
+        // english-only schema was shown english whatever the setting said.
+        var states = AchievementMetadata.ParseUnlockStates(
+            """{"A": {"earned": 1, "displayName": {"english": "First Strike", "russian": "Первый удар"}}}""");
+        var definitions = AchievementMetadata.ParseDefinitions(
+            """[{"name": "A", "displayName": {"english": "First Strike"}}]""");
+
+        Assert.Equal("Первый удар", AchievementMetadata.ResolvePreferringSchema(
+            states["A"], definitions, _tempDir, "A", "russian")!.DisplayName);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_PlainInlineString_DoesNotOutrankSchemaLackingTheLanguage()
+    {
+        // The deliberate core of the rule, and the only shape that reaches it: the schema does not
+        // carry the selected language either, so the question is whether a plain string counts as
+        // carrying it. It does not — it is text in some language with nothing saying which.
+        var states = AchievementMetadata.ParseUnlockStates(
+            """{"A": {"earned": 1, "displayName": "Inline name"}}""");
+        var definitions = AchievementMetadata.ParseDefinitions(
+            """[{"name": "A", "displayName": {"english": "Schema name"}}]""");
+
+        Assert.Equal("Schema name", AchievementMetadata.ResolvePreferringSchema(
+            states["A"], definitions, _tempDir, "A", "russian")!.DisplayName);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_SchemaLanguageIsWhitespace_DoesNotOutrankInline()
+    {
+        // Whitespace counts as blank. Without that it wins the field and is then accepted as text,
+        // leaving a blank line where the achievement's description belongs — where an outright empty
+        // value costs nothing either way, since the fall-through absorbs it.
+        var states = AchievementMetadata.ParseUnlockStates(
+            """{"A": {"earned": 1, "description": {"english": "Inline description.", "russian": "Описание"}}}""");
+        var definitions = AchievementMetadata.ParseDefinitions(
+            """[{"name": "A", "description": {"english": "Schema description.", "russian": "   "}}]""");
+
+        Assert.Equal("Описание", AchievementMetadata.ResolvePreferringSchema(
+            states["A"], definitions, _tempDir, "A", "russian")!.Description);
     }
 
     [Fact]
@@ -891,11 +972,13 @@ public class AchievementMetadataTests : IDisposable
     }
 
     [Fact]
-    public void ResolvePreferringSchema_NumericSchemaUnderCollidingAppId_KeepsInlineText()
+    public void ResolvePreferringSchema_NumericSchemaUnderCollidingAppId_TakesSchemaText()
     {
-        // Bare digits are the one name shape the appid-collision guard cannot help with: a real
-        // installed game names its achievements "01".."54", so a colliding save folder can reach it.
-        // The relaxed precedence is what keeps that costing an icon rather than the text as well.
+        // The accepted cost of letting a folded match lead. Bare digits are the one name shape the
+        // appid-collision guard cannot help with — a real installed game names its achievements
+        // "01".."54", so a colliding save folder can reach it — but the guard was already worthless
+        // there: an unpadded "1" against a colliding schema's "1" matches exactly and has always taken
+        // its text. Folding zeros widens which colliding schemas are reachable, not whether they are.
         var states = AchievementMetadata.ParseUnlockStates(OdysseyUnlockJson);
         var definitions = AchievementMetadata.ParseDefinitions(
             """[{"name": "01", "displayName": "A different game's achievement", "description": "Its description."}]""");
@@ -904,15 +987,34 @@ public class AchievementMetadataTests : IDisposable
             states["1"], definitions, _tempDir, "1", "english");
 
         Assert.NotNull(resolved);
-        Assert.Equal("This is Sparta!", resolved.DisplayName);
-        Assert.Equal("Complete the Battle of 300.", resolved.Description);
+        Assert.Equal("A different game's achievement", resolved.DisplayName);
+        Assert.Equal("Its description.", resolved.Description);
     }
 
     [Fact]
-    public void ResolvePreferringSchema_ExactMatch_StillLeadsOverInlineText()
+    public void ResolvePreferringSchema_AmbiguousFold_KeepsInlineText()
     {
-        // The exact path is unchanged: it is the schema speaking about this achievement by name, and
-        // it is what supplies localised text a self-describing writer cannot.
+        // What still bounds that cost: two schema entries folding onto one name are refused rather
+        // than guessed between, so the unlock file's own text stands.
+        var states = AchievementMetadata.ParseUnlockStates(OdysseyUnlockJson);
+        var definitions = AchievementMetadata.ParseDefinitions(
+            """[{"name": "01", "displayName": "One"}, {"name": "001", "displayName": "Another"}]""");
+
+        var resolved = AchievementMetadata.ResolvePreferringSchema(
+            states["1"], definitions, _tempDir, "1", "english");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("This is Sparta!", resolved.DisplayName);
+        Assert.Null(resolved.IconPath);
+    }
+
+    [Fact]
+    public void ResolvePreferringSchema_ExactMatch_LeadsOverPlainInlineText()
+    {
+        // Plain inline text never displaces the schema, on an exact match or a folded one: it is text
+        // in some language with nothing saying which, while the schema names this achievement and
+        // carries the localised text a self-describing writer cannot. The description pins the harder
+        // half — the schema has no german for it, and the plain inline string still does not lead.
         var states = AchievementMetadata.ParseUnlockStates(
             """{"001": {"earned": 1, "displayName": "Inline name", "description": "Inline description."}}""");
         var definitions = AchievementMetadata.ParseDefinitions(PaddedSchemaWithIcon());
@@ -922,6 +1024,7 @@ public class AchievementMetadataTests : IDisposable
 
         Assert.NotNull(resolved);
         Assert.Equal("Das ist Sparta!", resolved.DisplayName);
+        Assert.Equal("Complete the Battle of 300.", resolved.Description);
     }
 
     // --- Resolve: how hard the schema is looked for ---

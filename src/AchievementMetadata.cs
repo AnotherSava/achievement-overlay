@@ -336,9 +336,9 @@ public static class AchievementMetadata
     /// fallback that achievement gets no icon (issue #7). Padding is the one part of such a name its
     /// writer cannot fix at its own end: a key-prefix setting concatenates a literal string ahead of
     /// the raw id and cannot pad. That is why padding gets a fallback and a differing prefix does not.
-    /// The exact match wins wherever it sits in the list, so nothing that resolves today resolves
-    /// differently, and <paramref name="matchedExactly"/> reports which pass answered — a padding
-    /// match is an inference, and the caller must not let it overwrite text the unlock file carries.
+    /// The exact match wins wherever it sits in the list, and <paramref name="matchedExactly"/> reports
+    /// which pass answered — a folded match resolves exactly like a named one, so the caller logs it
+    /// once rather than treating it differently, since it is otherwise invisible.
     /// Two differently spelled entries folding onto one form match nothing rather than being decided
     /// by the order their author happened to type them in.
     /// </summary>
@@ -507,15 +507,30 @@ public static class AchievementMetadata
     /// the names are distinctive, and for a schema named in bare digits it is no guard at all, with or
     /// without the leading-zero fallback in <see cref="FindDefinition"/> — which is why that fallback
     /// stops at digits and goes no further.
-    /// Field by field rather than source by source, because a schema can name an achievement and still
-    /// leave a field blank — Steam redacts hidden achievements' descriptions, and the Add game wizard
-    /// writes them empty when no Firecrawl key fills them in. Choosing wholesale would then discard a
-    /// description the unlock file did carry.
-    /// A definition found by the leading-zero fallback rather than by name leads for nothing: it
-    /// supplies the icon and fills fields the unlock file left blank, but never replaces text the
-    /// unlock entry carries. The fallback is an inference about which achievement a number denotes,
-    /// and a wrong one attaching a wrong icon beside right text is visible where wrong text reads as
-    /// correct. A file with no inline text has nothing to protect, so it still takes the schema's.
+    /// <para>
+    /// One thing outranks the schema, and it is decided per field: a source written in the selected
+    /// language beats one that is not. A plain string does not count as written in it — that is text
+    /// in some language with nothing saying which — so an emulator inlining english cannot displace a
+    /// schema carrying russian, while an unlock file inlining {english, russian} does displace an
+    /// english-only schema. Without this the Achievement text setting silently did nothing for a game
+    /// whose schema lacks the chosen language while its unlock file has it (issue #7).
+    /// </para>
+    /// <para>
+    /// Field by field rather than source by source, because one source can be written in the selected
+    /// language and the other not for the same achievement — and because a schema can name an
+    /// achievement and still leave a field blank, since Steam redacts hidden achievements'
+    /// descriptions and the Add game wizard writes them empty when no Firecrawl key fills them in.
+    /// Choosing wholesale would then discard a description the unlock file did carry.
+    /// </para>
+    /// <para>
+    /// A definition found by the leading-zero fallback leads exactly like one found by name. That
+    /// reverses the first fix for issue #7, which let such a match supply only the icon: the reporter's
+    /// schema matched all 93 of his achievements by folding zeros and none by name, so the cautious
+    /// rule left his localised schema unused in every case it was written for. The risk it traded away
+    /// — a wrong fold showing another achievement's text — is bounded by <see cref="FindDefinition"/>
+    /// refusing an ambiguous fold, and was never bounded by the appid guard, which a digits-only schema
+    /// defeats whether or not zeros are folded.
+    /// </para>
     /// </summary>
     public static ResolvedAchievement? ResolvePreferringSchema(
         AchievementUnlockState? state, IEnumerable<AchievementDefinition>? definitions,
@@ -527,37 +542,70 @@ public static class AchievementMetadata
         if (definition == null && inline == null)
             return null;
 
-        // Order the two sources once rather than per field: reversing one field and not the other
-        // would be a silent bug, and this way they cannot disagree about which source leads.
         // The one fact about resolution that reaches neither the log nor the screen: that a definition
-        // was found only by folding leading zeros, which is what decides whether the schema's text or
-        // the unlock file's leads. Keyed so it is one line with an example, not one per achievement.
+        // was found only by folding leading zeros. Keyed so it is one line carrying an example, not
+        // one per achievement.
         if (definition != null && !matchedExactly)
         {
             WarnOnce("leading-zero-match",
                 $"Matching achievement names by ignoring leading zeros (e.g. '{achievementName}' matched schema entry '{definition.Name}'). "
-                + (inline != null
-                    ? "The unlock file's own text leads for these, so the schema supplies the icon."
-                    : "The schema supplies both text and icon for these."));
+                + "These are used like any other match, for text as well as the icon.");
         }
 
-        (JsonElement? Name, JsonElement? Description) schema = (definition?.DisplayName, definition?.Description);
-        (JsonElement? Name, JsonElement? Description) inlineText = (inline?.DisplayName, inline?.Description);
-        var (leading, filling) = matchedExactly ? (schema, inlineText) : (inlineText, schema);
+        var (leadingName, fillingName) = Order(definition?.DisplayName, inline?.DisplayName, language);
+        var (leadingDescription, fillingDescription) = Order(definition?.Description, inline?.Description, language);
 
         return new ResolvedAchievement
         {
             DisplayName = FirstNonEmpty(
-                GetDisplayText(leading.Name, language),
-                GetDisplayText(filling.Name, language),
+                GetDisplayText(leadingName, language),
+                GetDisplayText(fillingName, language),
                 achievementName),
             Description = FirstNonEmpty(
-                GetDisplayText(leading.Description, language),
-                GetDisplayText(filling.Description, language)),
+                GetDisplayText(leadingDescription, language),
+                GetDisplayText(fillingDescription, language)),
             // Only the schema can supply an icon: writers that inline their text ship none, and the
             // GSE Saves folder is never probed for images.
             IconPath = definition != null ? ResolveIconPath(definition, metadataDir) : null
         };
+    }
+
+    /// <summary>
+    /// The two sources for one field, schema first — unless the schema is not written in the selected
+    /// language for this field and the unlock file is. Returning an ordered pair rather than a winner
+    /// keeps the loser as the filler, so a leading source that turns out blank still falls through to
+    /// the other.
+    /// </summary>
+    private static (JsonElement? Leading, JsonElement? Filling) Order(JsonElement? schema, JsonElement? inline, string language)
+        => !CarriesLanguage(schema, language) && CarriesLanguage(inline, language) ? (inline, schema) : (schema, inline);
+
+    /// <summary>
+    /// Whether this text is written in the selected language: a multi-language object holding a value
+    /// under that key with something in it. A plain string is deliberately false — it is text in some
+    /// language and nothing in the file says which, so it must not outrank a source that names the
+    /// language asked for. Steam's localisation <see cref="TokenKey"/> is excluded here as it is
+    /// everywhere else.
+    /// <para>
+    /// Blank is false, and whitespace counts as blank. An empty value changes no outcome on its own —
+    /// <see cref="GetDisplayText"/> returns "" for it and <see cref="FirstNonEmpty"/> falls through to
+    /// the other source either way — but a whitespace-only one does: it would otherwise win the field
+    /// and then be accepted as text, putting a blank line where the achievement's name belongs.
+    /// </para>
+    /// </summary>
+    private static bool CarriesLanguage(JsonElement? element, string language)
+    {
+        if (element?.ValueKind != JsonValueKind.Object || string.IsNullOrEmpty(language))
+            return false;
+
+        foreach (var property in element.Value.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.String
+                && !property.NameEquals(TokenKey)
+                && string.Equals(property.Name, language, StringComparison.OrdinalIgnoreCase))
+                return !string.IsNullOrWhiteSpace(property.Value.GetString());
+        }
+
+        return false;
     }
 
     private static string FirstNonEmpty(params string[] candidates)

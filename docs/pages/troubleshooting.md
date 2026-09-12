@@ -52,6 +52,8 @@ A third cause is that the emulator and the schema spell the same achievement dif
 
 The log shows `[WARN] Language '...' not available, falling back to english`. Pick a different **Achievement text** language in [Settings](usage/settings) — the list offers the ones your installed games actually carry, though a single game can still be missing any of them.
 
+A game tracked through a non-GBE emulator can have two sources of text, its `steam_settings/` schema and the emulator's own writing in the unlock file. Whichever of them is written in the language you picked is used, field by field, so a localised schema is not held back by an emulator that inlines English. Text stored as a plain string rather than a per-language object counts as being in no particular language, since nothing in the file says which — see [Other emulators](usage/other-emulators#getting-icons-and-the-game-name-back).
+
 ## The hotkey does nothing
 
 If you pick a shortcut another application already owns, the [Settings](usage/settings) window says so when you save; the log also shows `[WARN] Could not register hotkey`. Pick a different combination under **Shortcut**. The tray menu item still works as a fallback.

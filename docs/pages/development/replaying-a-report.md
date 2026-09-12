@@ -40,8 +40,8 @@ Then one block per achievement, in the order the unlock file lists them:
 
 ```
 1   [earned]      padded → '001'
-    name  unlock   "This is Sparta!"
-    desc  unlock   "Complete the Battle of 300."
+    name  schema   "Это Спарта!"
+    desc  schema   "Завершить Фермопильское сражение."
 ```
 
 The first line is the achievement's name in the unlock file, its state, and how it was matched against
