@@ -61,7 +61,7 @@ dotnet_diagnostic.JSON002.severity = none
 
 ## CA rules switched off
 
-# Its hits are already ordinal (Replace, Contains, IndexOf(char)) or asserts on literals culture cannot flip; CA1310 covers the culture-default methods.
+# Its src hits are already ordinal (Replace, Contains, IndexOf(char)); its test hits are xUnit asserts, which compare with the current culture but only on ASCII or NFC literals no culture reads differently. CA1310 covers the BCL's culture-default methods.
 dotnet_diagnostic.CA1307.severity = none
 # ToLowerInvariant only feeds switches over lowercase literals and never stores a normalised key.
 dotnet_diagnostic.CA1308.severity = none

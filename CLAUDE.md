@@ -429,10 +429,13 @@ reports in a build only with it — CS1591 is off and `PublishDocumentationFile`
 ships. A deliberate catch-all that logs at Warn/Error or shows the error takes a
 `#pragma warning disable CA1031 // <boundary>: <what it logs or shows>` pair around its `catch` line,
 at column 0 (IDE0055 rejects an indented directive); a catch that swallows silently gets fixed
-instead of suppressed. Line endings are LF everywhere: `.gitattributes` checks them out that way and
-`end_of_line = lf` has the formatter enforce it, so a file some Windows tool rewrote as CRLF fails
-IDE0055 until `dotnet format whitespace` normalises it. `global.json` pins the SDK to the
-10.0.4xx band (`latestPatch`) and CI installs from it: the analyzers ship with the compiler, so
+instead of suppressed. Line endings are LF everywhere: `.gitattributes` checks them out and commits
+them that way, and `end_of_line = lf` makes editors and `dotnet format whitespace` write LF. The
+build ignores line endings — IDE0055 passes a CRLF file, and only
+`dotnet format whitespace --verify-no-changes` reports it, as ENDOFLINE — so git's normalisation on
+commit is what keeps the repo LF, not the gate. `global.json` pins the SDK to the 10.0.4xx band
+(`latestPatch`) and CI
+installs from it: the analyzers ship with the compiler, so
 another feature band reports a different set of findings — 10.0.401 flags `!` suppressions and
 `using`s as unnecessary where 10.0.112 is silent, so a tree clean here failed on an unpinned CI.
 
