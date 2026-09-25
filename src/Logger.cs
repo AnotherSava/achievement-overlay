@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 
 namespace AchievementOverlay;
@@ -50,7 +51,7 @@ public static class Logger
                 // Session banner. An appended log has no boundaries without it, and WarnOnce dedupes per
                 // process — so a reader needs to know where one run ends for a missing warning to mean
                 // "not this time" rather than "already said".
-                _writer.WriteLine($"{SessionBannerPrefix} {DateTime.Now:yyyy-MM-dd HH:mm:ss}, {AppUtilities.InformationalVersion} =====");
+                _writer.WriteLine($"{SessionBannerPrefix} {Timestamp()}, {AppUtilities.InformationalVersion} =====");
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -95,6 +96,9 @@ public static class Logger
     private static void Write(string level, string message)
     {
         lock (_writerLock)
-            _writer?.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{level}] {message}");
+            _writer?.WriteLine($"[{Timestamp()}] [{level}] {message}");
     }
+
+    // Invariant: under th-TH the current culture writes the year as 2569, and fi-FI writes the time as 02.00.00.
+    private static string Timestamp() => DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 }
