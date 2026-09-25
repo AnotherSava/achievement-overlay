@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using Xunit;
@@ -48,6 +49,38 @@ public sealed class AchievementMetadataTests : IDisposable
     {
         var states = AchievementMetadata.ParseUnlockStates("{}");
         Assert.Empty(states);
+    }
+
+    [Theory]
+    [InlineData("de-DE")]
+    [InlineData("fr-FR")]
+    public void ParseUnlockStates_QuotedFractionalEarnedTime_ReadsTheSameInEveryCulture(string culture)
+    {
+        // de-DE reads '.' as a digit group separator and fr-FR rejects it, so a culture-sensitive
+        // parse either inflates the timestamp or drops the achievement.
+        var previous = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = new CultureInfo(culture);
+        try
+        {
+            var states = AchievementMetadata.ParseUnlockStates("""{"ACH01": {"earned": "1", "earned_time": "1700000000.5"}}""");
+
+            Assert.True(states["ACH01"].Earned);
+            Assert.Equal(1700000000L, states["ACH01"].EarnedTime);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
+    }
+
+    [Fact]
+    public void ParseUnlockStates_CommaDecimalEarnedTime_SkipsTheEntryRatherThanMisreadingIt()
+    {
+        // Read with a thousands separator it would become 17000000005, a date centuries away.
+        var states = AchievementMetadata.ParseUnlockStates("""{"ACH01": {"earned": true, "earned_time": "1700000000,5"}, "ACH02": {"earned": true, "earned_time": 1700000000}}""");
+
+        Assert.False(states.ContainsKey("ACH01"));
+        Assert.True(states.ContainsKey("ACH02"));
     }
 
     // --- ParseDefinitions tests ---
