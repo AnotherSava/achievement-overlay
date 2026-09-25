@@ -13,7 +13,10 @@ public sealed class AppConfig
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        // A hand-edited null in a setting that needs a value is an invalid config, reported with the
+        // key's name, rather than a null reaching code that the nullable annotations promise never sees one.
+        RespectNullableAnnotations = true
     };
 
     /// <summary>The config file a default-constructed <see cref="AppConfig"/> reads, next to the executable.</summary>
@@ -120,8 +123,15 @@ public sealed class AppConfig
             {
                 Logger.Warn($"Could not write config for '{names}': {ex.Message}");
             }
-            _settings = Deserialize(updated);
-            InvalidateCaches();
+            try
+            {
+                _settings = Deserialize(updated);
+                InvalidateCaches();
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+            {
+                Logger.Warn($"Config written, but it no longer loads; keeping the last good settings: {ex.Message}");
+            }
         }
     }
 
@@ -182,6 +192,17 @@ public sealed class AppConfig
                 // Don't advance _lastWriteTimeUtc so the file will be re-read on next access
             }
         }
+    }
+
+    /// <summary>
+    /// A load failure as the startup dialog shows it: the parser's first sentence and the line it
+    /// failed on. The rest of the message is a path and byte offsets meant for a debugger.
+    /// </summary>
+    public static string DescribeLoadError(JsonException ex)
+    {
+        var end = ex.Message.IndexOf(". ", StringComparison.Ordinal);
+        var sentence = end >= 0 ? ex.Message[..(end + 1)] : ex.Message;
+        return ex.LineNumber is { } line ? $"{sentence} (line {line + 1})" : sentence;
     }
 
     private void InvalidateCaches()

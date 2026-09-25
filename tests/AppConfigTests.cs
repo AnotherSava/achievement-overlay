@@ -230,6 +230,40 @@ public sealed class AppConfigTests : IDisposable
         Assert.Throws<FileNotFoundException>(() => new AppConfig(_settingsPath));
     }
 
+    [Theory]
+    [InlineData("\"recentAchievementsShortcut\": \"Ctrl+Shift+H\"", "recentAchievementsShortcut")]
+    [InlineData("\"language\": \"english\"", "language")]
+    public void NullForASettingThatNeedsAValue_IsAnInvalidConfigNamingTheKey(string setting, string key)
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson().Replace(setting, $"\"{key}\": null", StringComparison.Ordinal));
+
+        var ex = Assert.Throws<JsonException>(() => new AppConfig(_settingsPath));
+        var shown = AppConfig.DescribeLoadError(ex);
+        Assert.Contains($"'{key}'", shown, StringComparison.Ordinal);
+        Assert.EndsWith(")", shown, StringComparison.Ordinal);
+        Assert.Contains("(line ", shown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UpdateConfigValue_FileGainedANullSinceLoad_KeepsTheLastGoodSettings()
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+        File.WriteAllText(_settingsPath, MinimalConfigJson().Replace("\"language\": \"english\"", "\"language\": null", StringComparison.Ordinal));
+
+        config.UpdateConfigValue("SoundEnabled", false, _settingsPath);
+
+        Assert.Equal("english", config.GetCurrent().Language);
+    }
+
+    [Fact]
+    public void NullForAnOptionalSetting_StillLoads()
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson("\"steamWebApiKey\": null,"));
+
+        Assert.Null(new AppConfig(_settingsPath).SteamWebApiKey);
+    }
+
     [Fact]
     public void HotReload_DetectsFileChanges()
     {

@@ -63,7 +63,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             var detail = ex switch
             {
                 FileNotFoundException => "Expected config.json next to the executable.",
-                JsonException je => je.Message.Split('.')[0] + ".",
+                JsonException je => AppConfig.DescribeLoadError(je),
                 InvalidOperationException ioe => ioe.Message.Replace("Invalid config: ", ""),
                 _ => "Check log file for more details."
             };
@@ -134,9 +134,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         openConfigItem.Click += (_, _) =>
         {
             if (File.Exists(AppConfig.ConfigFilePath))
-                Process.Start("explorer.exe", $"/select,\"{AppConfig.ConfigFilePath}\"");
+                Process.Start("explorer.exe", $"/select,\"{AppConfig.ConfigFilePath}\"")?.Dispose();
             else
-                Process.Start("explorer.exe", AppContext.BaseDirectory);
+                Process.Start("explorer.exe", AppContext.BaseDirectory)?.Dispose();
         };
 
         var exitItem = new ToolStripMenuItem("Exit");
