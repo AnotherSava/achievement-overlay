@@ -10,7 +10,7 @@ has_toc: false
 
 ## Setup
 
-**Prerequisites:** Windows 10 or later, and the [.NET 10 SDK](https://dotnet.microsoft.com/download). The app targets `net10.0-windows` and uses both WPF and WinForms, so it does not build on macOS or Linux.
+**Prerequisites:** Windows 10 or later, and the [.NET 10 SDK](https://dotnet.microsoft.com/download) in the band `global.json` pins (10.0.4xx). The linter ships with the compiler, so a different SDK band reports different findings from the ones CI enforces. The app targets `net10.0-windows` and uses both WPF and WinForms, so it does not build on macOS or Linux.
 
 ```
 git clone https://github.com/AnotherSava/achievement-overlay.git

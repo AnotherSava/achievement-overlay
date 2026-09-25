@@ -2,9 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
-using SharpCompress.Archives;
 using SharpCompress.Archives.SevenZip;
-using SharpCompress.Common;
 using SharpCompress.Readers;
 
 namespace AchievementOverlay.GbeConfig;

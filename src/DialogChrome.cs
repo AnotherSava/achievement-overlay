@@ -22,7 +22,7 @@ public static class DialogChrome
     {
         var dark = IsSystemInDarkMode();
         void Set(string key, string hex) =>
-            resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)!);
+            resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
 
         Set("WindowBackground", dark ? "#202020" : "#F3F3F3");
         Set("PageBackground", dark ? "#272727" : "#FBFBFB");

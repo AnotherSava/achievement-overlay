@@ -489,7 +489,7 @@ public sealed class AddGameForm : Form, IConfigProgress
         // taller than the screen (small resolution / high zoom), clamp to the screen and let the
         // page scroll so nothing is unreachable.
         var clamped = desired > maxClient;
-        _activePanel!.AutoScroll = clamped;
+        _activePanel.AutoScroll = clamped;
         ClientSize = new Size(ClientSize.Width, clamped ? maxClient : desired);
         if (recenter)
             CenterToScreen();
