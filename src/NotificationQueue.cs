@@ -75,7 +75,10 @@ public sealed class NotificationQueue : IDisposable
         var item = ResolveMetadata(args);
         if (item == null)
         {
-            Logger.Warn($"Skipping notification for {args.AppId}/{args.AchievementName} — no metadata (game not found under 'gamesPaths', and the unlock file carries no displayName)");
+            // Spelled 'appid N' because that is the form a diagnostic report recognises: a report about
+            // one game drops the lines naming another, and with the appid written bare this line,
+            // achievement name and all, would reach every other game's report.
+            Logger.Warn($"Skipping notification for appid {args.AppId}, achievement {args.AchievementName} — no metadata (game not found under 'gamesPaths', and the unlock file carries no displayName)");
             return;
         }
 
@@ -104,7 +107,8 @@ public sealed class NotificationQueue : IDisposable
     private void EnqueueItem(NotificationItem item)
     {
         _queue.Enqueue(item);
-        Logger.Info($"Queued notification: {item.AchievementName} (queue size: {_queue.Count})");
+        // The appid ties the achievement's name to its game, so another game's report can drop the line.
+        Logger.Info($"Queued notification for appid {item.AppId}: {item.AchievementName} (queue size: {_queue.Count})");
 
         // Kick off dispatching if not already running (atomic check-and-set)
         if (Interlocked.CompareExchange(ref _isDispatching, 1, 0) == 0)
@@ -161,7 +165,8 @@ public sealed class NotificationQueue : IDisposable
         try
         {
             var gameWindowRect = AppUtilities.GetForegroundWindowRect();
-            Logger.Info($"Showing notification: {item.AchievementName} at ({gameWindowRect.Left},{gameWindowRect.Top} {gameWindowRect.Width}x{gameWindowRect.Height})");
+            // The appid ties the achievement's name to its game, so another game's report can drop the line.
+            Logger.Info($"Showing notification for appid {item.AppId}: {item.AchievementName} at ({gameWindowRect.Left},{gameWindowRect.Top} {gameWindowRect.Width}x{gameWindowRect.Height})");
 
             var appearance = ResolveAppearance(item.AppId);
             _soundPlayer?.Play(appearance.SoundEnabled, appearance.SoundPath, appearance.SoundIsFromGame);

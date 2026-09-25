@@ -308,7 +308,7 @@ public static class DiagnosticReport
 
     /// <summary>Any appid a log line refers to, in either spelling the app writes (<c>appid=812140</c>, <c>appid 812140</c>).</summary>
     private static readonly Regex AppIdReference =
-        new(@"appid[= ](\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"appid(?:[= ]|: )(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
     /// A drive-lettered path in a log message. Stops at a quote because most messages wrap the path in

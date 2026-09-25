@@ -1,8 +1,10 @@
+using System.IO;
 using System.Text.Json.Nodes;
 using Xunit;
 
 namespace AchievementOverlay.Tests;
 
+[Collection("App log")]
 public class DiagnosticReportTests
 {
     private static DiagnosticReportInputs Inputs(
@@ -380,6 +382,14 @@ public class DiagnosticReportTests
     }
 
     [Fact]
+    public void KeepLinesForGame_RecognisesTheWizardsColonForm()
+    {
+        // The Add game wizard logs "AppID: <id>" through its progress log.
+        Assert.Empty(Keep("[add-game] Info: AppID: 1687950"));
+        Assert.Single(Keep("[add-game] Info: AppID: 812140"));
+    }
+
+    [Fact]
     public void KeepLinesForGame_KeepsOurOwnGame() =>
         Assert.Single(Keep(@"  Cached: appid=812140, game=Odyssey, path='C:\Games\Odyssey\steam_settings\achievements.json'"));
 
@@ -410,6 +420,52 @@ public class DiagnosticReportTests
     [Fact]
     public void KeepLinesForGame_DropsALineNamingTwoGamesRatherThanKeepingItForTheHalfThatMatches() =>
         Assert.Empty(Keep("Compared appid=812140 against appid=1687950"));
+
+    [Fact]
+    public void KeepLinesForGame_DropsAnotherGamesSkippedNotificationButKeepsOurs()
+    {
+        // The line comes from the queue rather than being written out here, so what is filtered is
+        // the spelling the app actually logs — another game's achievement name is the leak.
+        Assert.Empty(Keep(LoggedSkippedNotification("1687950")));
+        Assert.Single(Keep(LoggedSkippedNotification("812140")));
+    }
+
+    /// <summary>
+    /// The warning the queue logs for an unlock it has nothing to show with: an appid no scanned game
+    /// has, and an unlock entry carrying no text of its own.
+    /// </summary>
+    private static string LoggedSkippedNotification(string appId)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "ach-report-tests-" + Guid.NewGuid().ToString("N")[..8]);
+        var gamesDir = Path.Combine(tempDir, "Games");
+        Directory.CreateDirectory(gamesDir);
+        try
+        {
+            var configPath = Path.Combine(tempDir, "config.json");
+            File.WriteAllText(configPath, $$"""{"gseSavesPaths":"{{JsonEscaped(tempDir)}}","gamesPaths":"{{JsonEscaped(gamesDir)}}","language":"english","displayDuration":7,"recentAchievementsCount":5}""");
+
+            // Unique per call, so the line is found among whatever earlier runs left in the log.
+            var achievement = "ACH_" + Guid.NewGuid().ToString("N");
+
+            Logger.Init();
+            try
+            {
+                Assert.Null(Logger.InitError);
+                using var queue = new NotificationQueue(new GameCache(new[] { gamesDir }), new AppConfig(configPath));
+                queue.Enqueue(new NewAchievementEventArgs { AppId = appId, AchievementName = achievement, EarnedTime = 1 });
+            }
+            finally
+            {
+                Logger.Close();
+            }
+
+            return File.ReadLines(Logger.LogPath).Single(line => line.Contains(achievement, StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
 
     [Fact]
     public void Compose_CountsTheLinesItRemovedForOtherGames()
