@@ -4,9 +4,6 @@ obj/
 publish/
 __pycache__/
 
-# Claude Code
-.claude/settings.local.json
-
 # Local docs — ignore all except the published GitHub Pages site, its screenshots,
 # and the plans. A local Jekyll build (docs/_site/) stays ignored by the first rule.
 docs/*
@@ -19,9 +16,6 @@ docs/*
 
 # Runtime config (generated on first run)
 config.json
-
-# Local deploy config (machine-specific install path)
-config/deploy.env
 
 # Local development config (overrides default.json; holds personal Steam Web API key / Firecrawl API key)
 config/local.json

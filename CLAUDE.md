@@ -417,7 +417,9 @@ dotnet test tests/AchievementOverlay.Tests.csproj
 stricter than either line above on purpose. It builds the whole **solution** (so warnings in the test
 project and under `tools/` are seen at all), with `-warnaserror` and `--no-incremental` — MSBuild
 skips analysis for unchanged projects, so a cached build reports no warnings even when the code still
-has them. A `CS8625` in a test reached a release that way once.
+has them. A `CS8625` in a test reached a release that way once. Before the build it runs the
+conventions checker (`~/.claude/conventions/check.py`), which re-measures every rule this repo has
+adopted per `.claude/conventions`; a clone without that checker prints `SKIPPED` for the step.
 
 ## Replaying a diagnostic report
 

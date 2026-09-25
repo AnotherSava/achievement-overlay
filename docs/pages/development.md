@@ -28,7 +28,7 @@ The executable lands in `src/bin/Debug/net10.0-windows/`, with `config.json` cop
 | `dotnet build src/AchievementOverlay.csproj -c Release` | Release build |
 | `dotnet test tests/AchievementOverlay.Tests.csproj` | Run the xUnit suite |
 | `dotnet run --project tools/ReplayReport -- <report.json>` | [Replay a diagnostic report](development/replaying-a-report) through the resolver |
-| `bash .claude/commit-checks.sh` | The gate: a clean-slate Release build with `-warnaserror`, then the tests |
+| `bash .claude/commit-checks.sh` | The gate: the maintainer's conventions check (skipped where it isn't installed), a clean-slate Release build with `-warnaserror`, then the tests |
 
 Prefer the last one before pushing. It builds the whole solution, so warnings in the test project and in `tools/` are seen at all — and it passes `--no-incremental`, because MSBuild skips analysis for unchanged projects and a cached build reports no warnings even when the code still has them.
 
