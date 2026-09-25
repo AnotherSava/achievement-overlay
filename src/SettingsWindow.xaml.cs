@@ -26,7 +26,18 @@ public sealed class SettingsResult
     /// <summary>Config values the user actually changed, keyed by <see cref="SettingsData"/> property name.</summary>
     public required IReadOnlyDictionary<string, object?> ChangedSettings { get; init; }
 
-    public required bool StartWithWindows { get; init; }
+    /// <summary>
+    /// The Start with Windows value to write, or null when there is none: the user left it as it was,
+    /// or the startup entry could not be read, so there was no state to change.
+    /// </summary>
+    public required bool? StartWithWindows { get; init; }
+
+    /// <summary>
+    /// What a save writes to the startup entry: the choice when it differs from a state that was
+    /// actually read, and nothing otherwise. An unread entry gives nothing to compare against, so a
+    /// switch that was only showing "unavailable" can never be written back as a value.
+    /// </summary>
+    internal static bool? StartWithWindowsChange(bool? opened, bool chosen) => opened is { } before && chosen != before ? chosen : null;
 }
 
 /// <summary>
@@ -70,6 +81,8 @@ public partial class SettingsWindow : Window
     };
 
     private readonly SettingsData _current;
+    /// <summary>The startup state the window opened against; null when the entry could not be read.</summary>
+    private readonly bool? _startWithWindows;
 
     /// <summary>
     /// Pairs each cell of the position grid to the value it stands for, so loading and collecting read
@@ -98,14 +111,19 @@ public partial class SettingsWindow : Window
     /// <summary>Set once the user saves; null while the window is open or after a cancel.</summary>
     public SettingsResult? Result { get; private set; }
 
+    /// <param name="startWithWindows">
+    /// Whether the app starts with Windows, or null when the startup entry could not be read — the
+    /// switch is then shown as unavailable rather than as off.
+    /// </param>
     /// <param name="soundPlayer">
     /// The host's player, so "Show me" previews the sound through the same code the real unlock uses.
     /// </param>
-    public SettingsWindow(AppConfig config, bool startWithWindows, IReadOnlyCollection<string> availableLanguages,
+    public SettingsWindow(AppConfig config, bool? startWithWindows, IReadOnlyCollection<string> availableLanguages,
                           UnlockSoundPlayer? soundPlayer = null)
     {
         InitializeComponent();
         _soundPlayer = soundPlayer;
+        _startWithWindows = startWithWindows;
         _positionCells = new[]
         {
             (PosTopLeft, NotificationAnchor.TopLeft),
@@ -126,7 +144,7 @@ public partial class SettingsWindow : Window
         DialogChrome.ApplyThemeBrushes(Resources);
         DialogChrome.ClampToScreen(this);
         DialogChrome.LoadWindowIcon(this);
-        LoadValues(startWithWindows, availableLanguages);
+        LoadValues(availableLanguages);
         _loaded = true;
         UpdateScaleState();
         UpdateSoundState();
@@ -146,9 +164,14 @@ public partial class SettingsWindow : Window
 
     // --- Values ---
 
-    private void LoadValues(bool startWithWindows, IReadOnlyCollection<string> availableLanguages)
+    private void LoadValues(IReadOnlyCollection<string> availableLanguages)
     {
-        StartWithWindowsToggle.IsChecked = startWithWindows;
+        // An entry that could not be read is shown as unavailable rather than as off: the switch is
+        // disabled and the card says why.
+        StartWithWindowsToggle.IsChecked = _startWithWindows == true;
+        StartWithWindowsToggle.IsEnabled = _startWithWindows != null;
+        if (_startWithWindows == null)
+            StartWithWindowsDescription.Text = "The Windows startup entry could not be read, so this can't be shown or changed here. The log has the reason.";
         ShortcutBox.Text = _current.RecentAchievementsShortcut;
         RecentCountBox.Text = Math.Clamp(_current.RecentAchievementsCount, 1, 20).ToString(CultureInfo.CurrentCulture);
 
@@ -799,7 +822,7 @@ public partial class SettingsWindow : Window
         Result = new SettingsResult
         {
             ChangedSettings = SettingsDiff.Compute(_current, Collect()),
-            StartWithWindows = StartWithWindowsToggle.IsChecked == true
+            StartWithWindows = SettingsResult.StartWithWindowsChange(_startWithWindows, StartWithWindowsToggle.IsChecked == true)
         };
         DialogResult = true;
     }

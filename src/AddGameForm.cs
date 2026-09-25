@@ -28,6 +28,16 @@ public sealed class AddGameForm : Form, IConfigProgress
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMinutes(5) };
     private readonly System.Windows.Forms.Timer _spinner = new() { Interval = 90 };
 
+    // Neither a control nor the form owns a Font or Icon assigned to it, so each one the wizard draws
+    // with is made once here and disposed with the form, after the controls and window that use it.
+    private readonly Icon _windowIcon = AppUtilities.LoadOrCreateIcon(false);
+    private readonly Font _headerFont;
+    private readonly Font _boldFont;
+    private readonly Font _toggleFont = BoldSystemDefaultFont();
+    private readonly Font _logFont = new(FontFamily.GenericMonospace, 8.25f);
+    private readonly Font _stepIconFont = new("Segoe UI Symbol", 9f);
+    private readonly Font _stepDoneFont = new("Segoe UI Symbol", 9f, FontStyle.Bold);
+
 #pragma warning disable CA2213 // WinForms controls: every one sits in the form's Controls tree, and the form disposes them through it
     // Pages
     private readonly Panel _content = new() { Dock = DockStyle.Fill };
@@ -46,7 +56,7 @@ public sealed class AddGameForm : Form, IConfigProgress
     private readonly TextBox _gbePathBox = new() { BorderStyle = BorderStyle.FixedSingle };
     private readonly CheckBox _backupCheck = new() { Text = "Back up the original Steam library (recommended)", Checked = true, AutoSize = true, Margin = new Padding(0, 14, 0, 6) };
     private readonly CheckBox _downloadGbeCheck = new() { Text = "Download the latest GBE release", Checked = true, AutoSize = true, Margin = new Padding(0, 4, 0, 2) };
-    private readonly Label _advancedToggle = new() { AutoSize = true, Cursor = Cursors.Hand, Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold), Margin = new Padding(0, 10, 0, 2) };
+    private readonly Label _advancedToggle = new() { AutoSize = true, Cursor = Cursors.Hand, Margin = new Padding(0, 10, 0, 2) };
     private readonly List<Control> _advancedControls = new();
     private bool _advancedExpanded;
     private readonly Label _folderStatus = new() { AutoSize = true, ForeColor = Color.Firebrick, MaximumSize = new Size(HelpWidth, 0), Margin = new Padding(0, 6, 0, 0) };
@@ -74,8 +84,7 @@ public sealed class AddGameForm : Form, IConfigProgress
         WordWrap = true,
         ReadOnly = true,
         ScrollBars = ScrollBars.Vertical,
-        BackColor = Color.White,
-        Font = new Font(FontFamily.GenericMonospace, 8.25f)
+        BackColor = Color.White
     };
 
     // Navigation
@@ -103,6 +112,8 @@ public sealed class AddGameForm : Form, IConfigProgress
     private int _hiddenCount;
     private CancellationTokenSource? _cts;
     private bool _running;
+    /// <summary>Whether the last close request was refused, which a run in progress does.</summary>
+    private bool _closeRefused;
 
     public AddGameForm(AppConfig config, Action<string> onGameConfigured)
     {
@@ -110,13 +121,17 @@ public sealed class AddGameForm : Form, IConfigProgress
         _onGameConfigured = onGameConfigured;
 
         Text = "Add game";
-        Icon = AppUtilities.LoadOrCreateIcon(false);
+        Icon = _windowIcon;
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         ClientSize = new Size(FormWidth, 440);
         Padding = new Padding(12);
+
+        // Derived from the form's own font, which is what the pages built next inherit.
+        _headerFont = new Font(Font.FontFamily, Font.Size + 2f, FontStyle.Bold);
+        _boldFont = new Font(Font, FontStyle.Bold);
 
         BuildPages();
         BuildChrome();
@@ -286,9 +301,10 @@ public sealed class AddGameForm : Form, IConfigProgress
                     + "restore the game's normal Steam integration later (it's also the file the tool reads to generate the "
                     + "interface list GBE needs)."));
 
+                _advancedToggle.Font = _toggleFont;
                 g.Controls.Add(_advancedToggle);
 
-                var gbeLabel = new Label { Text = "GBE release folder", AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(0, 14, 0, 6) };
+                var gbeLabel = new Label { Text = "GBE release folder", AutoSize = true, Font = _boldFont, Margin = new Padding(0, 14, 0, 6) };
                 var gbeRow = DialogControls.MakeInputRow(_gbePathBox, MakeBrowseButton(_gbePathBox));
                 gbeRow.Margin = new Padding(TextInset, 6, TextInset, 12); // align the box edge with the text; extra space above/below
                 var gbeHelp = MakeHelp(
@@ -318,6 +334,7 @@ public sealed class AddGameForm : Form, IConfigProgress
                 g.Controls.Add(_stepsHost);
 
                 g.Controls.Add(new Label { Text = "Details", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 2) });
+                _logBox.Font = _logFont;
                 _logBox.Margin = new Padding(0, 0, 0, 0);
                 g.Controls.Add(_logBox);
             });
@@ -355,9 +372,16 @@ public sealed class AddGameForm : Form, IConfigProgress
     {
         Text = text,
         AutoSize = true,
-        Font = new Font(Font.FontFamily, Font.Size + 2f, FontStyle.Bold),
+        Font = _headerFont,
         Margin = new Padding(0, 0, 0, 14)
     };
+
+    /// <summary>The bold face of <see cref="SystemFonts.DefaultFont"/>, which hands out a new Font on every read.</summary>
+    private static Font BoldSystemDefaultFont()
+    {
+        using var systemDefault = SystemFonts.DefaultFont;
+        return new Font(systemDefault, FontStyle.Bold);
+    }
 
     /// <summary>A two-column summary whose values (folder, AppID) align on the left edge,
     /// with padding above and below.</summary>
@@ -892,9 +916,21 @@ public sealed class AddGameForm : Form, IConfigProgress
         {
             _cts?.Cancel();
             e.Cancel = true;
+            _closeRefused = true;
             return;
         }
         base.OnFormClosing(e);
+        _closeRefused = e.Cancel;
+    }
+
+    /// <summary>
+    /// Asks the wizard to close, and says whether it did. A run in progress refuses: the run is
+    /// cancelled instead, and the wizard stays open to show it stopping.
+    /// </summary>
+    public bool TryClose()
+    {
+        Close();
+        return !_closeRefused;
     }
 
     protected override void OnLoad(EventArgs e)
@@ -968,8 +1004,13 @@ public sealed class AddGameForm : Form, IConfigProgress
     {
         _spinner.Stop();
         _currentStepIcon = null;
+        _currentStepLabel = null;
         _stepsTable.SuspendLayout();
+        // Clear only detaches the previous run's rows; disposing them is what releases their handles.
+        var previousRows = _stepsTable.Controls.Cast<Control>().ToArray();
         _stepsTable.Controls.Clear();
+        foreach (var control in previousRows)
+            control.Dispose();
         _stepsTable.RowStyles.Clear();
         _stepsTable.RowCount = 0;
         _stepsTable.ResumeLayout();
@@ -986,7 +1027,7 @@ public sealed class AddGameForm : Form, IConfigProgress
         var icon = new Label
         {
             Text = SpinnerFrames[0],
-            Font = new Font("Segoe UI Symbol", 9f),
+            Font = _stepIconFont,
             AutoSize = false,
             Width = 20,
             Height = rowHeight,
@@ -1009,7 +1050,7 @@ public sealed class AddGameForm : Form, IConfigProgress
     {
         if (_currentStepIcon == null)
             return;
-        _currentStepIcon.Font = new Font("Segoe UI Symbol", 9f, FontStyle.Bold);
+        _currentStepIcon.Font = _stepDoneFont;
         _currentStepIcon.Text = ok ? "✓" : "✗"; // ✓ / ✗
         _currentStepIcon.ForeColor = ok ? Color.SeaGreen : Color.Firebrick;
         _currentStepIcon = null;
@@ -1050,5 +1091,17 @@ public sealed class AddGameForm : Form, IConfigProgress
             _cts?.Dispose();
         }
         base.Dispose(disposing);
+
+        // After the base call, which disposes every control drawing with these fonts and the window showing the icon.
+        if (disposing)
+        {
+            _headerFont.Dispose();
+            _boldFont.Dispose();
+            _toggleFont.Dispose();
+            _logFont.Dispose();
+            _stepIconFont.Dispose();
+            _stepDoneFont.Dispose();
+            _windowIcon.Dispose();
+        }
     }
 }

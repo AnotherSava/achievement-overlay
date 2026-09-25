@@ -143,7 +143,7 @@
                                                   Style="{StaticResource ToggleSwitch}" Margin="18,0,0,0" />
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource CardTitle}" Text="Start with Windows" />
-                                        <TextBlock Style="{StaticResource CardDescription}"
+                                        <TextBlock x:Name="StartWithWindowsDescription" Style="{StaticResource CardDescription}"
                                                    Text="Runs the overlay in the tray at sign-in. Kept in the registry rather than in config.json." />
                                     </StackPanel>
                                 </DockPanel>

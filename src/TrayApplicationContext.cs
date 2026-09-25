@@ -39,7 +39,8 @@ public sealed class TrayApplicationContext : ApplicationContext
 #pragma warning restore CA2213
     private SettingsWindow? _settingsWindow;
     private DiagnosticReportWindow? _reportWindow;
-    private bool _startWithWindowsEnabled;
+    /// <summary>Null when the Windows startup entry could not be read, which leaves the setting unavailable.</summary>
+    private bool? _startWithWindowsEnabled;
     private bool _disposed;
 
     // Appids already evaluated for the synthetic "tracking configured" notification this session,
@@ -475,8 +476,8 @@ public sealed class TrayApplicationContext : ApplicationContext
             Logger.Info($"Settings saved: {string.Join(", ", result.ChangedSettings.Keys)}");
         }
 
-        if (result.StartWithWindows != _startWithWindowsEnabled)
-            ApplyStartWithWindows(result.StartWithWindows);
+        if (result.StartWithWindows is { } startWithWindows)
+            ApplyStartWithWindows(startWithWindows);
 
         // The shortcut needs no work here: OpenSettingsDialog suspends the hotkey for the dialog's
         // lifetime and re-registers from config on the way out, which covers a changed value too.
@@ -553,6 +554,16 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void ExitApplication()
     {
+        // Application.Exit gives up on a form that refuses to close, and the wizard refuses mid-run, so
+        // ask it first: Dispose below removes the tray icon, and an app left running after that would
+        // have no way left to exit it.
+        if (_addGameForm != null && !_addGameForm.TryClose())
+        {
+            Logger.Info("Exit postponed: a game was still being added, and that run is being cancelled.");
+            MessageBox.Show(_addGameForm, "Choose Exit again once the Add game window has finished.\r\n\r\nA game was still being added, so that is being cancelled first.", "Achievement Overlay", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
         Logger.Info("Shutting down...");
         Dispose();
         Application.Exit();
@@ -600,7 +611,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         Environment.Exit(1);
     }
 
-    private static bool GetStartWithWindows()
+    /// <summary>Whether the app is registered to start with Windows, or null when the startup entry could not be read.</summary>
+    private static bool? GetStartWithWindows()
     {
         try
         {
@@ -609,7 +621,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
             Logger.Warn($"Could not read the Windows startup entry: {ex.Message}");
-            return false;
+            return null;
         }
     }
 }

@@ -123,4 +123,28 @@ public class SettingsDiffTests
 
         Assert.Empty(SettingsDiff.Compute(current, edited));
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StartWithWindowsChange_UnreadEntry_WritesNothing(bool chosen)
+    {
+        // A startup entry that could not be read is no state to change from, so a save must not write
+        // one whichever way the unavailable switch sits.
+        var written = SettingsResult.StartWithWindowsChange(opened: null, chosen);
+
+        Assert.Null(written);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StartWithWindowsChange_LeftAsRead_WritesNothing(bool state) => Assert.Null(SettingsResult.StartWithWindowsChange(opened: state, chosen: state));
+
+    [Fact]
+    public void StartWithWindowsChange_Switched_WritesTheChoice()
+    {
+        Assert.True(SettingsResult.StartWithWindowsChange(opened: false, chosen: true));
+        Assert.False(SettingsResult.StartWithWindowsChange(opened: true, chosen: false));
+    }
 }
