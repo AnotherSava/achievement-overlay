@@ -11,7 +11,7 @@ Every setting below has a field in the [Settings](settings) window, which is the
 
 Most keys are read live: `language`, `font`, `scale`, `notificationPosition`, `notificationBackground`, `soundEnabled`, `soundPath`, `displayDuration`, `useGameOverlaySettings` and `recentAchievementsCount` are picked up on the next popup. The remaining three — `gamesPaths`, `gseSavesPaths` and `recentAchievementsShortcut` — are bound at startup, so a hand edit to those needs a restart. Saving from the Settings window applies all of them at once either way.
 
-To leave a text setting at its default, write it empty (`""`), not `null`: an empty `soundPath` is the built-in sound and an empty `font` is Segoe UI. The app refuses to start on a `null` it cannot use, and the error names the key and its line.
+To leave a text setting at its default, write it empty (`""`), not `null`: an empty `soundPath` is the built-in sound and an empty `font` is Segoe UI. The app refuses to start on a `null` it cannot use, and the error names the key and its line. While it runs, an edit it cannot load — a `null`, a syntax error, an invalid value — is logged as a warning once per version of the file, and the previous settings stay in use until the file loads again.
 
 ## Keys
 

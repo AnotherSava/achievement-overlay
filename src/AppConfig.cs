@@ -23,6 +23,14 @@ public sealed class AppConfig
     public static string ConfigFilePath => SettingsPath;
 
     private DateTime _lastWriteTimeUtc;
+
+    /// <summary>
+    /// The write time of the file version whose failure to reload was last logged, or null when none
+    /// has failed since the last good reload. <see cref="Reload"/> retries a failing file on every
+    /// property read, so this is what keeps one bad edit to one warning.
+    /// </summary>
+    private DateTime? _reportedFailureWriteTimeUtc;
+
     private SettingsData _settings = null!;
     private readonly Lock _lock = new();
     private readonly string _settingsFilePath;
@@ -171,25 +179,30 @@ public sealed class AppConfig
             {
                 var json = File.ReadAllText(filePath);
                 _settings = Deserialize(json);
-                _lastWriteTimeUtc = currentWriteTime;
-                InvalidateCaches();
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
             {
-                // Malformed JSON (e.g. partially-written file) — keep last good config
-                // Don't advance _lastWriteTimeUtc so the file will be re-read on next access
+                // Malformed or partially written JSON, a file an editor still holds locked or this account
+                // may not read, and a required setting deleted mid-edit all keep the last good settings;
+                // otherwise the exception escapes every property getter and takes the app down mid-session.
+                // _lastWriteTimeUtc stays behind so the file is retried on the next read, which is why the
+                // warning is keyed to the write time: once per version of the file, not once per read.
+                // A momentary lock is warned about like the rest, since nothing here tells it from one
+                // that lasts, and the info line below says when the file loads again.
+                if (_reportedFailureWriteTimeUtc != currentWriteTime)
+                {
+                    _reportedFailureWriteTimeUtc = currentWriteTime;
+                    Logger.Warn($"Config file '{filePath}' could not be reloaded; keeping the last good settings: {ex.Message}");
+                }
+                return;
             }
-            catch (IOException)
+
+            _lastWriteTimeUtc = currentWriteTime;
+            InvalidateCaches();
+            if (_reportedFailureWriteTimeUtc != null)
             {
-                // File locked or inaccessible — keep last good config
-                // Don't advance _lastWriteTimeUtc so the file will be re-read on next access
-            }
-            catch (InvalidOperationException)
-            {
-                // Failed validation (e.g. a required setting momentarily deleted while the user
-                // edits the file) — keep last good config. Without this the exception escapes
-                // every config property getter and takes the app down mid-session.
-                // Don't advance _lastWriteTimeUtc so the file will be re-read on next access
+                _reportedFailureWriteTimeUtc = null;
+                Logger.Info($"Config file '{filePath}' loads again; its settings are in use");
             }
         }
     }

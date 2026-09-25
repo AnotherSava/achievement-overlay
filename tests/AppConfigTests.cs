@@ -1,14 +1,20 @@
 using System.IO;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text.Json;
 using Xunit;
 
 namespace AchievementOverlay.Tests;
 
+[Collection("App log")]
 public sealed class AppConfigTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _settingsPath;
     private readonly string _gseSavesDir;
+
+    // How many saves SaveNewVersion has made; each moves the write time a further second ahead.
+    private int _savedVersions;
 
     public AppConfigTests()
     {
@@ -322,6 +328,152 @@ public sealed class AppConfigTests : IDisposable
 
         Assert.Equal("english", config.Language);
     }
+
+    [Theory]
+    [InlineData("\"language\": \"english\",", "\"language\": \"english\"", "LineNumber")]
+    [InlineData("\"recentAchievementsCount\": 5", "\"recentAchievementsCount\": 0", "'recentAchievementsCount' is missing or invalid")]
+    public void HotReload_BadEditReadManyTimes_KeepsLastGoodConfigAndWarnsOnce(string find, string replace, string reported)
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+        SaveNewVersion(MinimalConfigJson().Replace(find, replace, StringComparison.Ordinal));
+
+        // Every property read retries the file, and none of those retries may add a second warning.
+        WhileLogging(() =>
+        {
+            for (var read = 0; read < 5; read++)
+            {
+                Assert.Equal("english", config.Language);
+                Assert.Equal(5, config.RecentAchievementsCount);
+            }
+        });
+
+        Assert.Contains(reported, Assert.Single(LogLines("WARN")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HotReload_SecondBadEdit_IsWarnedAboutAgain()
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+
+        WhileLogging(() =>
+        {
+            SaveNewVersion("{ not valid json");
+            Assert.Equal("english", config.Language);
+            Assert.Equal("english", config.Language);
+            SaveNewVersion("{ still not valid json");
+            Assert.Equal("english", config.Language);
+            Assert.Equal("english", config.Language);
+        });
+
+        Assert.Equal(2, LogLines("WARN").Count);
+    }
+
+    [Fact]
+    public void HotReload_EditFixedAfterAWarning_LoadsAndLogsThatItDid()
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+
+        WhileLogging(() =>
+        {
+            SaveNewVersion("{ not valid json");
+            Assert.Equal("english", config.Language);
+            SaveNewVersion(MinimalConfigJson().Replace("\"english\"", "\"german\"", StringComparison.Ordinal));
+            Assert.Equal("german", config.Language);
+            Assert.Equal("german", config.Language);
+        });
+
+        Assert.Single(LogLines("WARN"));
+        Assert.Contains("loads again", Assert.Single(LogLines("INFO")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HotReload_FileLockedWhileSaving_KeepsLastGoodConfigThenLoadsTheSameVersion()
+    {
+        // An editor holding the file for the length of its save: the version that could not be read
+        // is read once the lock goes, with no further save to move its write time.
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+        SaveNewVersion(MinimalConfigJson().Replace("\"english\"", "\"german\"", StringComparison.Ordinal));
+
+        WhileLogging(() =>
+        {
+            using (new FileStream(_settingsPath, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                Assert.Equal("english", config.Language);
+                Assert.Equal("english", config.Language);
+            }
+            Assert.Equal("german", config.Language);
+        });
+
+        Assert.Single(LogLines("WARN"));
+        Assert.Single(LogLines("INFO"));
+    }
+
+    [Fact]
+    public void HotReload_FileThisAccountMayNotRead_KeepsLastGoodConfigThenLoadsOnceReadable()
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+        SaveNewVersion(MinimalConfigJson().Replace("\"english\"", "\"german\"", StringComparison.Ordinal));
+
+        WhileDenied(FileSystemRights.ReadData, () => Assert.Equal("english", config.Language));
+
+        Assert.Equal("german", config.Language);
+    }
+
+    /// <summary>
+    /// A save as the app sees one: new content under a write time later than any earlier save's, so
+    /// two saves in quick succession are still two versions of the file.
+    /// </summary>
+    private void SaveNewVersion(string json)
+    {
+        File.WriteAllText(_settingsPath, json);
+        File.SetLastWriteTimeUtc(_settingsPath, DateTime.UtcNow.AddSeconds(++_savedVersions));
+    }
+
+    /// <summary>Runs <paramref name="act"/> while this account is denied <paramref name="rights"/> on the config file.</summary>
+    private void WhileDenied(FileSystemRights rights, Action act)
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var file = new FileInfo(_settingsPath);
+        var security = file.GetAccessControl();
+        var deny = new FileSystemAccessRule(identity.User!, rights, AccessControlType.Deny);
+        security.AddAccessRule(deny);
+        file.SetAccessControl(security);
+        try
+        {
+            act();
+        }
+        finally
+        {
+            security.RemoveAccessRule(deny);
+            file.SetAccessControl(security);
+        }
+    }
+
+    /// <summary>Runs <paramref name="act"/> with the app's own log open, as it is for the whole of a session.</summary>
+    private static void WhileLogging(Action act)
+    {
+        Logger.Init();
+        try
+        {
+            Assert.Null(Logger.InitError);
+            act();
+        }
+        finally
+        {
+            Logger.Close();
+        }
+    }
+
+    /// <summary>
+    /// The app log's lines at <paramref name="level"/> that name this test's config file. That file sits
+    /// in a folder named by a fresh GUID, so lines left by earlier runs never match.
+    /// </summary>
+    private List<string> LogLines(string level) => File.ReadLines(Logger.LogPath).Where(line => line.Contains($"[{level}]", StringComparison.Ordinal) && line.Contains(_settingsPath, StringComparison.Ordinal)).ToList();
 
     [Fact]
     public void UpdateConfigValue_UpdatesSingleProperty()
