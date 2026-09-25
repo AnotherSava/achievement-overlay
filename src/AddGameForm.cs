@@ -924,7 +924,7 @@ public sealed class AddGameForm : Form, IConfigProgress
             url = "https://" + url; // auto-detected links may be scheme-less (e.g. "steamdb.info")
         try
         {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose();
         }
 #pragma warning disable CA1031 // Link-click boundary: logs the failure at Warn
         catch (Exception ex)

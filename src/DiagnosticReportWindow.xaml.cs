@@ -310,7 +310,6 @@ public sealed partial class DiagnosticReportWindow : Window
             File.WriteAllText(dialog.FileName, _reportText);
             Logger.Info($"Saved diagnostic report for appid {choice.AppId} to '{dialog.FileName}'.");
             FooterStatus.Text = $"Saved to {dialog.FileName}";
-            Process.Start("explorer.exe", $"/select,\"{dialog.FileName}\"");
         }
 #pragma warning disable CA1031 // UI boundary: logs the failure at Error and shows it in a message box
         catch (Exception ex)
@@ -320,6 +319,18 @@ public sealed partial class DiagnosticReportWindow : Window
             // Qualified: WinForms is in global scope here, and both namespaces have a MessageBox.
             System.Windows.MessageBox.Show(this, $"Could not save the report:\r\n\r\n{ex.Message}",
                 "Achievement Overlay", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            Process.Start("explorer.exe", $"/select,\"{dialog.FileName}\"")?.Dispose();
+        }
+#pragma warning disable CA1031 // The report is saved and the footer says where; only the reveal failed, and it is logged at Warn
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            Logger.Warn($"Could not reveal '{dialog.FileName}' in Explorer: {ex.Message}");
         }
     }
 }
