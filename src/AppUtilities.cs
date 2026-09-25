@@ -4,7 +4,6 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Forms;
 
 namespace AchievementOverlay;
 
@@ -130,28 +129,21 @@ public static class AppUtilities
     // --- Screen geometry ---
 
     /// <summary>
-    /// Gets the work area of the monitor containing the foreground window.
-    /// Converts physical pixels to WPF DIPs using the primary monitor's DPI scale.
+    /// Gets the work area of the monitor containing the foreground window, in that monitor's own
+    /// logical units (physical pixels ÷ its DPI scale).
     /// </summary>
     public static Rect GetForegroundWindowRect()
     {
-        try
+        var hwnd = GetForegroundWindow();
+        if (hwnd != IntPtr.Zero)
         {
-            var hwnd = GetForegroundWindow();
-            if (hwnd != IntPtr.Zero)
-            {
-                var screen = Screen.FromHandle(hwnd);
-                var wa = screen.WorkingArea;
-                // Convert physical pixels using THIS monitor's own DPI — that's the coordinate space
-                // WPF uses for Window.Left/Top (the window's own monitor), so placement is correct
-                // on every display regardless of the primary monitor's scale.
-                var scale = GetMonitorScale(hwnd);
-                return new Rect(wa.Left / scale, wa.Top / scale, wa.Width / scale, wa.Height / scale);
-            }
-        }
-        catch
-        {
-            // Fall through to default
+            var screen = Screen.FromHandle(hwnd);
+            var wa = screen.WorkingArea;
+            // Convert physical pixels using THIS monitor's own DPI — that's the coordinate space
+            // WPF uses for Window.Left/Top (the window's own monitor), so placement is correct
+            // on every display regardless of the primary monitor's scale.
+            var scale = GetMonitorScale(hwnd);
+            return new Rect(wa.Left / scale, wa.Top / scale, wa.Width / scale, wa.Height / scale);
         }
 
         var area = SystemParameters.WorkArea;
@@ -165,18 +157,11 @@ public static class AppUtilities
     /// </summary>
     public static double GetForegroundLogicalWidth()
     {
-        try
+        var hwnd = GetForegroundWindow();
+        if (hwnd != IntPtr.Zero)
         {
-            var hwnd = GetForegroundWindow();
-            if (hwnd != IntPtr.Zero)
-            {
-                var screen = Screen.FromHandle(hwnd);
-                return screen.WorkingArea.Width / GetMonitorScale(hwnd);
-            }
-        }
-        catch
-        {
-            // Fall through to default
+            var screen = Screen.FromHandle(hwnd);
+            return screen.WorkingArea.Width / GetMonitorScale(hwnd);
         }
 
         return SystemParameters.WorkArea.Width;

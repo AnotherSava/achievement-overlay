@@ -21,7 +21,7 @@ public sealed class AppConfig
 
     private DateTime _lastWriteTimeUtc;
     private SettingsData _settings = null!;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly string _settingsFilePath;
 
     public AppConfig()
@@ -39,8 +39,8 @@ public sealed class AppConfig
         _settings = Load(settingsPath);
     }
 
-    public string[] GamesPaths { get { Reload(); return _gamesPaths ??= ParseGamesPaths(_settings.GamesPaths); } }
-    public string[] GseSavesPaths { get { Reload(); return _gseSavesPaths ??= ParseGamesPaths(_settings.GseSavesPaths); } }
+    public IReadOnlyList<string> GamesPaths { get { Reload(); return _gamesPaths ??= ParseGamesPaths(_settings.GamesPaths); } }
+    public IReadOnlyList<string> GseSavesPaths { get { Reload(); return _gseSavesPaths ??= ParseGamesPaths(_settings.GseSavesPaths); } }
     public string Language { get { Reload(); return _settings.Language; } }
     public bool SoundEnabled { get { Reload(); return _settings.SoundEnabled; } }
     public string SoundPath { get { Reload(); return _settings.SoundPath; } }
@@ -51,8 +51,8 @@ public sealed class AppConfig
     public string? SteamWebApiKey { get { Reload(); return _settings.SteamWebApiKey; } }
     public string? FirecrawlApiKey { get { Reload(); return _settings.FirecrawlApiKey; } }
 
-    private string[]? _gseSavesPaths;
-    private string[]? _gamesPaths;
+    private IReadOnlyList<string>? _gseSavesPaths;
+    private IReadOnlyList<string>? _gamesPaths;
 
     public SettingsData GetCurrent()
     {
@@ -60,25 +60,16 @@ public sealed class AppConfig
         return _settings;
     }
 
-    public void UpdateConfigValue(string propertyName, object value)
-    {
-        UpdateConfigValue(propertyName, value, _settingsFilePath);
-    }
+    public void UpdateConfigValue(string propertyName, object value) => UpdateConfigValue(propertyName, value, _settingsFilePath);
 
-    internal void UpdateConfigValue(string propertyName, object value, string settingsPath)
-    {
-        UpdateConfigValues(new Dictionary<string, object?> { [propertyName] = value }, settingsPath);
-    }
+    internal void UpdateConfigValue(string propertyName, object value, string settingsPath) => UpdateConfigValues(new Dictionary<string, object?> { [propertyName] = value }, settingsPath);
 
     /// <summary>
     /// Writes several settings in one read-modify-write pass, keyed by <see cref="SettingsData"/>
     /// property name. The settings dialog saves through here so a save is one file write rather than
     /// one per field — every write bumps the file's timestamp and triggers a reload.
     /// </summary>
-    public void UpdateConfigValues(IReadOnlyDictionary<string, object?> values)
-    {
-        UpdateConfigValues(values, _settingsFilePath);
-    }
+    public void UpdateConfigValues(IReadOnlyDictionary<string, object?> values) => UpdateConfigValues(values, _settingsFilePath);
 
     internal void UpdateConfigValues(IReadOnlyDictionary<string, object?> values, string settingsPath)
     {
@@ -330,11 +321,6 @@ public sealed class AppConfig
             .Where(p => !string.IsNullOrEmpty(p))
             .ToArray();
 
-    private static string ExpandAndCache(ref string? cached, string raw)
-    {
-        return cached ??= ExpandEnvironmentVariables(raw);
-    }
-
     // --- Registry auto-start ---
 
     private const string RegistryRunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
@@ -399,7 +385,7 @@ public sealed class SettingsData
     /// Which corner or edge popups appear at. Absent reads as bottom-right — the enum's member 0 —
     /// so an existing install keeps the only position the app has ever had. The converter is on the
     /// type; the name has to camel-case to the JSON key, because that is how
-    /// <see cref="AppConfig.UpdateConfigValues"/> derives it when the settings window saves.
+    /// <see cref="AppConfig.UpdateConfigValues(IReadOnlyDictionary{string, object})"/> derives it when the settings window saves.
     /// </summary>
     [JsonPropertyName("notificationPosition")]
     public NotificationAnchor NotificationPosition { get; set; }

@@ -12,7 +12,7 @@ To send a diagnosis rather than read one, use [Report a problem](#reporting-a-pr
 
 ## The app will not start
 
-The app shows an error dialog on startup if the config is missing, has invalid JSON, or has invalid settings. Click **Details** to see the full log. Common causes:
+The app shows an error dialog on startup if the config is missing, has invalid JSON, or has invalid settings. Click **Details** to see this run's log. Common causes:
 
 - **Config file not found** — make sure `config.json` is in the same folder as the executable. Re-extract it from the release archive if needed.
 - **Invalid JSON** — fix the syntax in `config.json`, using the [example config](usage/configuration#example) as a reference.
@@ -84,9 +84,9 @@ The report is split into parts listed down the side, so you can read one without
 
 The app sends nothing anywhere. It writes a file and you decide what happens to it. The parts are:
 
-- The app version, including the exact build it was made from.
+- The app version, including the exact build it was made from, and the reason if this run could not open its log.
 - Your `config.json`, with any API key replaced by `xxxxxx`. Folder paths are included, because which folder a game was found in is often the answer, but they are written in the portable form (`%appdata%\GSE Saves`) so your Windows account name does not travel with them.
-- The log for the last five runs of the app, narrowed to the game you picked. Lines about your other games are removed and counted, so reporting one game does not publish your library. A run that logged exactly what the run before it logged is listed by its start time alone, since restarts usually repeat the same startup lines. The file itself keeps more runs; five covers hitting a problem, restarting, and trying again.
+- The log for the last five runs of the app, narrowed to the game you picked. Lines about your other games are removed and counted, so reporting one game does not publish your library. A run that logged exactly what the run before it logged is listed by its start time alone, since restarts usually repeat the same startup lines. The file itself keeps more runs; five covers hitting a problem, restarting, and trying again. A log that is missing or could not be read is reported as such rather than as an empty one.
 - Every `steam_settings` folder found for that game, deepest first. The first is where achievement text and icons come from, and a game having more than one is worth knowing.
 - That game's `steam_settings/achievements.json` and its GSE Saves unlock file, or a note saying which was missing or unreadable.
 

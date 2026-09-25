@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using System.Windows.Forms;
+using Microsoft.Win32.SafeHandles;
 
 namespace AchievementOverlay;
 
@@ -18,15 +18,15 @@ internal sealed class LowLevelKeyboardHook : IDisposable
     private const int WmSysKeyDown = 0x0104;
     private const int WmSysKeyUp = 0x0105;
 
-    private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+    private delegate IntPtr LowLevelKeyboardProc(int nCode, nint wParam, IntPtr lParam);
 
     // Held in a field so the GC cannot collect the delegate while Windows still holds the pointer.
     private readonly LowLevelKeyboardProc _proc;
     private readonly Func<Keys, bool> _onKeyDown;
-    private IntPtr _hookId;
+    private readonly SafeHookHandle _hook;
     private Keys _consumedKey = Keys.None;
 
-    public bool IsInstalled => _hookId != IntPtr.Zero;
+    public bool IsInstalled => !_hook.IsInvalid && !_hook.IsClosed;
 
     /// <param name="onKeyDown">
     /// Returns true to consume the key, which suppresses it system-wide. It runs on the UI thread
@@ -36,15 +36,16 @@ internal sealed class LowLevelKeyboardHook : IDisposable
     {
         _onKeyDown = onKeyDown;
         _proc = HookProc;
-        _hookId = SetWindowsHookEx(WhKeyboardLl, _proc, GetModuleHandle(null), 0);
-        if (_hookId == IntPtr.Zero)
+        _hook = SetWindowsHookEx(WhKeyboardLl, _proc, GetModuleHandle(null), 0);
+        _hook.Callback = _proc;
+        if (_hook.IsInvalid)
             Logger.Warn($"Could not install the keyboard hook (error {Marshal.GetLastWin32Error()}) — a shortcut already claimed by another app cannot be captured.");
     }
 
     /// <summary>True while the key is physically held, read from the async state the hook sees.</summary>
     public static bool IsKeyDown(Keys key) => (GetAsyncKeyState((int)key) & 0x8000) != 0;
 
-    private IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam)
+    private IntPtr HookProc(int nCode, nint wParam, IntPtr lParam)
     {
         if (nCode >= 0)
         {
@@ -67,7 +68,7 @@ internal sealed class LowLevelKeyboardHook : IDisposable
             }
         }
 
-        return CallNextHookEx(_hookId, nCode, wParam, lParam);
+        return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam); // Windows ignores the hook handle
     }
 
     /// <summary>
@@ -80,24 +81,34 @@ internal sealed class LowLevelKeyboardHook : IDisposable
         {
             return _onKeyDown(key);
         }
+#pragma warning disable CA1031 // Keyboard hook boundary: logs the failure at Warn and lets the key through
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Warn($"Keyboard hook callback failed: {ex.Message}");
             return false;
         }
     }
 
-    public void Dispose()
-    {
-        if (_hookId == IntPtr.Zero)
-            return;
+    public void Dispose() => _hook.Dispose();
 
-        UnhookWindowsHookEx(_hookId);
-        _hookId = IntPtr.Zero;
+    /// <summary>
+    /// Owns the hook handle, so a finalizer removes the hook if Dispose is ever missed rather than
+    /// leaving it installed until the process exits. It also holds the callback: an object awaiting
+    /// finalization keeps what it references alive, so Windows cannot call a collected delegate in
+    /// the gap before the hook comes off.
+    /// </summary>
+    private sealed class SafeHookHandle : SafeHandleZeroOrMinusOneIsInvalid
+    {
+        public SafeHookHandle() : base(ownsHandle: true) { }
+
+        public LowLevelKeyboardProc? Callback { get; set; }
+
+        protected override bool ReleaseHandle() => UnhookWindowsHookEx(handle);
     }
 
     [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+    private static extern SafeHookHandle SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

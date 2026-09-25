@@ -3,8 +3,8 @@ using System.Net.Http;
 
 namespace AchievementOverlay.GbeConfig;
 
-/// <summary>Summary of an icon-download pass.</summary>
-public sealed record IconDownloadResult(int Downloaded, int Skipped, int Failed);
+/// <summary>Summary of an icon-download pass. <paramref name="FirstError"/> is the first failure's message, so a run reporting failures can also say why.</summary>
+public sealed record IconDownloadResult(int Downloaded, int Skipped, int Failed, string? FirstError);
 
 /// <summary>
 /// Downloads achievement icons (unlocked + locked) into the
@@ -31,6 +31,7 @@ public static class IconDownloader
         var downloaded = 0;
         var skipped = 0;
         var failed = 0;
+        string? firstError = null;
 
         using var throttle = new SemaphoreSlim(8);
         var tasks = jobs.Select(async job =>
@@ -48,9 +49,10 @@ public static class IconDownloader
                 await File.WriteAllBytesAsync(job.Path, bytes, ct);
                 Interlocked.Increment(ref downloaded);
             }
-            catch (Exception) when (!ct.IsCancellationRequested)
+            catch (Exception ex) when (!ct.IsCancellationRequested && ex is HttpRequestException or TaskCanceledException or IOException or UnauthorizedAccessException or InvalidOperationException or UriFormatException)
             {
                 Interlocked.Increment(ref failed);
+                Interlocked.CompareExchange(ref firstError, ex.Message, null);
             }
             finally
             {
@@ -59,6 +61,6 @@ public static class IconDownloader
         });
 
         await Task.WhenAll(tasks);
-        return new IconDownloadResult(downloaded, skipped, failed);
+        return new IconDownloadResult(downloaded, skipped, failed, firstError);
     }
 }

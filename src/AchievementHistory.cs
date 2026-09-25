@@ -56,7 +56,9 @@ public sealed class AchievementHistory
                     {
                         states = AchievementMetadata.ParseUnlockStates(File.ReadAllText(achievementsFile));
                     }
+#pragma warning disable CA1031 // Per-game boundary: logs the unreadable unlock file at Warn and lists the other games
                     catch (Exception ex)
+#pragma warning restore CA1031
                     {
                         Logger.Warn($"Error reading achievements for appid {appId}: {ex.Message}");
                     }

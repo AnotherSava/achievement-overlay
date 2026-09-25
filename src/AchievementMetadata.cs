@@ -245,7 +245,7 @@ public static class AchievementMetadata
             return $"digits, unpadded (\"{list[0]}\")";
 
         var widths = padded.Select(n => n.Length).Distinct().OrderBy(w => w).ToList();
-        var width = widths.Count == 1 ? widths[0].ToString() : string.Join("/", widths);
+        var width = string.Join("/", widths);
         return $"digits, zero-padded to {width} (\"{padded[0]}\")";
     }
 
@@ -273,8 +273,7 @@ public static class AchievementMetadata
 
         foreach (var property in element.Value.EnumerateObject())
         {
-            if (property.Value.ValueKind == JsonValueKind.String
-                && !property.NameEquals(TokenKey))
+            if (property.Value.ValueKind == JsonValueKind.String && !property.NameEquals(TokenKey))
                 into.Add(property.Name);
         }
     }
@@ -285,8 +284,7 @@ public static class AchievementMetadata
     /// </summary>
     public static string GetDisplayText(JsonElement? element, string language)
     {
-        if (element == null || element.Value.ValueKind == JsonValueKind.Undefined
-                           || element.Value.ValueKind == JsonValueKind.Null)
+        if (element == null || element.Value.ValueKind == JsonValueKind.Undefined || element.Value.ValueKind == JsonValueKind.Null)
             return "";
 
         if (element.Value.ValueKind == JsonValueKind.String)
@@ -295,8 +293,7 @@ public static class AchievementMetadata
         if (element.Value.ValueKind == JsonValueKind.Object)
         {
             // Try requested language first
-            if (element.Value.TryGetProperty(language, out var langValue)
-                && langValue.ValueKind == JsonValueKind.String)
+            if (element.Value.TryGetProperty(language, out var langValue) && langValue.ValueKind == JsonValueKind.String)
                 return langValue.GetString() ?? "";
 
             // Schemas disagree on case for the same language (one game ships "LATAM", another
@@ -304,17 +301,14 @@ public static class AchievementMetadata
             // before treating it as unavailable.
             foreach (var prop in element.Value.EnumerateObject())
             {
-                if (prop.Value.ValueKind == JsonValueKind.String
-                    && string.Equals(prop.Name, language, StringComparison.OrdinalIgnoreCase))
+                if (prop.Value.ValueKind == JsonValueKind.String && string.Equals(prop.Name, language, StringComparison.OrdinalIgnoreCase))
                     return prop.Value.GetString() ?? "";
             }
 
             // Fallback to english. Warned once per language: the message says nothing about which
             // achievement it came from, and a schema that lacks the language lacks it for every entry.
             WarnOnce($"Language '{language}' not available, falling back to english");
-            if (language != "english"
-                && element.Value.TryGetProperty("english", out var engValue)
-                && engValue.ValueKind == JsonValueKind.String)
+            if (language != "english" && element.Value.TryGetProperty("english", out var engValue) && engValue.ValueKind == JsonValueKind.String)
                 return engValue.GetString() ?? "";
 
             // Fallback to first available value
@@ -402,7 +396,7 @@ public static class AchievementMetadata
         return unpadded.Length > 0 ? unpadded : "0";
     }
 
-    /// <summary>Messages already logged by <see cref="WarnOnce"/>, so each is written once.</summary>
+    /// <summary>Messages already logged by <see cref="WarnOnce(string, string)"/>, so each is written once.</summary>
     private static readonly ConcurrentDictionary<string, byte> WarnedOnce = new();
 
     /// <summary>
@@ -599,9 +593,7 @@ public static class AchievementMetadata
 
         foreach (var property in element.Value.EnumerateObject())
         {
-            if (property.Value.ValueKind == JsonValueKind.String
-                && !property.NameEquals(TokenKey)
-                && string.Equals(property.Name, language, StringComparison.OrdinalIgnoreCase))
+            if (property.Value.ValueKind == JsonValueKind.String && !property.NameEquals(TokenKey) && string.Equals(property.Name, language, StringComparison.OrdinalIgnoreCase))
                 return !string.IsNullOrWhiteSpace(property.Value.GetString());
         }
 

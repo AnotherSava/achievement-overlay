@@ -1,5 +1,3 @@
-using System.Windows.Forms;
-using AchievementOverlay;
 using Xunit;
 
 namespace AchievementOverlay.Tests;

@@ -1,11 +1,14 @@
-using System.Windows.Forms;
+using System.Runtime.InteropServices;
+
+// P/Invoke targets are looked up in System32 only, so a DLL of the same name placed beside the exe is never loaded in their place.
+[assembly: DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
 
 namespace AchievementOverlay;
 
-static class Program
+internal static class Program
 {
     [STAThread]
-    static void Main()
+    private static void Main()
     {
         using var mutex = new Mutex(true, "AchievementOverlay_SingleInstance", out var isNew);
         if (!isNew)
@@ -17,11 +20,9 @@ static class Program
 
         // Initialize WPF application for dispatcher support
         // (needed for WPF overlay windows within WinForms lifecycle)
-        if (System.Windows.Application.Current == null)
-        {
-            new System.Windows.Application { ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown };
-        }
+        _ = new System.Windows.Application { ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown };
 
-        Application.Run(new TrayApplicationContext());
+        using var context = new TrayApplicationContext();
+        Application.Run(context);
     }
 }

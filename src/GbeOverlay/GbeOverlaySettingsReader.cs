@@ -68,7 +68,9 @@ public sealed class GbeOverlaySettingsReader
                 Logger.Info($"Game overlay settings: {settings}");
             return settings;
         }
+#pragma warning disable CA1031 // Popup boundary: logs the failure at Warn and keeps the last settings read, so the popup still shows
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Warn($"Could not read game overlay settings from '{key}': {ex.Message}");
             return _cache.TryGetValue(key, out var previous) ? previous.Settings : null;
@@ -115,7 +117,9 @@ public sealed class GbeOverlaySettingsReader
                 {
                     merged = merged.WithFallback(IniFile.Parse(File.ReadAllText(path)));
                 }
+#pragma warning disable CA1031 // Per-file boundary: logs the unreadable ini at Warn and merges the others
                 catch (Exception ex)
+#pragma warning restore CA1031
                 {
                     // Per file, so one unreadable config does not discard the others' values.
                     Logger.Warn($"Could not read '{path}': {ex.Message}");

@@ -19,11 +19,20 @@ public static class Logger
 
     private static StreamWriter? _writer;
 
+    // Every use of _writer takes this lock: the UI thread and the watcher's background tasks all log.
+    private static readonly Lock _writerLock = new();
+
     /// <summary>The log file, next to the executable. Read this rather than rebuilding the path.</summary>
     public static string LogPath => Path.Combine(AppContext.BaseDirectory, "overlay.log");
 
     /// <summary>Where <see cref="LogPath"/> is moved once it outgrows <see cref="MaxLogBytes"/>.</summary>
     private static string PreviousLogPath => LogPath + ".1";
+
+    /// <summary>
+    /// Why <see cref="Init"/> could not open the log, or null when it could. Kept here because a
+    /// logger that failed has nowhere to write its own failure; a diagnostic report carries it.
+    /// </summary>
+    public static string? InitError { get; private set; }
 
     public static void Init()
     {
@@ -34,16 +43,19 @@ public static class Logger
             // Append, not truncate. The app starts with Windows for most users, so a reboot is a
             // launch: truncating here destroyed the session the bug report was about and left behind
             // a file that reads like a clean run rather than one saying the evidence is gone.
-            _writer = new StreamWriter(LogPath, append: true) { AutoFlush = true };
+            lock (_writerLock)
+            {
+                _writer = new StreamWriter(LogPath, append: true) { AutoFlush = true };
 
-            // Session banner. An appended log has no boundaries without it, and WarnOnce dedupes per
-            // process — so a reader needs to know where one run ends for a missing warning to mean
-            // "not this time" rather than "already said".
-            _writer.WriteLine($"{SessionBannerPrefix} {DateTime.Now:yyyy-MM-dd HH:mm:ss}, {AppUtilities.InformationalVersion} =====");
+                // Session banner. An appended log has no boundaries without it, and WarnOnce dedupes per
+                // process — so a reader needs to know where one run ends for a missing warning to mean
+                // "not this time" rather than "already said".
+                _writer.WriteLine($"{SessionBannerPrefix} {DateTime.Now:yyyy-MM-dd HH:mm:ss}, {AppUtilities.InformationalVersion} =====");
+            }
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Can't create log file — logging silently disabled
+            InitError = ex.Message;
         }
     }
 
@@ -53,26 +65,10 @@ public static class Logger
 
     public static void Close()
     {
-        _writer?.Dispose();
-        _writer = null;
-    }
-
-    /// <summary>
-    /// The log's current contents, or an empty string if it cannot be read. Shares the file with the
-    /// writer this class holds open, so callers need not <see cref="Close"/> first: a plain
-    /// File.ReadAllText asks for a share mode that the writer's own handle denies.
-    /// </summary>
-    public static string ReadAll()
-    {
-        try
+        lock (_writerLock)
         {
-            using var stream = new FileStream(LogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            using var reader = new StreamReader(stream);
-            return reader.ReadToEnd();
-        }
-        catch
-        {
-            return "";
+            _writer?.Dispose();
+            _writer = null;
         }
     }
 
@@ -90,7 +86,7 @@ public static class Logger
         {
             File.Move(LogPath, PreviousLogPath, overwrite: true);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Rolling is a nicety; failing it must not cost this session its logging.
         }
@@ -98,6 +94,7 @@ public static class Logger
 
     private static void Write(string level, string message)
     {
-        _writer?.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{level}] {message}");
+        lock (_writerLock)
+            _writer?.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{level}] {message}");
     }
 }

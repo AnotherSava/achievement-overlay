@@ -1,11 +1,10 @@
 using System.IO;
 using System.Text.Json;
-using AchievementOverlay;
 using Xunit;
 
 namespace AchievementOverlay.Tests;
 
-public class AchievementMetadataTests : IDisposable
+public sealed class AchievementMetadataTests : IDisposable
 {
     private readonly string _tempDir;
 
@@ -226,7 +225,7 @@ public class AchievementMetadataTests : IDisposable
         // No english, no spanish — falls back to first available
         Assert.NotEmpty(text);
         // Should be one of the available values
-        Assert.True(text == "Erstes Blut" || text == "Premier Sang");
+        Assert.True(text is "Erstes Blut" or "Premier Sang");
     }
 
     [Fact]
@@ -316,12 +315,9 @@ public class AchievementMetadataTests : IDisposable
         Assert.False(matchedExactly);
     }
 
+    // No pad-and-probe ladder from the key would find this; folding both sides does.
     [Fact]
-    public void FindDefinition_BothSidesPaddedToDifferentWidths_Matches()
-    {
-        // No pad-and-probe ladder from the key would find this; folding both sides does.
-        Assert.Equal("001", Find("01", "001").Found?.Name);
-    }
+    public void FindDefinition_BothSidesPaddedToDifferentWidths_Matches() => Assert.Equal("001", Find("01", "001").Found?.Name);
 
     [Fact]
     public void FindDefinition_ExactMatchWinsOverZeroPadded()
@@ -333,26 +329,17 @@ public class AchievementMetadataTests : IDisposable
         Assert.True(matchedExactly);
     }
 
+    // Picking one would be picking whichever the schema's author typed first.
     [Fact]
-    public void FindDefinition_TwoEntriesDifferOnlyInPadding_ReturnsNull()
-    {
-        // Picking one would be picking whichever the schema's author typed first.
-        Assert.Null(Find("1", "001", "0001").Found);
-    }
+    public void FindDefinition_TwoEntriesDifferOnlyInPadding_ReturnsNull() => Assert.Null(Find("1", "001", "0001").Found);
 
+    // Two entries spelled the same are one achievement listed twice, not an ambiguity.
     [Fact]
-    public void FindDefinition_DuplicateIdenticalNames_StillMatches()
-    {
-        // Two entries spelled the same are one achievement listed twice, not an ambiguity.
-        Assert.Equal("001", Find("1", "001", "001").Found?.Name);
-    }
+    public void FindDefinition_DuplicateIdenticalNames_StillMatches() => Assert.Equal("001", Find("1", "001", "001").Found?.Name);
 
+    // Pins the one-character floor: stripping "000" to "" would fold it onto a nameless entry.
     [Fact]
-    public void FindDefinition_AllZeroNames_Match()
-    {
-        // Pins the one-character floor: stripping "000" to "" would fold it onto a nameless entry.
-        Assert.Equal("000", Find("0", "000").Found?.Name);
-    }
+    public void FindDefinition_AllZeroNames_Match() => Assert.Equal("000", Find("0", "000").Found?.Name);
 
     [Theory]
     [InlineData("01", "10")]      // same digits, different number
@@ -360,28 +347,19 @@ public class AchievementMetadataTests : IDisposable
     [InlineData("1", "ACH_1")]
     [InlineData("+1", "001")]     // excluded by construction, where long.TryParse would have accepted it
     [InlineData(" 1", "001")]
-    public void FindDefinition_NotEquivalentNames_ReturnsNull(string achievementName, string schemaName)
-    {
-        Assert.Null(Find(achievementName, schemaName).Found);
-    }
+    public void FindDefinition_NotEquivalentNames_ReturnsNull(string achievementName, string schemaName) => Assert.Null(Find(achievementName, schemaName).Found);
 
+    // The one case that separates char.IsAsciiDigit from char.IsDigit, using Arabic-Indic one
+    // (U+0661). TrimStart('0') strips only the ASCII zero, so under IsDigit the schema name is
+    // all-digits and folds onto the key; under IsAsciiDigit it is not numeric at all. Escaped
+    // rather than written literally: the file carries no BOM, and what this asserts must not
+    // rest on how the compiler reads a raw byte sequence.
     [Fact]
-    public void FindDefinition_NonAsciiDigitBehindAsciiZero_ReturnsNull()
-    {
-        // The one case that separates char.IsAsciiDigit from char.IsDigit, using Arabic-Indic one
-        // (U+0661). TrimStart('0') strips only the ASCII zero, so under IsDigit the schema name is
-        // all-digits and folds onto the key; under IsAsciiDigit it is not numeric at all. Escaped
-        // rather than written literally: the file carries no BOM, and what this asserts must not
-        // rest on how the compiler reads a raw byte sequence.
-        Assert.Null(Find("\u0661", "0\u0661").Found);
-    }
+    public void FindDefinition_NonAsciiDigitBehindAsciiZero_ReturnsNull() => Assert.Null(Find("\u0661", "0\u0661").Found);
 
+    // 25 digits: any numeric parse would fail outright, and double would equate distinct ids.
     [Fact]
-    public void FindDefinition_NameLongerThanInt64_Matches()
-    {
-        // 25 digits: any numeric parse would fail outright, and double would equate distinct ids.
-        Assert.Equal("0001234567890123456789012", Find("1234567890123456789012", "0001234567890123456789012").Found?.Name);
-    }
+    public void FindDefinition_NameLongerThanInt64_Matches() => Assert.Equal("0001234567890123456789012", Find("1234567890123456789012", "0001234567890123456789012").Found?.Name);
 
     [Fact]
     public void FindDefinition_SchemaEntryWithNullName_ReturnsNullWithoutThrowing()
@@ -629,16 +607,10 @@ public class AchievementMetadataTests : IDisposable
     }
 
     [Fact]
-    public void ParseUnlockStates_MalformedDocument_Throws()
-    {
-        Assert.Throws<JsonException>(() => AchievementMetadata.ParseUnlockStates("not valid json {{{"));
-    }
+    public void ParseUnlockStates_MalformedDocument_Throws() => Assert.Throws<JsonException>(() => AchievementMetadata.ParseUnlockStates("not valid json {{{"));
 
     [Fact]
-    public void IsSelfDescribing_UplayFile_True()
-    {
-        Assert.True(AchievementMetadata.IsSelfDescribing(AchievementMetadata.ParseUnlockStates(UplayJson)));
-    }
+    public void IsSelfDescribing_UplayFile_True() => Assert.True(AchievementMetadata.IsSelfDescribing(AchievementMetadata.ParseUnlockStates(UplayJson)));
 
     [Fact]
     public void IsSelfDescribing_GbeFile_False()
@@ -1105,12 +1077,9 @@ public class AchievementMetadataTests : IDisposable
     public void DescribeNameStyle_NamesTheSpellingThatDecidesWhetherAMatchIsPossible(string[] names, string expected) =>
         Assert.Equal(expected, AchievementMetadata.DescribeNameStyle(names));
 
+    // Real schemas do this: "000".."009" then "0010".
     [Fact]
-    public void DescribeNameStyle_ReportsBothWidthsWhenASchemaOverflowsItsOwnPadding()
-    {
-        // Real schemas do this: "000".."009" then "0010".
-        Assert.Equal("digits, zero-padded to 3/4 (\"000\")", AchievementMetadata.DescribeNameStyle(new[] { "000", "009", "0010" }));
-    }
+    public void DescribeNameStyle_ReportsBothWidthsWhenASchemaOverflowsItsOwnPadding() => Assert.Equal("digits, zero-padded to 3/4 (\"000\")", AchievementMetadata.DescribeNameStyle(new[] { "000", "009", "0010" }));
 
     [Fact]
     public void DescribeNameStyle_HandlesAnEmptySchema() =>

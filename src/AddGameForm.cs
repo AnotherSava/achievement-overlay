@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Net.Http;
-using System.Windows.Forms;
 using AchievementOverlay.GbeConfig;
 
 namespace AchievementOverlay;
@@ -27,7 +26,9 @@ public sealed class AddGameForm : Form, IConfigProgress
     private readonly Action<string> _onGameConfigured;
     private readonly ToolTip _toolTip = new();
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMinutes(5) };
+    private readonly System.Windows.Forms.Timer _spinner = new() { Interval = 90 };
 
+#pragma warning disable CA2213 // WinForms controls: every one sits in the form's Controls tree, and the form disposes them through it
     // Pages
     private readonly Panel _content = new() { Dock = DockStyle.Fill };
     private Panel _folderPage = null!;
@@ -59,7 +60,6 @@ public sealed class AddGameForm : Form, IConfigProgress
     // Progress checklist: steps accumulate as rows; the running one spins, finished ones get a check.
     private Panel _stepsHost = null!;
     private TableLayoutPanel _stepsTable = null!;
-    private readonly System.Windows.Forms.Timer _spinner = new() { Interval = 90 };
     private static readonly string[] SpinnerFrames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
     private Label? _currentStepIcon;
     private Label? _currentStepLabel;
@@ -89,10 +89,10 @@ public sealed class AddGameForm : Form, IConfigProgress
     private readonly List<Label> _wrapLabels = new();
     private Panel? _activePanel;
     private FlowLayoutPanel _buttonBar = null!;
+#pragma warning restore CA2213
 
     // Collected state
     private string _gameDir = "";
-    private string? _dllPrimaryPath;
     private string _appId = "";
     private bool _appIdGuessed;
     private bool _needAppId;
@@ -415,7 +415,7 @@ public sealed class AddGameForm : Form, IConfigProgress
         return label;
     }
 
-    private LinkLabel MakeLink(string text, string url)
+    private static LinkLabel MakeLink(string text, string url)
     {
         var link = new LinkLabel { Text = text, AutoSize = true, Margin = new Padding(0, 0, 0, 4) };
         link.LinkClicked += (_, _) => OpenUrl(url);
@@ -489,7 +489,7 @@ public sealed class AddGameForm : Form, IConfigProgress
         // taller than the screen (small resolution / high zoom), clamp to the screen and let the
         // page scroll so nothing is unreachable.
         var clamped = desired > maxClient;
-        ((Panel)_activePanel!).AutoScroll = clamped;
+        _activePanel!.AutoScroll = clamped;
         ClientSize = new Size(ClientSize.Width, clamped ? maxClient : desired);
         if (recenter)
             CenterToScreen();
@@ -587,7 +587,9 @@ public sealed class AddGameForm : Form, IConfigProgress
     private async Task AdvanceOrFetchAsync()
     {
         if (_steps[_stepIndex + 1] == Page.Ready)
+        {
             await ProceedAfterInputsAsync();
+        }
         else
         {
             _stepIndex++;
@@ -675,7 +677,6 @@ public sealed class AddGameForm : Form, IConfigProgress
             }
 
             _gameDir = gameDir;
-            _dllPrimaryPath = primary.Path;
 
             // If a config already exists at the target, confirm overwrite up front (not at the end).
             var existing = Path.Combine(Path.GetDirectoryName(primary.Path)!, "steam_settings");
@@ -711,14 +712,18 @@ public sealed class AddGameForm : Form, IConfigProgress
             InvalidateSchema(); // re-detection may change the AppID
             _folderStatus.Text = "";
             if (_steps[1] == Page.Ready)
+            {
                 await ProceedAfterInputsAsync(); // AppID + key already known — fetch, then ready/cookie
+            }
             else
             {
                 _stepIndex = 1;
                 ShowStep();
             }
         }
+#pragma warning disable CA1031 // UI boundary: shows the failure on the folder page's status line
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             _folderStatus.ForeColor = Color.Firebrick;
             _folderStatus.Text = ex.Message;
@@ -776,6 +781,7 @@ public sealed class AddGameForm : Form, IConfigProgress
         _nextButton.Visible = false;
         FitToActivePage();
         _running = true;
+        _cts?.Dispose();
         _cts = new CancellationTokenSource();
         UseWaitCursor = true;
 
@@ -790,7 +796,9 @@ public sealed class AddGameForm : Form, IConfigProgress
             FinishRun();
             return;
         }
+#pragma warning disable CA1031 // UI boundary: shows the failure as an error line in the progress log
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Report(ConfigLogLevel.Error, ex.Message);
             FinishRun();
@@ -803,7 +811,9 @@ public sealed class AddGameForm : Form, IConfigProgress
             {
                 _onGameConfigured(_gameDir);
             }
+#pragma warning disable CA1031 // Host-callback boundary: shows the failure as an error line in the progress log
             catch (Exception ex)
+#pragma warning restore CA1031
             {
                 Report(ConfigLogLevel.Error, $"Game configured, but updating the overlay failed: {ex.Message}");
             }
@@ -916,7 +926,9 @@ public sealed class AddGameForm : Form, IConfigProgress
         {
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         }
+#pragma warning disable CA1031 // Link-click boundary: logs the failure at Warn
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Warn($"Could not open '{url}': {ex.Message}");
         }
@@ -1013,8 +1025,7 @@ public sealed class AddGameForm : Form, IConfigProgress
             BeginInvoke(() => ((IConfigProgress)this).UpdateStep(text));
             return;
         }
-        if (_currentStepLabel != null)
-            _currentStepLabel.Text = text;
+        _currentStepLabel?.Text = text;
     }
 
     /// <summary>Marks the current step failed (✗), logs the reason, and lets the run continue.</summary>
@@ -1036,6 +1047,7 @@ public sealed class AddGameForm : Form, IConfigProgress
             _toolTip.Dispose();
             _http.Dispose();
             _spinner.Dispose();
+            _cts?.Dispose();
         }
         base.Dispose(disposing);
     }

@@ -4,7 +4,7 @@ using Xunit;
 
 namespace AchievementOverlay.Tests.GbeOverlay;
 
-public class GbeOverlaySettingsReaderTests : IDisposable
+public sealed class GbeOverlaySettingsReaderTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _steamSettings;
@@ -44,22 +44,13 @@ public class GbeOverlaySettingsReaderTests : IDisposable
         new GbeOverlaySettingsReader().Read(steamSettingsDirs);
 
     [Fact]
-    public void Read_NoSettingsDir_ReturnsNothing()
-    {
-        Assert.Null(Read(null));
-    }
+    public void Read_NoSettingsDir_ReturnsNothing() => Assert.Null(Read(null));
 
     [Fact]
-    public void Read_EmptyFolder_ReturnsNothing()
-    {
-        Assert.Null(Read(_steamSettings));
-    }
+    public void Read_EmptyFolder_ReturnsNothing() => Assert.Null(Read(_steamSettings));
 
     [Fact]
-    public void Read_FolderThatDoesNotExist_ReturnsNothing()
-    {
-        Assert.Null(Read(Path.Combine(_tempDir, "nope")));
-    }
+    public void Read_FolderThatDoesNotExist_ReturnsNothing() => Assert.Null(Read(Path.Combine(_tempDir, "nope")));
 
     [Fact]
     public void Read_OverlayIniWithNothingUsable_ReturnsNothing()

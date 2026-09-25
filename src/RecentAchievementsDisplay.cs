@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -121,7 +123,7 @@ public sealed class RecentAchievementsDisplay : IDisposable
         }
 
         var entry = ctx.Entries[index];
-        var timestamp = DateTimeOffset.FromUnixTimeSeconds(entry.EarnedTime).LocalDateTime.ToString("MMM dd, HH:mm");
+        var timestamp = DateTimeOffset.FromUnixTimeSeconds(entry.EarnedTime).LocalDateTime.ToString("MMM dd, HH:mm", CultureInfo.CurrentCulture);
         var gameInfoLine = $"{entry.GameName} \u2014 {timestamp}";
 
         var window = new NotificationWindow(ctx.Appearance);
@@ -164,7 +166,7 @@ public sealed class RecentAchievementsDisplay : IDisposable
     {
         try
         {
-            _escHotkey = new GlobalHotkey(ESC_HOTKEY_ID, "Escape", () => Dismiss());
+            _escHotkey = new GlobalHotkey(ESC_HOTKEY_ID, "Escape", Dismiss);
             if (!_escHotkey.IsRegistered)
             {
                 Logger.Info("Could not register Esc hotkey for dismiss");
@@ -172,8 +174,9 @@ public sealed class RecentAchievementsDisplay : IDisposable
                 _escHotkey = null;
             }
         }
-        catch
+        catch (Win32Exception ex)
         {
+            Logger.Warn($"Could not create the window for the Esc hotkey: {ex.Message}");
             _escHotkey = null;
         }
     }
@@ -188,15 +191,9 @@ public sealed class RecentAchievementsDisplay : IDisposable
         _escHotkey = null;
 
         foreach (var window in _windows)
-        {
-            try { window.DismissImmediately(); }
-            catch { /* window may already be closed */ }
-        }
+            window.DismissImmediately();
         _windows.Clear();
     }
 
-    public void Dispose()
-    {
-        Dismiss();
-    }
+    public void Dispose() => Dismiss();
 }

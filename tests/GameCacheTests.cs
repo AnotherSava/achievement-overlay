@@ -1,10 +1,9 @@
 using System.IO;
-using AchievementOverlay;
 using Xunit;
 
 namespace AchievementOverlay.Tests;
 
-public class GameCacheTests : IDisposable
+public sealed class GameCacheTests : IDisposable
 {
     private readonly string _tempDir;
 
@@ -54,8 +53,8 @@ public class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
-        Assert.True((cache.LookupCached("12345") != null));
-        Assert.True((cache.LookupCached("67890") != null));
+        Assert.True(cache.LookupCached("12345") != null);
+        Assert.True(cache.LookupCached("67890") != null);
         Assert.Equal(2, cache.GetAll().Count);
     }
 
@@ -70,8 +69,8 @@ public class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
-        Assert.True((cache.LookupCached("11111") != null));
-        Assert.False((cache.LookupCached("22222") != null));
+        Assert.True(cache.LookupCached("11111") != null);
+        Assert.False(cache.LookupCached("22222") != null);
         Assert.Single(cache.GetAll());
     }
 
@@ -103,7 +102,7 @@ public class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
-        Assert.True((cache.LookupCached("99999") != null));
+        Assert.True(cache.LookupCached("99999") != null);
     }
 
     // --- Lookup tests ---
@@ -147,7 +146,7 @@ public class GameCacheTests : IDisposable
         cache.ScanAll();
 
         // Initially not found
-        Assert.False((cache.LookupCached("55555") != null));
+        Assert.False(cache.LookupCached("55555") != null);
 
         // Now add a game
         var achievementsJson = """[{"name": "ACH01", "displayName": "Test"}]""";
@@ -263,8 +262,8 @@ public class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { path1, path2 });
         cache.ScanAll();
 
-        Assert.True((cache.LookupCached("11111") != null));
-        Assert.True((cache.LookupCached("22222") != null));
+        Assert.True(cache.LookupCached("11111") != null);
+        Assert.True(cache.LookupCached("22222") != null);
         Assert.Equal(2, cache.GetAll().Count);
     }
 
@@ -305,7 +304,7 @@ public class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
-        Assert.True((cache.LookupCached("88888") != null));
+        Assert.True(cache.LookupCached("88888") != null);
         Assert.Single(cache.GetAll());
         var info = cache.Lookup("88888");
         Assert.NotNull(info);
@@ -353,7 +352,7 @@ public class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
-        Assert.True((cache.LookupCached("33333") != null));
+        Assert.True(cache.LookupCached("33333") != null);
     }
 
     // --- Games carrying more than one steam_settings folder ---

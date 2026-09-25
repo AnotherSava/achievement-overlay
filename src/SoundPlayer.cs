@@ -66,7 +66,9 @@ public sealed class UnlockSoundPlayer : IDisposable
             player.Play();
             return true;
         }
+#pragma warning disable CA1031 // Per-file boundary: logs the failure at Warn and reports the file as unplayable
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Warn($"Could not play sound '{path}': {ex.Message}");
             return false;
@@ -79,8 +81,7 @@ public sealed class UnlockSoundPlayer : IDisposable
         {
             if (_defaultPlayer == null)
             {
-                var stream = typeof(UnlockSoundPlayer).Assembly
-                    .GetManifestResourceStream("AchievementOverlay.achievement_sound.wav");
+                var stream = typeof(UnlockSoundPlayer).Assembly.GetManifestResourceStream("AchievementOverlay.achievement_sound.wav");
 
                 if (stream == null)
                 {
@@ -94,7 +95,9 @@ public sealed class UnlockSoundPlayer : IDisposable
 
             _defaultPlayer.Play();
         }
+#pragma warning disable CA1031 // Playback boundary: logs the failure at Warn so a sound cannot break the notification it accompanies
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Warn($"Error playing sound: {ex.Message}");
         }

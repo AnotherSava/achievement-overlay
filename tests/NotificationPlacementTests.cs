@@ -1,5 +1,4 @@
 using System.Windows;
-using AchievementOverlay;
 using Xunit;
 
 namespace AchievementOverlay.Tests;
@@ -59,10 +58,7 @@ public class NotificationPlacementTests
     [InlineData(NotificationAnchor.BottomCenter, (1920 - Width) / 2)]
     [InlineData(NotificationAnchor.TopRight, 1920 - Width - Margin)]
     [InlineData(NotificationAnchor.BottomRight, 1920 - Width - Margin)]
-    public void LeftFor_AlignsLeftCentredAndRight(NotificationAnchor anchor, double expected)
-    {
-        Assert.Equal(expected, NotificationPlacement.LeftFor(anchor, Area, Width), 6);
-    }
+    public void LeftFor_AlignsLeftCentredAndRight(NotificationAnchor anchor, double expected) => Assert.Equal(expected, NotificationPlacement.LeftFor(anchor, Area, Width), 6);
 
     [Fact]
     public void Place_KeepsThePopupInsideTheArea()

@@ -1,11 +1,10 @@
 using System.IO;
 using System.Text.Json;
-using AchievementOverlay;
 using Xunit;
 
 namespace AchievementOverlay.Tests;
 
-public class AppConfigTests : IDisposable
+public sealed class AppConfigTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _settingsPath;
@@ -90,16 +89,10 @@ public class AppConfigTests : IDisposable
     }
 
     [Fact]
-    public void ExpandEnvironmentVariables_EmptyString_ReturnsEmpty()
-    {
-        Assert.Equal("", AppConfig.ExpandEnvironmentVariables(""));
-    }
+    public void ExpandEnvironmentVariables_EmptyString_ReturnsEmpty() => Assert.Equal("", AppConfig.ExpandEnvironmentVariables(""));
 
     [Fact]
-    public void ExpandEnvironmentVariables_NullString_ReturnsNull()
-    {
-        Assert.Null(AppConfig.ExpandEnvironmentVariables(null!));
-    }
+    public void ExpandEnvironmentVariables_NullString_ReturnsNull() => Assert.Null(AppConfig.ExpandEnvironmentVariables(null!));
 
     [Fact]
     public void CollapseEnvironmentVariables_PathUnderAppData_UsesVariable()
@@ -127,10 +120,7 @@ public class AppConfigTests : IDisposable
     }
 
     [Fact]
-    public void CollapseEnvironmentVariables_UnrelatedPath_IsUnchanged()
-    {
-        Assert.Equal(@"D:\Games\Atomfall", AppConfig.CollapseEnvironmentVariables(@"D:\Games\Atomfall"));
-    }
+    public void CollapseEnvironmentVariables_UnrelatedPath_IsUnchanged() => Assert.Equal(@"D:\Games\Atomfall", AppConfig.CollapseEnvironmentVariables(@"D:\Games\Atomfall"));
 
     [Fact]
     public void CollapseEnvironmentVariables_SiblingWithSharedPrefix_IsUnchanged()
@@ -176,15 +166,12 @@ public class AppConfigTests : IDisposable
         Assert.Equal(@"D:\More", result[1]);
     }
 
+    // A user whose games all describe their own achievements has no game roots at all.
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
-    public void SplitRawPaths_EmptyValue_ReturnsNoEntries(string? value)
-    {
-        // A user whose games all describe their own achievements has no game roots at all.
-        Assert.Empty(AppConfig.SplitRawPaths(value));
-    }
+    public void SplitRawPaths_EmptyValue_ReturnsNoEntries(string? value) => Assert.Empty(AppConfig.SplitRawPaths(value));
 
     [Fact]
     public void ParseGamesPaths_SemicolonSeparated_ReturnsSplitArray()
@@ -511,7 +498,7 @@ public class AppConfigTests : IDisposable
         File.WriteAllText(_settingsPath, JsonSerializer.Serialize(new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games;D:\More", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5 }));
 
         var config = new AppConfig(_settingsPath);
-        Assert.Equal(2, config.GamesPaths.Length);
+        Assert.Equal(2, config.GamesPaths.Count);
         Assert.Equal(@"C:\Games", config.GamesPaths[0]);
         Assert.Equal(@"D:\More", config.GamesPaths[1]);
     }

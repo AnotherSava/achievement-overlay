@@ -37,7 +37,7 @@ public sealed class GameCache
     private readonly ConcurrentDictionary<string, byte> _rescannedAppIds = new();
 
     private readonly AppConfig? _config;
-    private readonly string[]? _staticGamesPaths;
+    private readonly IReadOnlyList<string>? _staticGamesPaths;
 
     public GameCache(AppConfig config)
     {
@@ -47,12 +47,12 @@ public sealed class GameCache
     /// <summary>
     /// Constructor for testing — accepts static paths instead of AppConfig.
     /// </summary>
-    internal GameCache(string[] gamesPaths)
+    internal GameCache(IReadOnlyList<string> gamesPaths)
     {
         _staticGamesPaths = gamesPaths;
     }
 
-    private string[] GetGamesPaths() => _config?.GamesPaths ?? _staticGamesPaths ?? Array.Empty<string>();
+    private IReadOnlyList<string> GetGamesPaths() => _config?.GamesPaths ?? _staticGamesPaths ?? Array.Empty<string>();
 
     /// <summary>
     /// Performs initial scan of all configured game paths.
@@ -126,9 +126,11 @@ public sealed class GameCache
         {
             appIdFiles = Directory.EnumerateFiles(basePath, "steam_appid.txt", AppUtilities.RecursiveScan);
         }
+#pragma warning disable CA1031 // Per-root boundary: a hand-edited gamesPaths entry can fail in many ways; logs at Warn and scans the other roots
         catch (Exception ex)
+#pragma warning restore CA1031
         {
-            Logger.Info($"  Error scanning '{basePath}': {ex.Message}");
+            Logger.Warn($"  Error scanning '{basePath}': {ex.Message}");
             return 0;
         }
 
@@ -169,9 +171,11 @@ public sealed class GameCache
                 if (!dirs.Contains(settingsDir, StringComparer.OrdinalIgnoreCase))
                     dirs.Add(settingsDir);
             }
+#pragma warning disable CA1031 // Per-game boundary: logs the failure at Warn and scans the other games
             catch (Exception ex)
+#pragma warning restore CA1031
             {
-                Logger.Info($"  Error processing '{appIdFile}': {ex.Message}");
+                Logger.Warn($"  Error processing '{appIdFile}': {ex.Message}");
             }
         }
 
@@ -253,7 +257,9 @@ public sealed class GameCache
             var json = File.ReadAllText(gameInfo.MetadataPath);
             return AchievementMetadata.ParseDefinitions(json);
         }
+#pragma warning disable CA1031 // Per-schema boundary: logs the unreadable file at Warn and returns null, which callers read as no schema
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Warn($"Failed to load achievement definitions for appid {gameInfo.AppId} from '{gameInfo.MetadataPath}': {ex.Message}");
             return null;

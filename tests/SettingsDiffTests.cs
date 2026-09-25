@@ -1,4 +1,3 @@
-using AchievementOverlay;
 using Xunit;
 
 namespace AchievementOverlay.Tests;
@@ -21,10 +20,7 @@ public class SettingsDiffTests
     };
 
     [Fact]
-    public void Compute_IdenticalSettings_ReturnsNothing()
-    {
-        Assert.Empty(SettingsDiff.Compute(Sample(), Sample()));
-    }
+    public void Compute_IdenticalSettings_ReturnsNothing() => Assert.Empty(SettingsDiff.Compute(Sample(), Sample()));
 
     [Fact]
     public void Compute_ReturnsOnlyChangedKeys()

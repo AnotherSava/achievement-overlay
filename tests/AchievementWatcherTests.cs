@@ -1,14 +1,13 @@
 using System.IO;
-using AchievementOverlay;
 using Xunit;
 
 namespace AchievementOverlay.Tests;
 
-public class AchievementWatcherTests : IDisposable
+public sealed class AchievementWatcherTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly List<NewAchievementEventArgs> _events = new();
-    private readonly object _eventsLock = new();
+    private readonly Lock _eventsLock = new();
 
     public AchievementWatcherTests()
     {
@@ -96,13 +95,13 @@ public class AchievementWatcherTests : IDisposable
     // --- ProcessFile: detect new unlock ---
 
     [Fact]
-    public void ProcessFile_NewUnlock_RaisesEvent()
+    public async Task ProcessFile_NewUnlock_RaisesEvent()
     {
         var json = """{"ACH01": {"earned": true, "earned_time": 1700000000}}""";
         var filePath = WriteAchievementsJson("12345", json);
 
         using var watcher = CreateWatcher();
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
 
         Assert.Single(_events);
         Assert.Equal("12345", _events[0].AppId);
@@ -110,22 +109,57 @@ public class AchievementWatcherTests : IDisposable
         Assert.Equal(1700000000L, _events[0].EarnedTime);
     }
 
+    // --- ProcessFile: a file the emulator still holds ---
+
+    [Fact]
+    public async Task ProcessFile_LockedOnFirstRead_RetriesAndReports()
+    {
+        var filePath = WriteAchievementsJson("12345", """{"ACH01": {"earned": true, "earned_time": 1700000000}}""");
+        // A retry budget of seconds, far longer than the lock is held, so a slow runner cannot use it up.
+        using var watcher = new AchievementWatcher(new[] { _tempDir }, maxRetries: 100, retryDelay: TimeSpan.FromMilliseconds(20));
+        watcher.NewAchievement += (_, e) => { lock (_eventsLock) _events.Add(e); };
+
+        Task processing;
+        using (new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            processing = watcher.ProcessFileAsync(filePath);
+            await Task.Delay(100);
+            // Still waiting on the lock, which is what makes this a test of the retry at all.
+            Assert.False(processing.IsCompleted);
+        }
+        await processing;
+
+        Assert.Single(_events);
+    }
+
+    [Fact]
+    public async Task ProcessFile_LockedThroughEveryRetry_ReturnsWithoutRaising()
+    {
+        var filePath = WriteAchievementsJson("12345", """{"ACH01": {"earned": true, "earned_time": 1700000000}}""");
+        using var watcher = CreateWatcher();
+
+        using (new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.None))
+            await watcher.ProcessFileAsync(filePath);
+
+        Assert.Empty(_events);
+    }
+
     // --- ProcessFile: ignore already-seen unlock ---
 
     [Fact]
-    public void ProcessFile_AlreadySeenUnlock_DoesNotRaiseEvent()
+    public async Task ProcessFile_AlreadySeenUnlock_DoesNotRaiseEvent()
     {
         var json = """{"ACH01": {"earned": true, "earned_time": 1700000000}}""";
         var filePath = WriteAchievementsJson("12345", json);
 
         using var watcher = CreateWatcher();
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
         Assert.Single(_events);
 
         // Process same file again — need to bump mod time for it to pass the mod time check
-        Thread.Sleep(50);
+        await Task.Delay(50);
         File.SetLastWriteTimeUtc(filePath, DateTime.UtcNow);
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
 
         // Still only one event — same earned_time means it's not new
         Assert.Single(_events);
@@ -134,7 +168,7 @@ public class AchievementWatcherTests : IDisposable
     // --- ProcessFile: multiple simultaneous unlocks ---
 
     [Fact]
-    public void ProcessFile_MultipleUnlocks_RaisesMultipleEvents()
+    public async Task ProcessFile_MultipleUnlocks_RaisesMultipleEvents()
     {
         var json = """
         {
@@ -146,7 +180,7 @@ public class AchievementWatcherTests : IDisposable
         var filePath = WriteAchievementsJson("12345", json);
 
         using var watcher = CreateWatcher();
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
 
         // ACH03 is not earned, so only 2 events
         Assert.Equal(2, _events.Count);
@@ -158,24 +192,24 @@ public class AchievementWatcherTests : IDisposable
     // --- ProcessFile: modification time check skips unchanged files ---
 
     [Fact]
-    public void ProcessFile_UnchangedModTime_SkipsFile()
+    public async Task ProcessFile_UnchangedModTime_SkipsFile()
     {
         var json = """{"ACH01": {"earned": true, "earned_time": 1700000000}}""";
         var filePath = WriteAchievementsJson("12345", json);
 
         using var watcher = CreateWatcher();
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
         Assert.Single(_events);
 
         // Process again without changing mod time — should skip entirely
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
         Assert.Single(_events); // No new events
     }
 
     // --- ProcessFile: seeded achievements don't fire ---
 
     [Fact]
-    public void SeedExistingAchievements_PreventsNotification()
+    public async Task SeedExistingAchievements_PreventsNotification()
     {
         var json = """{"ACH01": {"earned": true, "earned_time": 1700000000}}""";
         var filePath = WriteAchievementsJson("12345", json);
@@ -186,7 +220,7 @@ public class AchievementWatcherTests : IDisposable
         var states = AchievementMetadata.ParseUnlockStates(json);
         watcher.SeedExistingAchievements("12345", states);
 
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
 
         // No events because ACH01 was seeded
         Assert.Empty(_events);
@@ -195,7 +229,7 @@ public class AchievementWatcherTests : IDisposable
     // --- ProcessFile: new unlock after seeding ---
 
     [Fact]
-    public void ProcessFile_NewUnlockAfterSeeding_RaisesEvent()
+    public async Task ProcessFile_NewUnlockAfterSeeding_RaisesEvent()
     {
         // Seed with ACH01 only
         var seedJson = """{"ACH01": {"earned": true, "earned_time": 1700000000}}""";
@@ -211,7 +245,7 @@ public class AchievementWatcherTests : IDisposable
         }
         """;
         var filePath = WriteAchievementsJson("12345", json);
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
 
         // Only ACH02 is new
         Assert.Single(_events);
@@ -221,13 +255,13 @@ public class AchievementWatcherTests : IDisposable
     // --- Seeding never overwrites an already-observed unlock ---
 
     [Fact]
-    public void SeedExistingAchievements_DoesNotOverwriteObservedUnlock()
+    public async Task SeedExistingAchievements_DoesNotOverwriteObservedUnlock()
     {
         var json = """{"ACH01": {"earned": true, "earned_time": 1700000000}}""";
         var filePath = WriteAchievementsJson("12345", json);
 
         using var watcher = CreateWatcher();
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
         Assert.Single(_events);
 
         // A re-seed (e.g. after Add game) racing a fresh unlock must not record the new
@@ -235,9 +269,9 @@ public class AchievementWatcherTests : IDisposable
         var reEarned = """{"ACH01": {"earned": true, "earned_time": 1700000999}}""";
         watcher.SeedExistingAchievements("12345", AchievementMetadata.ParseUnlockStates(reEarned));
 
-        Thread.Sleep(50);
+        await Task.Delay(50);
         WriteFile(filePath, reEarned);
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
 
         Assert.Equal(2, _events.Count);
         Assert.Equal(1700000999L, _events[1].EarnedTime);
@@ -246,14 +280,14 @@ public class AchievementWatcherTests : IDisposable
     // --- ProcessFile: JSON parse error ---
 
     [Fact]
-    public void ProcessFile_InvalidJson_LogsErrorAndSkips()
+    public async Task ProcessFile_InvalidJson_LogsErrorAndSkips()
     {
         var dir = CreateAppDir("12345");
         var filePath = Path.Combine(dir, "achievements.json");
         WriteFile(filePath, "not valid json {{{");
 
         using var watcher = CreateWatcher();
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
 
         Assert.Empty(_events);
     }
@@ -261,12 +295,12 @@ public class AchievementWatcherTests : IDisposable
     // --- ProcessFile: file not found ---
 
     [Fact]
-    public void ProcessFile_FileNotFound_LogsAndSkips()
+    public async Task ProcessFile_FileNotFound_LogsAndSkips()
     {
         var filePath = Path.Combine(_tempDir, "99999", "achievements.json");
 
         using var watcher = CreateWatcher();
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
 
         Assert.Empty(_events);
     }
@@ -274,20 +308,20 @@ public class AchievementWatcherTests : IDisposable
     // --- ProcessFile: changed earned_time triggers re-notification ---
 
     [Fact]
-    public void ProcessFile_ChangedEarnedTime_RaisesNewEvent()
+    public async Task ProcessFile_ChangedEarnedTime_RaisesNewEvent()
     {
         var json1 = """{"ACH01": {"earned": true, "earned_time": 1700000000}}""";
         var filePath = WriteAchievementsJson("12345", json1);
 
         using var watcher = CreateWatcher();
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
         Assert.Single(_events);
 
         // Update with a new earned_time (re-earned)
-        Thread.Sleep(50);
+        await Task.Delay(50);
         var json2 = """{"ACH01": {"earned": true, "earned_time": 1700000999}}""";
         WriteFile(filePath, json2);
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
 
         Assert.Equal(2, _events.Count);
         Assert.Equal(1700000999L, _events[1].EarnedTime);
@@ -317,7 +351,7 @@ public class AchievementWatcherTests : IDisposable
     {
         var nonExistent = Path.Combine(_tempDir, "new_saves_dir");
         var watcher = new AchievementWatcher(new[] { nonExistent });
-        Assert.Throws<ArgumentException>(() => watcher.Start());
+        Assert.Throws<ArgumentException>(watcher.Start);
         watcher.Dispose();
     }
 
@@ -375,7 +409,7 @@ public class AchievementWatcherTests : IDisposable
     // --- Self-describing unlock files (issue #5) ---
 
     [Fact]
-    public void ProcessFile_UplayFormat_RaisesEventCarryingUnlockState()
+    public async Task ProcessFile_UplayFormat_RaisesEventCarryingUnlockState()
     {
         var json = """
         {
@@ -386,7 +420,7 @@ public class AchievementWatcherTests : IDisposable
         var filePath = WriteAchievementsJson("2840770", json);
 
         using var watcher = CreateWatcher();
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
 
         // Only the unlocked one fires, and it carries the inline text for the consumer to resolve.
         Assert.Single(_events);
@@ -397,7 +431,7 @@ public class AchievementWatcherTests : IDisposable
     }
 
     [Fact]
-    public void ProcessFile_FolderAppearingAfterStart_SeedsBacklogInsteadOfReplaying()
+    public async Task ProcessFile_FolderAppearingAfterStart_SeedsBacklogInsteadOfReplaying()
     {
         using var watcher = CreateWatcher();
         watcher.Start();
@@ -410,36 +444,36 @@ public class AchievementWatcherTests : IDisposable
         }
         """;
         var filePath = WriteAchievementsJson("2840770", json);
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
 
         Assert.Empty(_events);
     }
 
     [Fact]
-    public void ProcessFile_UnlockAfterFolderAppeared_StillNotifies()
+    public async Task ProcessFile_UnlockAfterFolderAppeared_StillNotifies()
     {
         using var watcher = CreateWatcher();
         watcher.Start();
 
         var filePath = WriteAchievementsJson("2840770",
             """{"ACH01": {"earned": 1, "earned_time": 1700000000, "displayName": "One", "description": "d"}}""");
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
         Assert.Empty(_events);
 
         // A genuinely new unlock — earned now, not before the watcher started.
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 5;
-        Thread.Sleep(50);
+        await Task.Delay(50);
         WriteFile(filePath,
             """{"ACH01": {"earned": 1, "earned_time": 1700000000, "displayName": "One", "description": "d"}, "ACH02": {"earned": 1, "earned_time": """
             + now + """, "displayName": "Two", "description": "d"}}""");
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
 
         Assert.Single(_events);
         Assert.Equal("ACH02", _events[0].AchievementName);
     }
 
     [Fact]
-    public void GameFolderObserved_RaisedOnceFromFileRead_CarryingStates()
+    public async Task GameFolderObserved_RaisedOnceFromFileRead_CarryingStates()
     {
         var observed = new List<GameFolderObservedEventArgs>();
         var filePath = WriteAchievementsJson("2840770",
@@ -448,10 +482,10 @@ public class AchievementWatcherTests : IDisposable
         using var watcher = CreateWatcher();
         watcher.GameFolderObserved += (_, e) => observed.Add(e);
 
-        watcher.ProcessFile(filePath);
-        Thread.Sleep(50);
+        await watcher.ProcessFileAsync(filePath);
+        await Task.Delay(50);
         File.SetLastWriteTimeUtc(filePath, DateTime.UtcNow);
-        watcher.ProcessFile(filePath);
+        await watcher.ProcessFileAsync(filePath);
 
         Assert.Single(observed);
         Assert.Equal("2840770", observed[0].AppId);

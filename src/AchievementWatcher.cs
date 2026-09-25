@@ -52,8 +52,9 @@ public sealed class AchievementWatcher : IDisposable
     // Tracks last (write-time, length) per file to skip unchanged files
     private readonly ConcurrentDictionary<string, (DateTime Time, long Length)> _lastModTimes = new();
 
-    // Debounce: tracks pending file change callbacks
-    private readonly ConcurrentDictionary<string, CancellationTokenSource> _debounceTokens = new();
+    // Debounce: the newest change event per file. A task waiting out its delay processes the file
+    // only if its token is still the one stored here, so a burst of events costs one read.
+    private readonly ConcurrentDictionary<string, object> _pendingChanges = new();
 
     // Appids already covered by a seeding pass. An appid absent from this set has a folder that
     // appeared after Start(), so its existing unlocks must be seeded rather than replayed.
@@ -182,13 +183,8 @@ public sealed class AchievementWatcher : IDisposable
 
         Logger.Info("Achievement watcher stopped.");
 
-        // Cancel and dispose any pending debounce callbacks
-        foreach (var cts in _debounceTokens.Values)
-        {
-            cts.Cancel();
-            cts.Dispose();
-        }
-        _debounceTokens.Clear();
+        // A debounce still waiting finds its token gone and skips the file.
+        _pendingChanges.Clear();
     }
 
     public void Dispose() => Stop();
@@ -209,53 +205,30 @@ public sealed class AchievementWatcher : IDisposable
 
     private void OnFileChanged(object sender, FileSystemEventArgs e)
     {
-        var filePath = e.FullPath;
-
-        // Cancel any previous pending debounce for this file
-        if (_debounceTokens.TryRemove(filePath, out var oldCts))
-        {
-            oldCts.Cancel();
-            oldCts.Dispose();
-        }
-
-        var cts = new CancellationTokenSource();
-        _debounceTokens[filePath] = cts;
-
-        _ = DebounceAndProcessAsync(filePath, cts);
+        // The newest event for a file supersedes any still waiting out its delay.
+        var token = new object();
+        _pendingChanges[e.FullPath] = token;
+        _ = DebounceAndProcessAsync(e.FullPath, token);
     }
 
-    private async Task DebounceAndProcessAsync(string filePath, CancellationTokenSource cts)
+    private async Task DebounceAndProcessAsync(string filePath, object token)
     {
+        await Task.Delay(_debounceDelay);
+
+        // Removes the entry only while it still holds this token: a newer event, or Stop(), wins.
+        if (!_pendingChanges.TryRemove(KeyValuePair.Create(filePath, token)))
+            return;
+
         try
         {
-            await Task.Delay(_debounceDelay, cts.Token);
+            await ProcessFileAsync(filePath);
         }
-        catch (TaskCanceledException)
+#pragma warning disable CA1031 // Boundary of a fire-and-forget task: anything escaping is logged here or lost with the task
+        catch (Exception ex)
+#pragma warning restore CA1031
         {
-            return; // Superseded by a newer change event
+            Logger.Error($"Processing '{filePath}' failed: {ex.ToString().ReplaceLineEndings(" | ")}");
         }
-
-        // Only process if this CTS is still the active one for this file
-        if (_debounceTokens.TryRemove(filePath, out var current))
-        {
-            if (!ReferenceEquals(current, cts))
-            {
-                // A newer event replaced us — put its CTS back and bail out
-                _debounceTokens.TryAdd(filePath, current);
-                cts.Dispose();
-                return;
-            }
-        }
-        cts.Dispose();
-        await ProcessFileAsync(filePath);
-    }
-
-    /// <summary>
-    /// Synchronous wrapper for testing — calls ProcessFileAsync synchronously.
-    /// </summary>
-    internal void ProcessFile(string filePath)
-    {
-        ProcessFileAsync(filePath).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -279,9 +252,14 @@ public sealed class AchievementWatcher : IDisposable
         }
 
         // Read file with retry for locked files
-        string? json = await ReadFileWithRetryAsync(filePath);
+        var json = await ReadFileWithRetryAsync(filePath);
         if (json == null)
+        {
+            // Forget the stamp HasFileChanged just stored: otherwise the next event for the same,
+            // still-unread file is skipped as unchanged and its unlocks are never read.
+            _lastModTimes.TryRemove(filePath, out _);
             return;
+        }
 
         // Parse unlock states
         Dictionary<string, AchievementUnlockState> states;
@@ -292,6 +270,7 @@ public sealed class AchievementWatcher : IDisposable
         catch (JsonException ex)
         {
             Logger.Warn($"JSON parse error for '{filePath}': {ex.Message}");
+            _lastModTimes.TryRemove(filePath, out _);
             return;
         }
 
@@ -377,16 +356,16 @@ public sealed class AchievementWatcher : IDisposable
             _lastModTimes[filePath] = stamp;
             return true;
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // If we can't check, assume changed
+            // Unreadable metadata counts as changed, so the read that follows reports why.
             return true;
         }
     }
 
     private async Task<string?> ReadFileWithRetryAsync(string filePath)
     {
-        for (var attempt = 0; attempt <= _maxRetries; attempt++)
+        for (var attempt = 0; ; attempt++)
         {
             try
             {
@@ -402,15 +381,17 @@ public sealed class AchievementWatcher : IDisposable
                 Logger.Info($"File not found (may have been deleted): '{filePath}'");
                 return null;
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
-                Logger.Info($"Error reading '{filePath}': {ex.Message}");
+                Logger.Warn($"Failed to read after {_maxRetries} retries: '{filePath}': {ex.Message}");
+                return null;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Logger.Warn($"Error reading '{filePath}': {ex.Message}");
                 return null;
             }
         }
-
-        Logger.Warn($"Failed to read after {_maxRetries} retries: '{filePath}'");
-        return null;
     }
 
     /// <summary>
@@ -438,7 +419,9 @@ public sealed class AchievementWatcher : IDisposable
                 SeedExistingAchievements(appId, states);
                 Logger.Info($"Seeded {states.Count(s => s.Value.Earned)} existing achievement(s) for appid {appId}");
             }
+#pragma warning disable CA1031 // Per-folder boundary: logs the failure at Warn and seeds the other folders
             catch (Exception ex)
+#pragma warning restore CA1031
             {
                 Logger.Warn($"Error seeding achievements for appid {appId}: {ex.Message}");
             }

@@ -24,7 +24,7 @@ public enum ScaleUnit
 /// <remarks>
 /// The converter is attached to the <em>type</em>, not to the property on <see cref="SettingsData"/>.
 /// A property-scoped converter is skipped whenever the value is serialized on its own — which is
-/// exactly what <see cref="AppConfig.UpdateConfigValues"/> does, boxing it into an object dictionary
+/// exactly what <see cref="AppConfig.UpdateConfigValues(IReadOnlyDictionary{string, object})"/> does, boxing it into an object dictionary
 /// — and the struct then writes as {"Unit":0,"Value":15}, which cannot be read back.
 /// </remarks>
 [JsonConverter(typeof(NotificationScaleConverter))]
@@ -99,17 +99,13 @@ internal sealed class NotificationScaleConverter : JsonConverter<NotificationSca
 {
     public override NotificationScale Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        switch (reader.TokenType)
+        return reader.TokenType switch
         {
-            case JsonTokenType.Null:
-                return NotificationScale.Default;
-            case JsonTokenType.Number:
-                return NotificationScale.Pixels(reader.GetDouble());
-            case JsonTokenType.String:
-                return NotificationScale.Parse(reader.GetString());
-            default:
-                throw new JsonException($"Cannot convert token {reader.TokenType} to a scale.");
-        }
+            JsonTokenType.Null => NotificationScale.Default,
+            JsonTokenType.Number => NotificationScale.Pixels(reader.GetDouble()),
+            JsonTokenType.String => NotificationScale.Parse(reader.GetString()),
+            _ => throw new JsonException($"Cannot convert token {reader.TokenType} to a scale.")
+        };
     }
 
     public override void Write(Utf8JsonWriter writer, NotificationScale value, JsonSerializerOptions options) =>

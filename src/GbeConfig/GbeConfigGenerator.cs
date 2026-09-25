@@ -169,7 +169,10 @@ public sealed class GbeConfigGenerator
         var iconResult = await IconDownloader.DownloadAllAsync(schema, imageDir, _http, overwrite: _req.Force, ct: ct);
         Info($"Icons: {iconResult.Downloaded} downloaded, {iconResult.Skipped} skipped, {iconResult.Failed} failed.");
         if (iconResult.Failed > 0)
+        {
+            Warn($"{iconResult.Failed} icon(s) failed to download, the first with: {iconResult.FirstError}");
             partial = true;
+        }
 
         // --- Write config files ---
         await File.WriteAllTextAsync(Path.Combine(steamSettingsDir, "achievements.json"),
@@ -259,10 +262,9 @@ public sealed class GbeConfigGenerator
         const int errorVirusDeleted = unchecked((int)0x800700E2);
         for (var e = ex; e != null; e = e.InnerException)
         {
-            if (e.HResult == errorVirusInfected || e.HResult == errorVirusDeleted)
+            if (e.HResult is errorVirusInfected or errorVirusDeleted)
                 return true;
-            if (e.Message.Contains("virus", StringComparison.OrdinalIgnoreCase)
-                || e.Message.Contains("potentially unwanted", StringComparison.OrdinalIgnoreCase))
+            if (e.Message.Contains("virus", StringComparison.OrdinalIgnoreCase) || e.Message.Contains("potentially unwanted", StringComparison.OrdinalIgnoreCase))
                 return true;
         }
         return false;

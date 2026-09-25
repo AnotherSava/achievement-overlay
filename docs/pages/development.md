@@ -32,6 +32,22 @@ The executable lands in `src/bin/Debug/net10.0-windows/`, with `config.json` cop
 
 Prefer the last one before pushing. It builds the whole solution, so warnings in the test project and in `tools/` are seen at all — and it passes `--no-incremental`, because MSBuild skips analysis for unchanged projects and a cached build reports no warnings even when the code still has them.
 
+## Linting
+
+Every build runs the code-analysis and code-style rules, and the gate and CI both build with `-warnaserror`, so there a lint finding fails the build like a compile error. The rules live in `.editorconfig` at the repo root, and `Directory.Build.props` beside it switches them on for all three projects. A rule that is off carries its reason next to its entry.
+
+Most style findings can be fixed automatically. `dotnet format style achievement-overlay.slnx --severity warn` applies the style rules that have a fixer, and `dotnet format whitespace achievement-overlay.slnx` fixes formatting, including line endings: every file is LF.
+
+When a rule is right in general and wrong at one site, suppress it at that site with the reason. A catch-all that logs at `Warn` or `Error`, or shows the error, looks like this. Keep the directives at column 0, because the formatter rejects an indented one:
+
+```csharp
+#pragma warning disable CA1031 // Per-game boundary: logs the failure at Warn and scans the other games
+            catch (Exception ex)
+#pragma warning restore CA1031
+```
+
+A catch that swallows an error silently is not a candidate: make it report the error, or catch only the exceptions it expects.
+
 ## Configuration files
 
 `config/default.json` is the committed config that ships as `config.json` next to the executable. For local builds a gitignored `config/local.json` takes precedence — the csproj links whichever exists, preferring local — so a personal `steamWebApiKey` and `firecrawlApiKey` stay out of git. On CI and release builds `local.json` does not exist, so `default.json` is used.

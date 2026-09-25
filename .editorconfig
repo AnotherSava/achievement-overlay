@@ -1,0 +1,102 @@
+# Lint configuration. The build enforces it: Directory.Build.props turns on AnalysisMode=All and
+# EnforceCodeStyleInBuild, and .claude/commit-checks.sh builds with -warnaserror, so every rule below
+# that is not `none` fails the commit gate. Preference options follow the style the code already uses;
+# every rule switched off says why, and each reason was checked against the flagged code.
+root = true
+
+[*]
+# Git stores LF and .gitattributes checks out LF on every machine, so editors write LF too.
+end_of_line = lf
+insert_final_newline = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+
+# Every code-style rule is on unless configured below; AnalysisMode=All does the same for CA rules.
+dotnet_analyzer_diagnostic.category-Style.severity = warning
+
+## Preferences: the style the code already uses
+
+csharp_style_var_for_built_in_types = true
+csharp_style_var_when_type_is_apparent = true
+csharp_style_var_elsewhere = true
+csharp_style_namespace_declarations = file_scoped
+# Brace-less one-line guards are the house form; a condition or body spanning lines gets braces.
+csharp_prefer_braces = when_multiline
+csharp_style_expression_bodied_methods = when_on_single_line
+csharp_style_expression_bodied_constructors = false
+csharp_style_expression_bodied_local_functions = when_on_single_line
+# Initializer members written on one line stay on one line.
+csharp_new_line_before_members_in_object_initializers = false
+# The code writes new[] { }, new List<T> { } and Array.Empty<T>(); no rule can require that form,
+# so the suggestion to switch to collection expressions is off instead.
+dotnet_style_prefer_collection_expression = false
+dotnet_style_parentheses_in_arithmetic_binary_operators = never_if_unnecessary
+dotnet_style_parentheses_in_relational_binary_operators = always_for_clarity
+dotnet_style_parentheses_in_other_binary_operators = always_for_clarity
+dotnet_style_parentheses_in_other_operators = never_if_unnecessary
+# Guard-then-return rejects input; a ternary chooses between two values.
+dotnet_style_prefer_conditional_expression_over_return = false
+# Constructors assign parameters to readonly fields; a primary-constructor parameter is a mutable capture.
+csharp_style_prefer_primary_constructors = false
+dotnet_style_require_accessibility_modifiers = for_non_interface_members
+
+## Code-style rules switched off
+
+# Bare Add/TryAdd/CreateDirectory/Append calls are the house form; a discard on each would be noise.
+dotnet_diagnostic.IDE0058.severity = none
+# A spread would replace .ToList()/.ToArray() only where the target is explicitly typed, splitting identical chains.
+dotnet_diagnostic.IDE0305.severity = none
+# A default: that throws, or none where unmatched values pass through, is this code's catch-all.
+dotnet_diagnostic.IDE0010.severity = none
+# A `_` arm covering the remaining members is the house form.
+dotnet_diagnostic.IDE0072.severity = none
+# Its rewrites would hide explicit state (AppConfig's path caches, NativeFolderIcon's lazy load) behind `field`.
+dotnet_diagnostic.IDE0032.severity = none
+# Doc comments tag only the parameter that needs explaining.
+dotnet_diagnostic.CS1573.severity = none
+# Editor-only (the build never runs it): wants a /*lang=json*/ marker on every JSON literal in the tests.
+dotnet_diagnostic.JSON002.severity = none
+
+## CA rules switched off
+
+# Its hits are already ordinal (Replace, Contains, IndexOf(char)) or asserts on literals culture cannot flip; CA1310 covers the culture-default methods.
+dotnet_diagnostic.CA1307.severity = none
+# ToLowerInvariant only feeds switches over lowercase literals and never stores a normalised key.
+dotnet_diagnostic.CA1308.severity = none
+# Naming a culture comparison is the decision CA1310 asks for; its one hit sorts display names, where culture order is right.
+dotnet_diagnostic.CA1309.severity = none
+# The app has no resource tables and no localisation goal for its own UI.
+dotnet_diagnostic.CA1303.severity = none
+# UI continuations must resume on the dispatcher; the non-UI awaits already run without a sync context.
+dotnet_diagnostic.CA2007.severity = none
+# The URLs are absolute strings, which HttpClient's string overloads parse exactly as a Uri would.
+dotnet_diagnostic.CA2234.severity = none
+# Nullable reference types cover every in-assembly call and nothing outside the solution calls in.
+dotnet_diagnostic.CA1062.severity = none
+# Every hit is one-shot construction; hoisting would separate the data from its only reader.
+dotnet_diagnostic.CA1861.severity = none
+# Devirtualising private helpers gains nothing here and would narrow IReadOnlyList parameters to List.
+dotnet_diagnostic.CA1859.severity = none
+# LINQ already fast-paths List<T> and arrays, the only IReadOnlyLists here.
+dotnet_diagnostic.CA1826.severity = none
+# Going internal needs InternalsVisibleTo for tools/ReplayReport and breaks public [Theory] tests taking app enums.
+dotnet_diagnostic.CA1515.severity = none
+# Collection<T> is guidance for extensible library APIs; nothing outside the solution consumes these.
+dotnet_diagnostic.CA1002.severity = none
+# The nested-type rule protects external consumers, and there are none.
+dotnet_diagnostic.CA1034.severity = none
+# SettingsData is a config DTO where a null collection means the key is absent.
+dotnet_diagnostic.CA2227.severity = none
+# NotificationQueue is a queue of notifications; reserving the suffix is library naming.
+dotnet_diagnostic.CA1711.severity = none
+# Its one hit copies a ConcurrentDictionary's keys, which stays a method by the rule's own guidance.
+dotnet_diagnostic.CA1024.severity = none
+# URLs here are log text and JSON payload fields, never dereferenced as Uri.
+dotnet_diagnostic.CA1054.severity = none
+dotnet_diagnostic.CA1055.severity = none
+
+[tests/**.cs]
+# Test names follow Method_Scenario_Expected; src/ and tools/ stay enforced.
+dotnet_diagnostic.CA1707.severity = none

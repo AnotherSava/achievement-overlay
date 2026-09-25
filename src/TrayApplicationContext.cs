@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Security;
 using System.Text.Json;
-using System.Windows.Forms;
 using AchievementOverlay.GbeConfig;
 using AchievementOverlay.GbeOverlay;
 
@@ -23,16 +23,20 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly AchievementHistory _achievementHistory = null!;
     private readonly RecentAchievementsDisplay _recentDisplay = null!;
     private readonly NotifyIcon _trayIcon = null!;
+#pragma warning disable CA2213 // Owned by the tray's ContextMenuStrip through Items, and disposed with it
     private readonly ToolStripMenuItem _recentItem = null!;
     private readonly ToolStripMenuItem _pauseItem = null!;
+#pragma warning restore CA2213
 
     // Rebuilt in place when the settings dialog changes the paths they watch / the keys they bind.
     private AchievementWatcher _watcher = null!;
     private GlobalHotkey? _hotkey;
 
-    private Icon? _activeIcon;
-    private Icon? _pausedIcon;
+    private readonly Icon? _activeIcon;
+    private readonly Icon? _pausedIcon;
+#pragma warning disable CA2213 // OpenAddGameDialog's finally disposes it once ShowDialog returns; disposing it here would skip its veto on exiting mid-run
     private AddGameForm? _addGameForm;
+#pragma warning restore CA2213
     private SettingsWindow? _settingsWindow;
     private DiagnosticReportWindow? _reportWindow;
     private bool _startWithWindowsEnabled;
@@ -204,15 +208,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         return watcher;
     }
 
-    private void OnNewAchievement(object? sender, NewAchievementEventArgs e)
-    {
-        _notificationQueue.Enqueue(e);
-    }
+    private void OnNewAchievement(object? sender, NewAchievementEventArgs e) => _notificationQueue.Enqueue(e);
 
-    private void OnGameFolderObserved(object? sender, GameFolderObservedEventArgs e)
-    {
-        TryNotifyTrackingConfigured(e.AppId, e.States);
-    }
+    private void OnGameFolderObserved(object? sender, GameFolderObservedEventArgs e) => TryNotifyTrackingConfigured(e.AppId, e.States);
 
     /// <summary>
     /// Evaluates every already-existing GSE Saves folder for the synthetic "tracking configured"
@@ -311,7 +309,9 @@ public sealed class TrayApplicationContext : ApplicationContext
             {
                 return AchievementMetadata.ParseUnlockStates(File.ReadAllText(file));
             }
+#pragma warning disable CA1031 // Per-path boundary: logs the failure at Warn and reports the file as unreadable
             catch (Exception ex)
+#pragma warning restore CA1031
             {
                 Logger.Warn($"Could not read achievements for appid {appId}: {ex.Message}");
                 unreadable = true;
@@ -527,7 +527,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         var shortcut = _config.RecentAchievementsShortcut;
         _hotkey?.Dispose();
-        _hotkey = new GlobalHotkey(RecentHotkeyId, shortcut, () => _recentDisplay.Toggle());
+        _hotkey = new GlobalHotkey(RecentHotkeyId, shortcut, _recentDisplay.Toggle);
         _recentItem.ShortcutKeyDisplayString = _hotkey.IsRegistered ? shortcut : "";
         if (!_hotkey.IsRegistered)
             Logger.Warn($"Could not register hotkey '{shortcut}' — use the tray menu instead");
@@ -541,7 +541,9 @@ public sealed class TrayApplicationContext : ApplicationContext
             _startWithWindowsEnabled = enabled;
             Logger.Info($"Start with Windows: {enabled}");
         }
+#pragma warning disable CA1031 // UI boundary: logs at Error and shows the failure in a message box
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Error($"Failed to set Start with Windows: {ex.Message}");
             MessageBox.Show($"Could not change the Windows startup entry:\r\n\r\n{ex.Message}",
@@ -565,6 +567,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         if (disposing)
         {
             _trayIcon.Visible = false;
+            _trayIcon.ContextMenuStrip?.Dispose();
             _trayIcon.Dispose();
             _hotkey?.Dispose();
             _recentDisplay.Dispose();
@@ -580,7 +583,9 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private static void ShowConfigError(string heading, string detail)
     {
-        var logContent = Logger.ReadAll();
+        // This run's log is what explains the error; the file holds every run since it last rolled.
+        var log = DiagnosticFile.Read(Logger.LogPath);
+        var details = log.Content != null ? string.Join(Environment.NewLine, DiagnosticReport.TakeRecentSessions(log.Content, 1).Lines) : $"The log could not be shown: {Logger.InitError ?? log.Error ?? log.Status}";
         Logger.Close();
         var page = new TaskDialogPage
         {
@@ -588,10 +593,9 @@ public sealed class TrayApplicationContext : ApplicationContext
             Text = detail,
             Icon = TaskDialogIcon.Error,
             Caption = "Achievement Overlay",
-            Buttons = { TaskDialogButton.OK }
+            Buttons = { TaskDialogButton.OK },
+            Expander = new TaskDialogExpander { Text = details, CollapsedButtonText = "Details", ExpandedButtonText = "Details", Position = TaskDialogExpanderPosition.AfterFootnote }
         };
-        if (!string.IsNullOrEmpty(logContent))
-            page.Expander = new TaskDialogExpander { Text = logContent, CollapsedButtonText = "Details", ExpandedButtonText = "Details", Position = TaskDialogExpanderPosition.AfterFootnote };
         TaskDialog.ShowDialog(page);
         Environment.Exit(1);
     }
@@ -602,8 +606,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             return AppConfig.IsStartWithWindows();
         }
-        catch
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
+            Logger.Warn($"Could not read the Windows startup entry: {ex.Message}");
             return false;
         }
     }

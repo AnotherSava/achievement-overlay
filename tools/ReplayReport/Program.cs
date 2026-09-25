@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -259,14 +260,14 @@ internal static class Program
 
         text.AppendLine("Replaying a diagnostic report through this build's resolver.");
         text.AppendLine();
-        text.AppendLine($"  report from   {Text(app?["version"]) ?? "unknown"}, generated {Text(app?["generated"]) ?? "unknown"}");
-        text.AppendLine($"  replayed by   {replayedBy}");
-        text.AppendLine($"  game          {Text(game?["name"]) ?? "(unnamed)"} ({Text(game?["appId"]) ?? "no appid"})");
-        text.AppendLine($"  language      {(language.Length == 0 ? "(empty)" : language)} — {languageNote}");
+        text.AppendLine(CultureInfo.InvariantCulture, $"  report from   {Text(app?["version"]) ?? "unknown"}, generated {Text(app?["generated"]) ?? "unknown"}");
+        text.AppendLine(CultureInfo.InvariantCulture, $"  replayed by   {replayedBy}");
+        text.AppendLine(CultureInfo.InvariantCulture, $"  game          {Text(game?["name"]) ?? "(unnamed)"} ({Text(game?["appId"]) ?? "no appid"})");
+        text.AppendLine(CultureInfo.InvariantCulture, $"  language      {(language.Length == 0 ? "(empty)" : language)} — {languageNote}");
 
         if (entryCount == 0)
         {
-            text.AppendLine($"  unlock file   {unlockReason} — nothing to resolve from");
+            text.AppendLine(CultureInfo.InvariantCulture, $"  unlock file   {unlockReason} — nothing to resolve from");
         }
         else
         {
@@ -282,7 +283,7 @@ internal static class Program
             // Deliberately about this replay rather than about the reporter's run: a schema left out
             // of the report is one the app may well have had, and only a schema this build could not
             // read is one the app could not read either.
-            text.AppendLine($"  schema        {schemaReason} — every achievement here resolves from the unlock file alone");
+            text.AppendLine(CultureInfo.InvariantCulture, $"  schema        {schemaReason} — every achievement here resolves from the unlock file alone");
         }
         else
         {
@@ -308,8 +309,9 @@ internal static class Program
     /// text is plain strings offers no choice at all, which is a different answer from offering
     /// several and lacking this one.
     /// <para>
-    /// An empty language set does not on its own mean plain strings: <see cref="AchievementMetadata
-    /// .CollectLanguages"/> harvests keys off multi-language objects, so it is equally empty for a
+    /// An empty language set does not on its own mean plain strings:
+    /// <see cref="AchievementMetadata.CollectLanguages(IEnumerable{AchievementUnlockState})"/>
+    /// harvests keys off multi-language objects, so it is equally empty for a
     /// source carrying no text whatsoever — a plain GBE unlock file, which is the common case. The
     /// shape is asked for separately, or the header would assert "text in one language" on the same
     /// line as "no inline text".
@@ -356,12 +358,12 @@ internal static class Program
 
         if (names.Count == 0)
         {
-            text.AppendLine($"Nothing to replay — the unlock file is {unlockReason}, and names no achievements.");
+            text.AppendLine(CultureInfo.InvariantCulture, $"Nothing to replay — the unlock file is {unlockReason}, and names no achievements.");
             text.AppendLine("Every count below is therefore zero because nothing ran, not because nothing was wrong.");
             return;
         }
 
-        text.AppendLine($"Achievements — {names.Count}, in the order the unlock file lists them");
+        text.AppendLine(CultureInfo.InvariantCulture, $"Achievements — {names.Count}, in the order the unlock file lists them");
         text.AppendLine();
 
         // Wide enough to line the blocks up, capped so one long identifier does not indent the rest
@@ -405,7 +407,7 @@ internal static class Program
             };
 
             var earned = state == null ? "[unreadable]" : state.Earned ? "[earned]" : "[locked]";
-            text.AppendLine($"{name.PadRight(nameWidth)}  {earned,-12}  {match}");
+            text.AppendLine(CultureInfo.InvariantCulture, $"{name.PadRight(nameWidth)}  {earned,-12}  {match}");
 
             // The app never resolves an entry it could not parse: ParseUnlockStates drops it, and both
             // consumers iterate only what parsed. Resolving it here would put text on the page that
@@ -441,8 +443,8 @@ internal static class Program
             Count(stats.DisplayName, nameSource);
             Count(stats.Description, descSource);
 
-            text.AppendLine($"    name  {nameSource,-7}  \"{resolved.DisplayName}\"");
-            text.AppendLine($"    desc  {descSource,-7}  \"{resolved.Description}\"");
+            text.AppendLine(CultureInfo.InvariantCulture, $"    name  {nameSource,-7}  \"{resolved.DisplayName}\"");
+            text.AppendLine(CultureInfo.InvariantCulture, $"    desc  {descSource,-7}  \"{resolved.Description}\"");
         }
     }
 
@@ -481,25 +483,25 @@ internal static class Program
         text.AppendLine();
         text.AppendLine("Summary");
         text.AppendLine();
-        text.AppendLine($"  matched       {Tally(stats.Match, MatchOrder)}");
-        text.AppendLine($"  displayName   {Tally(stats.DisplayName, SourceOrder)}");
+        text.AppendLine(CultureInfo.InvariantCulture, $"  matched       {Tally(stats.Match, MatchOrder)}");
+        text.AppendLine(CultureInfo.InvariantCulture, $"  displayName   {Tally(stats.DisplayName, SourceOrder)}");
         // "name" is the displayName's fall back to the achievement's own internal name; a description
         // has nothing to fall back to, so the column would be a zero that means nothing.
-        text.AppendLine($"  description   {Tally(stats.Description, SourceOrder.Where(s => s != "name"))}");
+        text.AppendLine(CultureInfo.InvariantCulture, $"  description   {Tally(stats.Description, SourceOrder.Where(s => s != "name"))}");
         // The two ways an achievement reaches no screen at all, kept apart: the app discarded the
         // entry before resolving it, or it resolved to nothing because no source named it.
-        text.AppendLine($"  unreadable    {stats.Unreadable}");
-        text.AppendLine($"  unresolved    {stats.Unresolved}");
+        text.AppendLine(CultureInfo.InvariantCulture, $"  unreadable    {stats.Unreadable}");
+        text.AppendLine(CultureInfo.InvariantCulture, $"  unresolved    {stats.Unresolved}");
 
         if (definitions != null)
         {
             var unmatched = definitions.Select(d => d.Name).Where(n => !stats.MatchedDefinitions.Contains(n)).ToList();
-            text.AppendLine($"  schema entries no unlock name matched: {unmatched.Count} of {definitions.Count}");
+            text.AppendLine(CultureInfo.InvariantCulture, $"  schema entries no unlock name matched: {unmatched.Count} of {definitions.Count}");
             if (unmatched.Count > 0)
             {
                 var listed = string.Join(", ", unmatched.Take(ListedUnmatched).Select(n => $"'{n}'"));
                 var more = unmatched.Count > ListedUnmatched ? $", and {unmatched.Count - ListedUnmatched} more" : "";
-                text.AppendLine($"                {listed}{more}");
+                text.AppendLine(CultureInfo.InvariantCulture, $"                {listed}{more}");
             }
         }
 

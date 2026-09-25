@@ -1,6 +1,4 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
-using AchievementOverlay;
 using Xunit;
 
 namespace AchievementOverlay.Tests;
@@ -18,7 +16,7 @@ public class DiagnosticReportTests
             Config = config ?? DiagnosticFile.Absent,
             Schema = schema ?? DiagnosticFile.Absent,
             Unlock = unlock ?? DiagnosticFile.Absent,
-            Log = log
+            Log = Present(log)
         };
 
     private static DiagnosticFile Present(string content) => new() { Path = @"C:\x\y.json", Status = "ok", Content = content };
@@ -127,6 +125,35 @@ public class DiagnosticReportTests
         Assert.Equal("1.9.1+abc1234", (string?)report["app"]!["version"]);
         Assert.Equal("2026-09-02T22:35:00+03:00", (string?)report["app"]!["generated"]);
     }
+
+    [Fact]
+    public void Compose_LogThatCouldNotBeRead_ReportsWhyRatherThanAnEmptyLog()
+    {
+        var inputs = new DiagnosticReportInputs
+        {
+            Version = "1.0.0",
+            GeneratedAt = "2026-09-25T00:00:00+00:00",
+            AppId = "812140",
+            Log = new DiagnosticFile { Path = @"C:\x\overlay.log", Status = "unreadable", Error = "Access to the path is denied." }
+        };
+
+        var log = Compose(inputs)["log"]!;
+
+        Assert.Equal("unreadable", (string?)log["status"]);
+        Assert.Equal("Access to the path is denied.", (string?)log["error"]);
+        Assert.Null(log["sessions"]);
+    }
+
+    [Fact]
+    public void Compose_LoggingError_IsCarriedInTheAppSection()
+    {
+        var inputs = new DiagnosticReportInputs { Version = "1.0.0", GeneratedAt = "2026-09-25T00:00:00+00:00", AppId = "812140", LoggingError = "Access to the path is denied." };
+
+        Assert.Equal("Access to the path is denied.", (string?)Compose(inputs)["app"]!["loggingError"]);
+    }
+
+    [Fact]
+    public void Compose_NoLoggingError_LeavesTheKeyOut() => Assert.False(Compose(Inputs())["app"]!.AsObject().ContainsKey("loggingError"));
 
     [Fact]
     public void Compose_ListsEverySettingsFolderNotOnlyTheOneThatWon()
@@ -395,7 +422,7 @@ public class DiagnosticReportTests
         var inputs = new DiagnosticReportInputs
         {
             Version = "1.0.0", GeneratedAt = "2026-09-02T22:35:00+03:00", AppId = "812140",
-            Log = log, ConfiguredRoots = Roots, GameFolders = OursOnly
+            Log = Present(log), ConfiguredRoots = Roots, GameFolders = OursOnly
         };
 
         var reported = Compose(inputs)["log"]!;
@@ -495,7 +522,7 @@ public class DiagnosticReportTests
             GeneratedAt = "2026-09-03T00:00:00+00:00",
             AppId = "812140",
             ConfiguredRoots = new[] { savesRoot },
-            Log = $"{Logger.SessionBannerPrefix} 1 =====\n[INFO] Watching for achievements in '{savesRoot}'\n"
+            Log = Present($"{Logger.SessionBannerPrefix} 1 =====\n[INFO] Watching for achievements in '{savesRoot}'\n")
         };
 
         var json = DiagnosticReport.Compose(inputs);

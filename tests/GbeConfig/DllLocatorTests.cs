@@ -4,7 +4,7 @@ using Xunit;
 
 namespace AchievementOverlay.Tests.GbeConfig;
 
-public class DllLocatorTests : IDisposable
+public sealed class DllLocatorTests : IDisposable
 {
     private readonly string _tempDir;
 
@@ -28,10 +28,7 @@ public class DllLocatorTests : IDisposable
     }
 
     [Fact]
-    public void FindAll_NoDlls_ReturnsEmpty()
-    {
-        Assert.Empty(DllLocator.FindAll(_tempDir));
-    }
+    public void FindAll_NoDlls_ReturnsEmpty() => Assert.Empty(DllLocator.FindAll(_tempDir));
 
     [Fact]
     public void FindAll_FindsNestedDll()

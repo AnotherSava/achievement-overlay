@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using System.Windows.Forms;
 
 namespace AchievementOverlay;
 
@@ -34,10 +33,7 @@ public sealed class GlobalHotkey : IDisposable
         _window.CreateHandle(new CreateParams());
 
         var (modifiers, vk) = ParseHotkeyString(hotkeyString);
-        if (vk == 0)
-            _registered = false;
-        else
-            _registered = RegisterHotKey(_window.Handle, _id, modifiers | MOD_NOREPEAT, vk);
+        _registered = vk != 0 && RegisterHotKey(_window.Handle, _id, modifiers | MOD_NOREPEAT, vk);
     }
 
     /// <summary>
@@ -84,7 +80,10 @@ public sealed class GlobalHotkey : IDisposable
     {
         private readonly Action _onHotkey;
 
-        public HotkeyWindow(Action onHotkey) => _onHotkey = onHotkey;
+        public HotkeyWindow(Action onHotkey)
+        {
+            _onHotkey = onHotkey;
+        }
 
         protected override void WndProc(ref Message m)
         {

@@ -7,11 +7,11 @@ namespace AchievementOverlay;
 /// Which corner or edge of the display popups appear at. The names are GBE's own — its
 /// <c>PosAchievement</c> takes exactly these six spellings — so a value here reads the same way as one
 /// in a <c>configs.overlay.ini</c> the user has already edited. A game's own key is still not read;
-/// the reasoning is in docs/plans/2026-08-30-popup-position-and-background.md.
+/// the reasoning is in docs/plans/completed/2026-08-30-popup-position-and-background.md.
 /// </summary>
 /// <remarks>
 /// The converter is attached to the <em>type</em> for the same reason
-/// <see cref="NotificationScale"/>'s is: <see cref="AppConfig.UpdateConfigValues"/> boxes each changed
+/// <see cref="NotificationScale"/>'s is: <see cref="AppConfig.UpdateConfigValues(IReadOnlyDictionary{string, object})"/> boxes each changed
 /// value into an object dictionary and serializes it on its own, where a property-scoped converter is
 /// skipped — and a bare enum then writes as the integer 3, which no one reading config.json can act on.
 /// </remarks>
@@ -46,7 +46,7 @@ public static class NotificationAnchors
             return NotificationAnchor.BottomRight;
 
         var name = new string(text.Where(c => c is not ('-' or '_' or ' ')).ToArray()).ToLowerInvariant();
-        if (name.StartsWith("bottom"))
+        if (name.StartsWith("bottom", StringComparison.Ordinal))
             name = "bot" + name["bottom".Length..];
 
         return name switch

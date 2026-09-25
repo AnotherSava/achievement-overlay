@@ -1,5 +1,4 @@
 using System.Text.Json;
-using AchievementOverlay;
 using Xunit;
 using Color = System.Windows.Media.Color;
 
@@ -20,11 +19,10 @@ public class PopupBackgroundTests
     [InlineData(" #F00 ", "#DDFF0000")]        // 3 digits: doubled, and takes the default's alpha
     [InlineData("#8F00", "#88FF0000")]         // 4 digits: doubled, alpha first
     [InlineData("#1A1A2E", "#DD1A1A2E")]       // 6 digits: takes the default's alpha
-    public void Parse_ReadsEveryHexForm(string text, string expected)
-    {
-        Assert.Equal(expected, PopupBackground.Parse(text).ToString());
-    }
+    public void Parse_ReadsEveryHexForm(string text, string expected) => Assert.Equal(expected, PopupBackground.Parse(text).ToString());
 
+    // WPF's own ColorConverter throws three different exception types across these inputs, which is
+    // why this parser is hand-written.
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -35,12 +33,7 @@ public class PopupBackgroundTests
     [InlineData("#12345")]
     [InlineData("#GGGGGG")]
     [InlineData("#")]
-    public void Parse_UnreadableValuesFallBackWithoutThrowing(string? text)
-    {
-        // WPF's own ColorConverter throws three different exception types across these inputs, which is
-        // why this parser is hand-written.
-        Assert.Equal(PopupBackground.Default, PopupBackground.Parse(text));
-    }
+    public void Parse_UnreadableValuesFallBackWithoutThrowing(string? text) => Assert.Equal(PopupBackground.Default, PopupBackground.Parse(text));
 
     [Fact]
     public void Parse_ClampsAlphaToTheVisibleFloor()
@@ -70,13 +63,10 @@ public class PopupBackgroundTests
         Assert.True(recoloured.IsColour(Color.FromRgb(0xF5, 0xF5, 0xF0)));
     }
 
+    // The settings window boxes this into an object dictionary, so only a type-level converter
+    // applies — the trap the scale setting already fell into once.
     [Fact]
-    public void Serializes_AsItsStringFormNotAsAnObject()
-    {
-        // The settings window boxes this into an object dictionary, so only a type-level converter
-        // applies — the trap the scale setting already fell into once.
-        Assert.Equal("\"#DD1A1A2E\"", JsonSerializer.Serialize(PopupBackground.Default));
-    }
+    public void Serializes_AsItsStringFormNotAsAnObject() => Assert.Equal("\"#DD1A1A2E\"", JsonSerializer.Serialize(PopupBackground.Default));
 
     [Theory]
     [InlineData("\"#FF102030\"", "#FF102030")]
@@ -86,8 +76,5 @@ public class PopupBackgroundTests
     [InlineData("true", "#DD1A1A2E")]
     [InlineData("{}", "#DD1A1A2E")]
     [InlineData("[1,2]", "#DD1A1A2E")]
-    public void Deserializes_WithoutThrowingOnAnyToken(string json, string expected)
-    {
-        Assert.Equal(expected, JsonSerializer.Deserialize<PopupBackground>(json).ToString());
-    }
+    public void Deserializes_WithoutThrowingOnAnyToken(string json, string expected) => Assert.Equal(expected, JsonSerializer.Deserialize<PopupBackground>(json).ToString());
 }

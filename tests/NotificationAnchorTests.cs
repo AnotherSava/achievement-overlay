@@ -1,18 +1,14 @@
 using System.Text.Json;
-using AchievementOverlay;
 using Xunit;
 
 namespace AchievementOverlay.Tests;
 
 public class NotificationAnchorTests
 {
+    // No existing config carries the key, so the absent case has to be where the popup has always
+    // gone. That is the enum's member 0, not a value anything assigns.
     [Fact]
-    public void Default_IsBottomRight()
-    {
-        // No existing config carries the key, so the absent case has to be where the popup has always
-        // gone. That is the enum's member 0, not a value anything assigns.
-        Assert.Equal(NotificationAnchor.BottomRight, default(NotificationAnchor));
-    }
+    public void Default_IsBottomRight() => Assert.Equal(NotificationAnchor.BottomRight, default);
 
     [Theory]
     [InlineData("top_left", NotificationAnchor.TopLeft)]
@@ -21,10 +17,7 @@ public class NotificationAnchorTests
     [InlineData("bot_left", NotificationAnchor.BottomLeft)]
     [InlineData("bot_center", NotificationAnchor.BottomCenter)]
     [InlineData("bot_right", NotificationAnchor.BottomRight)]
-    public void Parse_ReadsGbesOwnSpellings(string text, NotificationAnchor expected)
-    {
-        Assert.Equal(expected, NotificationAnchors.Parse(text));
-    }
+    public void Parse_ReadsGbesOwnSpellings(string text, NotificationAnchor expected) => Assert.Equal(expected, NotificationAnchors.Parse(text));
 
     [Theory]
     [InlineData("TOP_RIGHT")]
@@ -40,6 +33,7 @@ public class NotificationAnchorTests
         Assert.Equal(expected, NotificationAnchors.Parse(text));
     }
 
+    // A hand-edited value must cost the popup's position, never the app's startup.
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -47,11 +41,7 @@ public class NotificationAnchorTests
     [InlineData("middle")]
     [InlineData("42")]
     [InlineData("mid_left")]
-    public void Parse_UnrecognisedReadsAsBottomRight(string? text)
-    {
-        // A hand-edited value must cost the popup's position, never the app's startup.
-        Assert.Equal(NotificationAnchor.BottomRight, NotificationAnchors.Parse(text));
-    }
+    public void Parse_UnrecognisedReadsAsBottomRight(string? text) => Assert.Equal(NotificationAnchor.BottomRight, NotificationAnchors.Parse(text));
 
     [Fact]
     public void ToConfigString_RoundTripsEveryMember()
@@ -60,15 +50,14 @@ public class NotificationAnchorTests
             Assert.Equal(anchor, NotificationAnchors.Parse(anchor.ToConfigString()));
     }
 
+    // The converter is on the type, so it applies even when the value is serialized on its own —
+    // which is what AppConfig.UpdateConfigValues does when the settings window saves. A bare enum
+    // would write 3, which nobody reading config.json can act on.
     [Fact]
-    public void Serializes_AsGbesStringNotAsANumber()
-    {
-        // The converter is on the type, so it applies even when the value is serialized on its own —
-        // which is what AppConfig.UpdateConfigValues does when the settings window saves. A bare enum
-        // would write 3, which nobody reading config.json can act on.
-        Assert.Equal("\"top_right\"", JsonSerializer.Serialize(NotificationAnchor.TopRight));
-    }
+    public void Serializes_AsGbesStringNotAsANumber() => Assert.Equal("\"top_right\"", JsonSerializer.Serialize(NotificationAnchor.TopRight));
 
+    // Deliberately unlike NotificationScaleConverter: a throw here would escape AppConfig's load
+    // and put the config-error dialog in front of a user who mistyped a corner.
     [Theory]
     [InlineData("\"top_left\"", NotificationAnchor.TopLeft)]
     [InlineData("\"sideways\"", NotificationAnchor.BottomRight)]
@@ -77,10 +66,5 @@ public class NotificationAnchorTests
     [InlineData("true", NotificationAnchor.BottomRight)]
     [InlineData("{}", NotificationAnchor.BottomRight)]
     [InlineData("[1,2]", NotificationAnchor.BottomRight)]
-    public void Deserializes_WithoutThrowingOnAnyToken(string json, NotificationAnchor expected)
-    {
-        // Deliberately unlike NotificationScaleConverter: a throw here would escape AppConfig's load
-        // and put the config-error dialog in front of a user who mistyped a corner.
-        Assert.Equal(expected, JsonSerializer.Deserialize<NotificationAnchor>(json));
-    }
+    public void Deserializes_WithoutThrowingOnAnyToken(string json, NotificationAnchor expected) => Assert.Equal(expected, JsonSerializer.Deserialize<NotificationAnchor>(json));
 }

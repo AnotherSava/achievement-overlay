@@ -55,7 +55,9 @@ internal static class PopupFontLoader
                 Logger.Warn($"No usable font family in '{fontFilePath}'; using the configured family instead.");
             return family;
         }
+#pragma warning disable CA1031 // Per-file boundary: logs the failure at Warn and falls back to the configured family
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Warn($"Could not load font '{fontFilePath}': {ex.Message}");
             return null;

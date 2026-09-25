@@ -1,11 +1,10 @@
 using System.IO;
 using System.Text.Json;
-using AchievementOverlay;
 using Xunit;
 
 namespace AchievementOverlay.Tests;
 
-public class AchievementHistoryTests : IDisposable
+public sealed class AchievementHistoryTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _gseSavesDir;

@@ -35,14 +35,8 @@ public class SteamWebApiTests
     }
 
     [Fact]
-    public void ParseSchema_NoAchievementsBlock_ReturnsEmpty()
-    {
-        Assert.Empty(SteamWebApi.ParseSchema("""{"game": {"gameName": "X", "availableGameStats": {}}}"""));
-    }
+    public void ParseSchema_NoAchievementsBlock_ReturnsEmpty() => Assert.Empty(SteamWebApi.ParseSchema("""{"game": {"gameName": "X", "availableGameStats": {}}}"""));
 
     [Fact]
-    public void ParseSchema_UnauthorizedEmptyResponse_ReturnsEmpty()
-    {
-        Assert.Empty(SteamWebApi.ParseSchema("{}"));
-    }
+    public void ParseSchema_UnauthorizedEmptyResponse_ReturnsEmpty() => Assert.Empty(SteamWebApi.ParseSchema("{}"));
 }
