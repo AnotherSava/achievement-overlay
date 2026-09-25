@@ -37,6 +37,7 @@ public static class Logger
 
     public static void Init()
     {
+        InitError = null;
         try
         {
             RollIfOversized();
