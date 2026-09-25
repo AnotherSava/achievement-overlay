@@ -7,7 +7,7 @@ nav_order: 6
 
 # Other emulators
 
-The overlay is built around GBE, but it tracks any emulator that writes a GSE-Saves-style `achievements.json` — one JSON object per achievement, keyed by achievement name, with an `earned` flag and an `earned_time`. Both `true`/`false` and `1`/`0` are accepted for `earned`.
+The overlay is built around GBE, but it tracks any emulator that writes a GSE-Saves-style `achievements.json` — one JSON object per achievement, keyed by achievement name, with an `earned` flag and an `earned_time` in Unix seconds. Both `true`/`false` and `1`/`0` are accepted for `earned`. An `earned_time` no date can hold, such as one written in milliseconds, still notifies, and the recent achievements panel lists it without a time.
 
 Where such an emulator also writes `displayName` and `description` into each entry — the Goldberg Uplay R2 emulator does, when pointed at the GSE Saves folder — the unlock file describes itself, and the game needs **no `steam_settings/` folder, no `steam_appid.txt`, and no entry in `gamesPaths`**. Point the emulator's achievement output at `%appdata%\GSE Saves\<id>\` and it is tracked on the next unlock.
 

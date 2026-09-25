@@ -21,6 +21,16 @@ public sealed class RecentAchievementsDisplay : IDisposable
     private const int ESC_HOTKEY_ID = 9999;
     private DateTime _lastShowTime;
 
+    /// <summary>
+    /// Appids whose earned time has been logged as not being a date, so each game is reported once per
+    /// session rather than on every press of the shortcut.
+    /// </summary>
+    private readonly HashSet<string> _undatedAppIds = new();
+
+    /// <summary>The Unix seconds <see cref="DateTimeOffset"/> can hold: 0001-01-01 to 9999-12-31 23:59:59 UTC.</summary>
+    private static readonly long MinUnixSeconds = DateTimeOffset.MinValue.ToUnixTimeSeconds();
+    private static readonly long MaxUnixSeconds = DateTimeOffset.MaxValue.ToUnixTimeSeconds();
+
     public bool IsVisible => _windows.Count > 0;
 
     public RecentAchievementsDisplay(AchievementHistory history, AppConfig config, UnlockSoundPlayer? soundPlayer = null)
@@ -123,8 +133,11 @@ public sealed class RecentAchievementsDisplay : IDisposable
         }
 
         var entry = ctx.Entries[index];
-        var timestamp = DateTimeOffset.FromUnixTimeSeconds(entry.EarnedTime).LocalDateTime.ToString("MMM dd, HH:mm", CultureInfo.CurrentCulture);
-        var gameInfoLine = $"{entry.GameName} \u2014 {timestamp}";
+        var earnedAt = LocalEarnedTime(entry.EarnedTime, TimeZoneInfo.Local, CultureInfo.CurrentCulture);
+        if (earnedAt == null && _undatedAppIds.Add(entry.AppId))
+            Logger.Warn($"Recent achievements: appid {entry.AppId} has earned_time {entry.EarnedTime} on '{entry.AchievementName}', outside the range a date can hold; its entries like this are listed without a time (logged once per game)");
+        // An unknown time is left off the line rather than replaced with one.
+        var gameInfoLine = earnedAt is { } local ? $"{entry.GameName} \u2014 {local.ToString("MMM dd, HH:mm", CultureInfo.CurrentCulture)}" : entry.GameName;
 
         var window = new NotificationWindow(ctx.Appearance);
         var anchor = ctx.Appearance.Anchor;
@@ -160,6 +173,27 @@ public sealed class RecentAchievementsDisplay : IDisposable
                 RegisterEscHotkey();
             }
         }, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// The clock time in <paramref name="zone"/> at which an achievement was earned, or null when
+    /// <paramref name="culture"/>'s calendar cannot write it — epoch milliseconds are enough to pass
+    /// year 9999, and some calendars end far sooner (Um al-Qura, ar-SA's default, in 2077). Null means
+    /// the time is unknown, including an instant inside the UTC range whose clock time in the zone falls
+    /// past either end, which the framework's own conversions would clamp to the extreme date instead.
+    /// </summary>
+    internal static DateTime? LocalEarnedTime(long earnedTime, TimeZoneInfo zone, CultureInfo culture)
+    {
+        if (earnedTime < MinUnixSeconds || earnedTime > MaxUnixSeconds)
+            return null;
+
+        var utc = DateTimeOffset.FromUnixTimeSeconds(earnedTime).UtcDateTime;
+        var localTicks = utc.Ticks + zone.GetUtcOffset(utc).Ticks;
+        var calendar = culture.DateTimeFormat.Calendar;
+        if (localTicks < calendar.MinSupportedDateTime.Ticks || localTicks > calendar.MaxSupportedDateTime.Ticks)
+            return null;
+
+        return new DateTime(localTicks, DateTimeKind.Unspecified);
     }
 
     private void RegisterEscHotkey()
