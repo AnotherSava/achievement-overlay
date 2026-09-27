@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -50,7 +51,7 @@ internal sealed class FlexibleBooleanConverter : JsonConverter<bool>
             case JsonTokenType.String:
                 var text = reader.GetString();
                 if (bool.TryParse(text, out var parsed)) return parsed;
-                if (long.TryParse(text, out var numeric)) return numeric != 0;
+                if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numeric)) return numeric != 0;
                 throw new JsonException($"Cannot convert string '{text}' to a boolean.");
             default:
                 throw new JsonException($"Cannot convert token {reader.TokenType} to a boolean.");
@@ -76,8 +77,9 @@ internal sealed class FlexibleInt64Converter : JsonConverter<long>
             case JsonTokenType.Number: return reader.TryGetInt64(out var number) ? number : (long)reader.GetDouble();
             case JsonTokenType.String:
                 var text = reader.GetString();
-                if (long.TryParse(text, out var parsed)) return parsed;
-                if (double.TryParse(text, out var asDouble)) return (long)asDouble;
+                // Machine data: parsed the same on every machine, whatever its regional settings.
+                if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)) return parsed;
+                if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var asDouble)) return (long)asDouble;
                 throw new JsonException($"Cannot convert string '{text}' to an integer.");
             default:
                 throw new JsonException($"Cannot convert token {reader.TokenType} to an integer.");
