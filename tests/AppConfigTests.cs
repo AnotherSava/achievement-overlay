@@ -774,6 +774,36 @@ public class AppConfigTests : IDisposable
     }
 
     [Fact]
+    public void CollapseEnvironmentVariablesInText_LeavesALongerFolderNameAlone()
+    {
+        // 'C:\Users\Samantha' must not become '%userprofile%antha' against a profile of 'C:\Users\Sam'.
+        // Built from the profile, the outermost collapsible folder, so nothing else can claim it.
+        var line = $@"[WARN] Game path does not exist: '{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}Extra\Games'";
+
+        Assert.Equal(line, AppConfig.CollapseEnvironmentVariablesInText(line));
+    }
+
+    [Fact]
+    public void CollapseEnvironmentVariablesInText_CollapsesAMixedSeparatorSpelling()
+    {
+        // Windows reads either separator, and Path.Combine joins a hand-typed 'C:/Users' with a backslash,
+        // so the profile folder itself can be written 'C:/Users\Sam'.
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var mixed = profile[..2] + "/" + profile[3..];
+
+        Assert.Equal(@"'%userprofile%\Games'", AppConfig.CollapseEnvironmentVariablesInText($"'{mixed}" + @"\Games'"));
+    }
+
+    [Fact]
+    public void CollapseEnvironmentVariablesInText_CollapsesAJsonEscapedPath()
+    {
+        // A report quotes an unparsable file as raw JSON, where every backslash is written twice.
+        var escaped = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).Replace(@"\", @"\\", StringComparison.Ordinal);
+
+        Assert.Equal(@"{ ""soundPath"": ""%userprofile%\\Music\\a.wav"" }", AppConfig.CollapseEnvironmentVariablesInText(@"{ ""soundPath"": """ + escaped + @"\\Music\\a.wav"" }"));
+    }
+
+    [Fact]
     public void CollapseEnvironmentVariablesInText_LeavesUnrelatedTextAlone() =>
         Assert.Equal(@"[INFO] Cached: appid=812140, path='C:\Games\Odyssey'",
             AppConfig.CollapseEnvironmentVariablesInText(@"[INFO] Cached: appid=812140, path='C:\Games\Odyssey'"));

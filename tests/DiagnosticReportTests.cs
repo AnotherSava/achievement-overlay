@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AchievementOverlay;
@@ -5,6 +6,7 @@ using Xunit;
 
 namespace AchievementOverlay.Tests;
 
+[Collection("App log")]
 public class DiagnosticReportTests
 {
     private static DiagnosticReportInputs Inputs(
@@ -371,6 +373,46 @@ public class DiagnosticReportTests
     }
 
     [Fact]
+    public void KeepLinesForGame_OurFolderWithAnApostrophe_KeepsOurLineAndDropsAnotherGamesLikeIt()
+    {
+        // The path pattern stops at a quote, so "Assassin's" would otherwise cut our own folder down
+        // to an undisclosed-looking C:\Games\Assassin.
+        var ours = new[] { @"C:\Games\Assassin's Creed Odyssey\steam_settings" };
+        var kept = DiagnosticReport.KeepLinesForGame(new[]
+        {
+            @"  Error processing 'C:\Games\Assassin's Creed Odyssey\steam_settings\steam_appid.txt': Access denied",
+            @"  Error processing 'C:\Games\Baldur's Gate 3\steam_settings\steam_appid.txt': Access denied"
+        }, "812140", Roots, ours);
+
+        Assert.Contains("Assassin", Assert.Single(kept), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void KeepLinesForGame_DriveRoot_MatchesOnlyAsItself()
+    {
+        // Trimming keeps a drive root's separator, so what follows 'D:\' is a folder name, not prose.
+        Assert.Empty(DiagnosticReport.KeepLinesForGame(new[] { @"  Error processing 'D:\Persona 5 Royal\steam_appid.txt': Access denied" }, "812140", new[] { @"D:\" }, OursOnly));
+        Assert.Empty(DiagnosticReport.KeepLinesForGame(new[] { @"  Error processing 'D:/Persona 5 Royal\steam_appid.txt': Access denied" }, "812140", new[] { "D:/" }, OursOnly));
+        Assert.Single(DiagnosticReport.KeepLinesForGame(new[] { @"Config: gamesPaths='D:\', language=russian" }, "812140", new[] { @"D:\" }, OursOnly));
+    }
+
+    [Fact]
+    public void KeepLinesForGame_OurFolderIsRemovedOnlyWhereItEnds()
+    {
+        // Our unlock folder '...\812140' is a prefix of another game's '...\8121400'.
+        Assert.Empty(DiagnosticReport.KeepLinesForGame(new[] { @"File locked, retry 1/3: 'C:\Users\Sam\AppData\Roaming\GSE Saves\8121400\achievements.json'" }, "812140", Roots, OursOnly));
+        Assert.Single(DiagnosticReport.KeepLinesForGame(new[] { @"File locked, retry 1/3: 'C:\Users\Sam\AppData\Roaming\GSE Saves\812140\achievements.json'" }, "812140", Roots, OursOnly));
+    }
+
+    [Fact]
+    public void KeepLinesForGame_RecognisesTheWizardsColonForm()
+    {
+        // The Add game wizard logs "AppID: <id>" through its progress log.
+        Assert.Empty(Keep("[add-game] Info: AppID: 1687950"));
+        Assert.Single(Keep("[add-game] Info: AppID: 812140"));
+    }
+
+    [Fact]
     public void KeepLinesForGame_KeepsOurOwnGame() =>
         Assert.Single(Keep(@"  Cached: appid=812140, game=Odyssey, path='C:\Games\Odyssey\steam_settings\achievements.json'"));
 
@@ -398,9 +440,124 @@ public class DiagnosticReportTests
     public void KeepLinesForGame_KeepsAnUnquotedPathFollowedByProse() =>
         Assert.Single(Keep(@"Font_Override 'x.ttf' does not resolve to a file under C:\Games\Odyssey\steam_settings; ignoring it."));
 
+    // --- Paths written with forward slashes ---
+
+    [Fact]
+    public void KeepLinesForGame_ForwardSlashPath_DropsAnotherGamesPathOnlyLine()
+    {
+        // Windows reads '/' as a separator, so a hand-edited config can carry one, and what the app builds
+        // on it appends backslashes: the scan of a 'C:/Games' root reports 'C:/Games\Persona 5 Royal'.
+        Assert.Empty(Keep(@"  Error processing 'C:/Games/Persona 5 Royal/_crack/steam_appid.txt': Access denied"));
+        Assert.Empty(Keep(@"  Error processing 'C:/Games\Persona 5 Royal\_crack\steam_appid.txt': Access denied"));
+    }
+
+    [Fact]
+    public void KeepLinesForGame_ForwardSlashPath_KeepsOurFoldersAndTheRoots()
+    {
+        Assert.Single(Keep(@"  Cached: appid=812140, game=Odyssey, path='C:/Games/Odyssey/steam_settings/achievements.json'"));
+        Assert.Single(Keep(@"  Cached: appid=812140, game=Odyssey, path='C:/Games\Odyssey\steam_settings\achievements.json'"));
+        Assert.Single(Keep(@"Config: gamesPaths='C:/Games', gseSavesPaths='C:/Users/Sam/AppData/Roaming/GSE Saves', language=russian"));
+    }
+
+    // A config reading 'C:/Games': Collect passes the roots on as typed, and every folder through
+    // Path.GetDirectoryName, which rewrites each separator to a backslash. The settings folder is
+    // written mixed here all the same, so the folder side of the comparison is exercised too.
+    private static readonly string[] SlashRoots = { "C:/Games", "C:/Users/Sam/AppData/Roaming/GSE Saves" };
+    private static readonly string[] SlashOursOnly = { @"C:/Games\Odyssey\steam_settings", @"C:\Users\Sam\AppData\Roaming\GSE Saves\812140", @"C:\Programs\achievement-overlay" };
+
+    private static IReadOnlyList<string> KeepWithSlashConfig(params string[] lines) =>
+        DiagnosticReport.KeepLinesForGame(lines, "812140", SlashRoots, SlashOursOnly);
+
+    [Fact]
+    public void KeepLinesForGame_ForwardSlashConfig_KeepsOurFoldersAndTheRootsInEitherSpelling()
+    {
+        // The log spans several runs and the config can be rewritten between them, so a run from before
+        // the edit names the same folders with backslashes.
+        Assert.Single(KeepWithSlashConfig(@"  Cached: appid=812140, game=Odyssey, path='C:\Games\Odyssey\steam_settings\achievements.json'"));
+        Assert.Single(KeepWithSlashConfig(@"Config: gamesPaths='C:\Games', gseSavesPaths='C:\Users\Sam\AppData\Roaming\GSE Saves', language=russian"));
+        Assert.Single(KeepWithSlashConfig(@"File locked, retry 1/3: 'C:/Users/Sam/AppData/Roaming/GSE Saves\812140\achievements.json'"));
+        Assert.Single(KeepWithSlashConfig(@"Config: gamesPaths='C:/Games', gseSavesPaths='C:/Users/Sam/AppData/Roaming/GSE Saves', language=russian"));
+    }
+
+    [Fact]
+    public void KeepLinesForGame_ForwardSlashConfig_DropsAnotherGamesLineInEitherSpelling()
+    {
+        Assert.Empty(KeepWithSlashConfig(@"  Watching for achievements in 'C:/Games\Some Other Game'"));
+        Assert.Empty(KeepWithSlashConfig(@"File locked, retry 1/3: 'C:/Users/Sam/AppData/Roaming/GSE Saves\1687950\achievements.json'"));
+        Assert.Empty(KeepWithSlashConfig(@"  Watching for achievements in 'C:\Games\Some Other Game'"));
+    }
+
+    [Fact]
+    public void KeepLinesForGame_KeepsALineHoldingOnlyAUrl()
+    {
+        // 'https://' holds a colon and a slash, the shape a drive path starts with, after a letter.
+        Assert.Single(Keep("[WARN] Could not open 'https://steamcommunity.com/dev/apikey': The system cannot find the file specified."));
+        Assert.Single(Keep("Fetching http://store.steampowered.com/search/?term=Odyssey then https://steamdb.info/"));
+    }
+
+    [Fact]
+    public void KeepLinesForGame_OurFolderJsonEscaped_IsKept() =>
+        // Raw JSON doubles every separator, including the one after the folder that is taken out.
+        Assert.Single(Keep(@"Loaded ""C:\\Games\\Odyssey\\steam_settings\\achievements.json"""));
+
     [Fact]
     public void KeepLinesForGame_DropsALineNamingTwoGamesRatherThanKeepingItForTheHalfThatMatches() =>
         Assert.Empty(Keep("Compared appid=812140 against appid=1687950"));
+
+    [Fact]
+    public void KeepLinesForGame_DropsAnotherGamesSkippedNotificationButKeepsOurs()
+    {
+        // The line comes from the queue rather than being written out here, so what is filtered is
+        // the spelling the app actually logs — another game's achievement name is the leak.
+        Assert.Empty(Keep(LoggedSkippedNotification("1687950")));
+        Assert.Single(Keep(LoggedSkippedNotification("812140")));
+    }
+
+    /// <summary>
+    /// The warning the queue logs for an unlock it has nothing to show with: an appid no scanned game
+    /// has, and an unlock entry carrying no text of its own.
+    /// </summary>
+    private static string LoggedSkippedNotification(string appId)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "ach-report-tests-" + Guid.NewGuid().ToString("N")[..8]);
+        var gamesDir = Path.Combine(tempDir, "Games");
+        Directory.CreateDirectory(gamesDir);
+        try
+        {
+            var configPath = Path.Combine(tempDir, "config.json");
+            File.WriteAllText(configPath, $$"""{"gseSavesPaths":"{{JsonEscaped(tempDir)}}","gamesPaths":"{{JsonEscaped(gamesDir)}}","language":"english","displayDuration":7,"recentAchievementsCount":5}""");
+
+            // Unique per call, so the line is found among whatever earlier runs left in the log.
+            var achievement = "ACH_" + Guid.NewGuid().ToString("N");
+
+            Logger.Init();
+            try
+            {
+                using var queue = new NotificationQueue(new GameCache(new[] { gamesDir }), new AppConfig(configPath));
+                queue.Enqueue(new NewAchievementEventArgs { AppId = appId, AchievementName = achievement, EarnedTime = 1 });
+            }
+            finally
+            {
+                Logger.Close();
+            }
+
+            return File.ReadLines(Logger.LogPath).Single(line => line.Contains(achievement, StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void KeepLinesForGame_DropsAnotherGamesQueuedAndShowingLinesButKeepsOurs()
+    {
+        // Both lines name the achievement, so another game's are a leak even with no path in them.
+        Assert.Empty(Keep("[INFO] Queued notification for appid 1687950: ACH_ROYAL (queue size: 1)"));
+        Assert.Empty(Keep("[INFO] Showing notification for appid 1687950: ACH_ROYAL at (0,0 1920x1080)"));
+        Assert.Single(Keep("[INFO] Queued notification for appid 812140: 001 (queue size: 1)"));
+        Assert.Single(Keep("[INFO] Showing notification for appid 812140: 001 at (0,0 1920x1080)"));
+    }
 
     [Fact]
     public void Compose_CountsTheLinesItRemovedForOtherGames()

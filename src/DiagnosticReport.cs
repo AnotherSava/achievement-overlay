@@ -301,15 +301,24 @@ public static class DiagnosticReport
 
     /// <summary>Any appid a log line refers to, in either spelling the app writes (<c>appid=812140</c>, <c>appid 812140</c>).</summary>
     private static readonly Regex AppIdReference =
-        new(@"appid[= ](\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"appid(?:[= ]|: )(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
-    /// A drive-lettered path in a log message. Stops at a quote because most messages wrap the path in
-    /// them; where one does not, the match runs on into the prose after it, which the boundary rules in
-    /// <see cref="IsDisclosedPath"/> tolerate.
+    /// A drive-lettered path in a log line that has been through <see cref="UnifySeparators"/>: a drive
+    /// letter, a colon and a backslash. Stops at a quote because most messages wrap the path in them;
+    /// where one does not, the match runs on into the prose after it, which the boundary rules in
+    /// <see cref="IsDisclosedPath"/> tolerate. A letter before the drive is refused because unifying
+    /// turns <c>https://host/…</c> into <c>https:\\host\…</c>.
     /// </summary>
     private static readonly Regex AbsolutePath =
-        new(@"[A-Za-z]:\\[^'""]*", RegexOptions.Compiled);
+        new(@"(?<![A-Za-z])[A-Za-z]:\\[^'""]*", RegexOptions.Compiled);
+
+    /// <summary>
+    /// A path, or a line holding paths, with every forward slash turned into a backslash. Windows reads
+    /// both as a separator, so <c>C:/Games</c>, <c>C:\Games</c> and <c>C:/Games\Game</c> can all name
+    /// folders the report discloses, and only their unified spellings compare equal.
+    /// </summary>
+    private static string UnifySeparators(string text) => text.Replace('/', '\\');
 
     /// <summary>
     /// Drops log lines that are about a different game. A report about one game otherwise publishes the
@@ -333,12 +342,19 @@ public static class DiagnosticReport
         IReadOnlyList<string> lines, string appId,
         IReadOnlyCollection<string> configuredRoots, IReadOnlyCollection<string> gameFolders)
     {
+        // Every path comparison below is between unified spellings, so a root configured as 'C:/Games'
+        // still matches a line that wrote 'C:\Games', and the reverse.
+        var roots = configuredRoots.Select(UnifySeparators).ToList();
+        var folders = gameFolders.Select(UnifySeparators).ToList();
         var kept = new List<string>(lines.Count);
         foreach (var line in lines)
         {
             if (AppIdReference.Matches(line).Any(m => m.Groups[1].Value != appId))
                 continue;
-            if (AbsolutePath.Matches(line).Any(m => !IsDisclosedPath(m.Value, configuredRoots, gameFolders)))
+            // This game's own folders come out before the path check: the pattern stops at a quote, so an
+            // apostrophe in one ("Assassin's Creed") would cut it down to a path that looks undisclosed.
+            var remainder = folders.Aggregate(UnifySeparators(line), (text, folder) => AppConfig.ReplaceFolderInText(text, folder, ""));
+            if (AbsolutePath.Matches(remainder).Any(m => !IsDisclosedPath(m.Value, roots)))
                 continue;
             kept.Add(line);
         }
@@ -348,21 +364,18 @@ public static class DiagnosticReport
     /// <summary>
     /// Whether a path found in a log line is one the report already discloses. A configured root
     /// matches only as itself — <c>C:\Games</c> is in the config section, while <c>C:\Games\Someone
-    /// Else</c> is a different game — whereas this game's own folders match anything beneath them.
+    /// Else</c> is a different game. This game's own folders never reach here: <see cref="KeepLinesForGame"/>
+    /// removes them from the line first. Every argument is a <see cref="UnifySeparators"/> spelling, so a
+    /// backslash is the only separator.
     /// </summary>
-    private static bool IsDisclosedPath(string candidate, IReadOnlyCollection<string> configuredRoots, IReadOnlyCollection<string> gameFolders)
+    private static bool IsDisclosedPath(string candidate, IReadOnlyCollection<string> configuredRoots)
     {
-        foreach (var folder in gameFolders)
-        {
-            if (candidate.StartsWith(folder, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
         foreach (var root in configuredRoots)
         {
             // The root itself, optionally followed by prose from the message rather than a subfolder.
-            if (candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase)
-                && (candidate.Length == root.Length || candidate[root.Length] is not ('\\' or '/')))
+            // A drive root keeps its separator through trimming ('D:\'), so what follows it is a folder
+            // name and it matches only as itself.
+            if (candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase) && (candidate.Length == root.Length || (!root.EndsWith('\\') && candidate[root.Length] is not '\\')))
                 return true;
         }
 

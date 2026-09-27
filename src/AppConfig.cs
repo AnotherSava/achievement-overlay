@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
 namespace AchievementOverlay;
@@ -328,7 +329,10 @@ public sealed class AppConfig
     /// log through this so the Windows account name stops riding along inside
     /// <c>C:\Users\Sam\AppData\Roaming\GSE Saves</c>, which is a fact about the person rather than
     /// about the problem. Longest expansion first, so <c>%appdata%</c> claims a path before
-    /// <c>%userprofile%</c> can take the front of it.
+    /// <c>%userprofile%</c> can take the front of it. Each folder is matched by
+    /// <see cref="ReplaceFolderInText"/>, so a longer name beside it is left as written — including a
+    /// folder beside the profile whose name continues the account's with a letter, digit, <c>_</c> or
+    /// <c>-</c> (<c>C:\Users\Sam_old</c>), which keeps the account name.
     /// </summary>
     public static string CollapseEnvironmentVariablesInText(string text)
     {
@@ -341,14 +345,24 @@ public sealed class AppConfig
             .OrderByDescending(pair => pair.Expanded.Length);
 
         foreach (var (variable, expanded) in byDepth)
-        {
-            text = text.Replace(expanded, variable, StringComparison.OrdinalIgnoreCase);
-            // Also the forward-slash spelling: Windows accepts it, so a hand-edited config or a
-            // third-party file can carry 'C:/Users/Sam/...' where nothing this app writes would.
-            text = text.Replace(expanded.Replace('\\', '/'), variable, StringComparison.OrdinalIgnoreCase);
-        }
+            text = ReplaceFolderInText(text, expanded, variable);
 
         return text;
+    }
+
+    /// <summary>
+    /// Replaces <paramref name="folder"/> wherever free text writes it — a log line, a message quoting
+    /// a file — in any case and with a run of either separator at each separator: Windows reads both, a
+    /// hand-edited config or a third-party file can carry <c>C:/Users/Sam</c>, and a report quoting a
+    /// file as raw JSON writes <c>C:\\Users\\Sam</c>. Only where the folder's
+    /// last name ends: neither <c>C:\Users\Samantha</c> nor <c>GSE Saves\8121400</c> is the folder that
+    /// is a prefix of it. A name running on after a space or a dot is still taken for the folder, since
+    /// nothing in free text says where a path stops.
+    /// </summary>
+    internal static string ReplaceFolderInText(string text, string folder, string replacement)
+    {
+        var pattern = string.Join(@"[\\/]+", folder.Split('\\', '/').Select(Regex.Escape)) + @"(?![\w-])";
+        return Regex.Replace(text, pattern, replacement, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     /// <summary>
