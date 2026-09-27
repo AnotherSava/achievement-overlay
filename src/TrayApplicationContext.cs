@@ -355,7 +355,6 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
 
         _gameCache.ScanAll();
-        _watcher.ReseedAll();
         Logger.Info($"Game cache now has {_gameCache.GetAll().Count} game(s) after Add game.");
 
         // This is the re-evaluation that TryNotifyTrackingConfigured leaves unguarded games for.
@@ -489,8 +488,6 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         if (savesPathsChanged)
             RebuildWatcher();
-        else if (gamesPathsChanged)
-            _watcher.ReseedAll();
 
         if (gamesPathsChanged || savesPathsChanged)
             NotifyTrackingConfiguredForExistingFolders();

@@ -69,12 +69,12 @@ lives in `FlexibleBooleanConverter`/`FlexibleInt64Converter` (property-scoped, s
 bad value costs one achievement rather than the whole file.
 
 Consequences elsewhere: `AchievementWatcher` seeds unconditionally (an appid that becomes resolvable
-later would otherwise replay its backlog), seeds rather than notifies for a folder that appears after
-`Start()`, subscribes `Renamed`, and raises `GameFolderObserved` from the file path as well as the
-folder path. An empty `GameCache` is a warning, not a fatal error. A self-describing game with no
-`steam_settings/` of its own gets no icons and no game name — the Recent panel falls back to the
-appid. Plan: `docs/plans/completed/2026-08-11-uplay-emulator-support.md` (its final section covers the
-schema-first follow-up).
+later would otherwise replay its backlog), seeds rather than notifies the backlog of a game whose
+folder appears after `Start()`, subscribes `Renamed`, and raises `GameFolderObserved` from the file
+path as well as the folder path. An empty `GameCache` is a warning, not a fatal error. A
+self-describing game with no `steam_settings/` of its own gets no icons and no game name — the Recent
+panel falls back to the appid. Plan: `docs/plans/completed/2026-08-11-uplay-emulator-support.md` (its
+final section covers the schema-first follow-up).
 
 ## Config generator (Add game dialog)
 
@@ -82,7 +82,7 @@ The tray menu's **Add game…** item opens `AddGameForm` — a wizard (despite t
 
 The engine lives under `src/GbeConfig/`. Modules keep parsing logic in pure static methods (unit-tested in `tests/GbeConfig/`) separate from the network/IO/subprocess work in `GbeConfigGenerator`, which is front-end agnostic — it reports progress through `IConfigProgress` (the dialog implements it to drive its checklist + log) and takes a `ConfigRequest`. The Steam Web API key and optional Firecrawl API key are stored as optional fields in the app's own `config.json` (via `SettingsData`/`AppConfig`).
 
-After a run, `TrayApplicationContext.RegisterNewGame` ensures the game's folder is covered by `gamesPaths` (using `GamesPathPlanner`), rescans `GameCache`, and re-seeds the watcher so the game is tracked without a restart.
+After a run, `TrayApplicationContext.RegisterNewGame` ensures the game's folder is covered by `gamesPaths` (using `GamesPathPlanner`) and rescans `GameCache`, so the game is tracked without a restart. The watcher is left alone: it seeds every game in the GSE Saves paths at `Start()`, and a game whose folder appears later has its pre-`Start()` backlog seeded on first sight, whether or not it is configured yet. Re-seeding here could only record unlocks its diff has not reached yet — swallowing any unlock written while the game is being added.
 
 The original plan for this feature (written for a CLI; the front-end was later changed to the dialog) is at `docs/plans/completed/2026-06-18-gbe-config-generator.md`.
 
