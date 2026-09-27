@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Security;
 using System.Text.Json;
 using System.Windows.Forms;
 using AchievementOverlay.GbeConfig;
@@ -35,7 +36,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     private AddGameForm? _addGameForm;
     private SettingsWindow? _settingsWindow;
     private DiagnosticReportWindow? _reportWindow;
-    private bool _startWithWindowsEnabled;
+    /// <summary>Null when the Windows startup entry could not be read, which leaves the setting unavailable.</summary>
+    private bool? _startWithWindowsEnabled;
     private bool _disposed;
 
     // Appids already evaluated for the synthetic "tracking configured" notification this session,
@@ -57,7 +59,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             var detail = ex switch
             {
                 FileNotFoundException => "Expected config.json next to the executable.",
-                JsonException je => je.Message.Split('.')[0] + ".",
+                JsonException je => AppConfig.DescribeLoadError(je),
                 InvalidOperationException ioe => ioe.Message.Replace("Invalid config: ", ""),
                 _ => "Check log file for more details."
             };
@@ -269,7 +271,15 @@ public sealed class TrayApplicationContext : ApplicationContext
                 TrackingConfirmation.Description(gameName),
                 EmbeddedAssets.GetTrackingConfiguredIconPath());
             var updated = new Dictionary<string, long>(shown) { [appId] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
-            _config.UpdateConfigValue(nameof(SettingsData.TrackingConfigured), updated);
+            try
+            {
+                _config.UpdateConfigValue(nameof(SettingsData.TrackingConfigured), updated);
+            }
+            catch (ConfigSaveException ex)
+            {
+                // _trackingNotified still stops a repeat this session; only the next start can't know.
+                Logger.Warn($"Could not record that 'tracking configured' was shown for appid {appId}, so it may show again next start: {ex.Message}");
+            }
             Logger.Info($"Showed 'tracking configured' for appid {appId} ({gameName}).");
         }
     }
@@ -350,6 +360,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             var raw = _config.GetCurrent().GamesPaths;
             var newRaw = string.IsNullOrWhiteSpace(raw) ? rootToAdd : raw.TrimEnd(';') + ";" + rootToAdd;
+            // A ConfigSaveException leaves here for the wizard, which shows it where the game was added;
+            // without this root the rescan below could not find the game anyway.
             _config.UpdateConfigValue(nameof(SettingsData.GamesPaths), newRaw);
             Logger.Info($"Added games path '{rootToAdd}' to config.");
         }
@@ -423,14 +435,14 @@ public sealed class TrayApplicationContext : ApplicationContext
         _hotkey = null;
         _recentDisplay.Dismiss(); // it may be on screen from exactly that misfire
 
-        SettingsResult? result = null;
-        _settingsWindow = new SettingsWindow(_config, _startWithWindowsEnabled, AvailableLanguages(), _soundPlayer);
+        var shortcutSaved = false;
         try
         {
-            if (_settingsWindow.ShowDialog() == true)
-                result = _settingsWindow.Result;
-            if (result != null)
-                ApplySettings(result);
+            // Inside the try, so a window that fails to construct still re-registers the shortcut suspended above.
+            _settingsWindow = new SettingsWindow(_config, _startWithWindowsEnabled, AvailableLanguages(), ApplySettings, _soundPlayer);
+            // Save runs ApplySettings with the window still open, and the window closes only once that succeeds.
+            if (_settingsWindow.ShowDialog() == true && _settingsWindow.Result is { } result)
+                shortcutSaved = result.ChangedSettings.ContainsKey(nameof(SettingsData.RecentAchievementsShortcut));
         }
         finally
         {
@@ -438,7 +450,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             RebuildHotkey(); // after a cancel this re-registers the unchanged value
         }
 
-        if (result != null && result.ChangedSettings.ContainsKey(nameof(SettingsData.RecentAchievementsShortcut)))
+        if (shortcutSaved)
             WarnIfShortcutUnavailable();
     }
 
@@ -460,20 +472,37 @@ public sealed class TrayApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// Persists what the settings dialog changed and re-wires whatever binds a changed value at
-    /// startup, so nothing here needs a restart. Values read live on every use — the sound, the
-    /// display duration, the language, the recent count — need no work beyond the write.
+    /// The settings window's save: persists what it changed and re-wires whatever binds a changed
+    /// value at startup, so nothing here needs a restart. Values read live on every use — the sound,
+    /// the display duration, the language, the recent count — need no work beyond the write.
+    /// Runs while the window is still open, and returns false when config.json could not be written,
+    /// which leaves the window open with the edits in it. That save changes nothing at all: the
+    /// in-memory settings still match the file, and the startup entry is left alone too, so the
+    /// message saying the settings were not saved is true of all of them.
+    /// Every message here is owned by <paramref name="owner"/>, the settings window. An owned box
+    /// stays in front of it and disables it until dismissed, so Save cannot start a second save
+    /// beneath a message about the first; an unowned one takes whichever window happens to be active.
     /// </summary>
-    private void ApplySettings(SettingsResult result)
+    private bool ApplySettings(IWin32Window owner, SettingsResult result)
     {
         if (result.ChangedSettings.Count > 0)
         {
-            _config.UpdateConfigValues(result.ChangedSettings);
-            Logger.Info($"Settings saved: {string.Join(", ", result.ChangedSettings.Keys)}");
+            var keys = string.Join(", ", result.ChangedSettings.Keys);
+            try
+            {
+                _config.UpdateConfigValues(result.ChangedSettings);
+            }
+            catch (ConfigSaveException ex)
+            {
+                Logger.Error($"Settings not saved ({keys}): {ex.Message}");
+                MessageBox.Show(owner, $"Your settings were not saved, so nothing has changed. Your edits are still in the Settings window: save again once the problem below is fixed, or cancel to keep the settings you had.\r\n\r\n{ex.Message}", "Achievement Overlay", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+            Logger.Info($"Settings saved: {keys}");
         }
 
-        if (result.StartWithWindows != _startWithWindowsEnabled)
-            ApplyStartWithWindows(result.StartWithWindows);
+        if (result.StartWithWindows is { } startWithWindows)
+            ApplyStartWithWindows(owner, startWithWindows);
 
         // The shortcut needs no work here: OpenSettingsDialog suspends the hotkey for the dialog's
         // lifetime and re-registers from config on the way out, which covers a changed value too.
@@ -491,6 +520,8 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         if (gamesPathsChanged || savesPathsChanged)
             NotifyTrackingConfiguredForExistingFolders();
+
+        return true;
     }
 
     /// <summary>
@@ -528,7 +559,8 @@ public sealed class TrayApplicationContext : ApplicationContext
             Logger.Warn($"Could not register hotkey '{shortcut}' — use the tray menu instead");
     }
 
-    private void ApplyStartWithWindows(bool enabled)
+    /// <param name="owner">The settings window, which owns the message a failure shows; see <see cref="ApplySettings"/>.</param>
+    private void ApplyStartWithWindows(IWin32Window owner, bool enabled)
     {
         try
         {
@@ -539,7 +571,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         catch (Exception ex)
         {
             Logger.Error($"Failed to set Start with Windows: {ex.Message}");
-            MessageBox.Show($"Could not change the Windows startup entry:\r\n\r\n{ex.Message}",
+            MessageBox.Show(owner, $"Could not change the Windows startup entry:\r\n\r\n{ex.Message}",
                 "Achievement Overlay", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
@@ -590,15 +622,17 @@ public sealed class TrayApplicationContext : ApplicationContext
         Environment.Exit(1);
     }
 
-    private static bool GetStartWithWindows()
+    /// <summary>Whether the app is registered to start with Windows, or null when the startup entry could not be read.</summary>
+    private static bool? GetStartWithWindows()
     {
         try
         {
             return AppConfig.IsStartWithWindows();
         }
-        catch
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            return false;
+            Logger.Warn($"Could not read the Windows startup entry: {ex.Message}");
+            return null;
         }
     }
 }

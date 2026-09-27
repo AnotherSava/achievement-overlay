@@ -70,7 +70,7 @@ If one game sounds different from the rest, it is supplying its own — see [Per
 
 ## Settings are not saving
 
-If a change made in the [Settings](usage/settings) window does not persist, the log shows `[WARN] Config file is malformed, could not update` or `[WARN] Could not write config`. Fix the JSON syntax in `config.json`, or check file permissions on it.
+If `config.json` cannot be read or written, or is not valid JSON, saving from the [Settings](usage/settings) window shows "Your settings were not saved, so nothing has changed" with the reason, and the log shows `[ERROR] Settings not saved`. The window stays open with your edits, so you can save again once the problem is fixed. Fix the JSON syntax in `config.json`, or check whether another program has it open. Saving writes a temporary file beside `config.json` and swaps it in, so it needs permission to create files in that folder and to replace `config.json`. A save that fails can leave that file, `config.json.tmp`, behind until the next save writes over it. If `config.json` is missing after a failed save, rename `config.json.tmp` to `config.json`: it holds the settings you were saving.
 
 ## Reporting a problem
 

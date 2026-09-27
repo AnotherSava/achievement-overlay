@@ -102,15 +102,23 @@ the Windows theme or accent — it sits over a game, not over Windows, so the tw
 match. `#DD1A1A2E` is now its default rather than its only colour: only an explicit choice moves it,
 and the text colours are derived from that choice rather than configured beside it.
 
-The window writes nothing itself. It returns a `SettingsResult` holding the values that changed —
+The window writes nothing itself. Save hands a `SettingsResult` holding the values that changed —
 `SettingsDiff.Compute` diffs the collected `SettingsData` against the snapshot the window opened
-against, keyed by property name — and `TrayApplicationContext.ApplySettings` persists them through
-`AppConfig.UpdateConfigValues` (one file write, not one per field) and re-wires whatever binds a
-changed value at startup. That diff is load-bearing rather than an optimisation: it's how the host
-knows to re-register the hotkey, rescan `GameCache`, or rebuild `AchievementWatcher` over new
-`gseSavesPaths` (it binds its paths at construction, and `Start()` re-seeds from disk so the new
-paths' backlog is recorded rather than replayed). Values read live on every use — sound, duration,
-language, font, scale, recent count — need nothing beyond the write.
+against, keyed by property name — to the save function the host passed in,
+`TrayApplicationContext.ApplySettings`, which persists them through `AppConfig.UpdateConfigValues`
+(one file write, not one per field) and re-wires whatever binds a changed value at startup. The
+window closes only when that returns true: a save that fails leaves it open with every edit in
+place, to be saved again or cancelled. Nothing else reaches the save function — Cancel and the
+close button save nothing. The messages `ApplySettings` shows are owned
+by the window, which passes itself in as their owner (it implements WinForms' `IWin32Window` for
+that): an owned box stays in front of the window and disables it until dismissed, so Save cannot
+start a second save beneath a message about the first.
+
+That diff is load-bearing rather than an optimisation: it's how the host knows to re-register the
+hotkey, rescan `GameCache`, or rebuild `AchievementWatcher` over new `gseSavesPaths` (it
+binds its paths at construction, and `Start()` re-seeds from disk so the new paths' backlog is
+recorded rather than replayed). Values read live on every use — sound, duration, language, font,
+scale, recent count — need nothing beyond the write.
 
 **Pause notifications** is deliberately absent: a momentary tray toggle, not a setting. The
 `trackingConfigured` map stays out too — app-managed state, and `SettingsDiff` never compares it, so
@@ -206,7 +214,8 @@ Validation blocks only the two entries that would fail silently — a GSE Saves 
 exists, and a missing custom sound file — and switches to the page that needs fixing before saying so.
 
 The folder picker and browse button are shared with `AddGameForm` via `src/DialogControls.cs`;
-`PickFolder` takes a nullable owner so the WPF window, which has no `IWin32Window`, uses the same one.
+`PickFolder` takes a nullable owner, and the settings window passes itself (it implements WinForms'
+`IWin32Window`), so the picker is modal to it.
 
 ## Report a problem window
 

@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Win32;
@@ -13,13 +14,24 @@ public sealed class AppConfig
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        // A hand-edited null in a setting that needs a value is an invalid config, reported with the
+        // key's name, rather than a null reaching code that the nullable annotations promise never sees one.
+        RespectNullableAnnotations = true
     };
 
     /// <summary>The config file a default-constructed <see cref="AppConfig"/> reads, next to the executable.</summary>
     public static string ConfigFilePath => SettingsPath;
 
     private DateTime _lastWriteTimeUtc;
+
+    /// <summary>
+    /// The write time of the file version whose failure to reload was last logged, or null when none
+    /// has failed. <see cref="Reload"/> retries a failing file on every property read, so this is what
+    /// keeps one bad edit to one warning.
+    /// </summary>
+    private DateTime? _reportedFailureWriteTimeUtc;
+
     private SettingsData _settings = null!;
     private readonly object _lock = new();
     private readonly string _settingsFilePath;
@@ -60,6 +72,8 @@ public sealed class AppConfig
         return _settings;
     }
 
+    /// <summary>Writes one setting through <see cref="UpdateConfigValues(IReadOnlyDictionary{string, object})"/>.</summary>
+    /// <exception cref="ConfigSaveException">The value was not saved.</exception>
     public void UpdateConfigValue(string propertyName, object value)
     {
         UpdateConfigValue(propertyName, value, _settingsFilePath);
@@ -73,8 +87,10 @@ public sealed class AppConfig
     /// <summary>
     /// Writes several settings in one read-modify-write pass, keyed by <see cref="SettingsData"/>
     /// property name. The settings dialog saves through here so a save is one file write rather than
-    /// one per field — every write bumps the file's timestamp and triggers a reload.
+    /// one per field — every write bumps the file's timestamp and triggers a reload. The file is
+    /// replaced whole rather than written in place; <see cref="WriteReplacing"/> says why.
     /// </summary>
+    /// <exception cref="ConfigSaveException">Nothing was saved, and the in-memory settings are unchanged.</exception>
     public void UpdateConfigValues(IReadOnlyDictionary<string, object?> values)
     {
         UpdateConfigValues(values, _settingsFilePath);
@@ -84,21 +100,14 @@ public sealed class AppConfig
     {
         lock (_lock)
         {
-            var names = string.Join(", ", values.Keys);
             string json;
             try
             {
-                if (!File.Exists(settingsPath))
-                {
-                    Logger.Warn($"Config file not found, cannot update '{names}'");
-                    return;
-                }
                 json = File.ReadAllText(settingsPath);
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                Logger.Warn($"Could not read config to update '{names}': {ex.Message}");
-                return;
+                throw new ConfigSaveException($"Could not read the config file: {ex.Message}", ex);
             }
 
             Dictionary<string, JsonElement> dict;
@@ -109,8 +118,8 @@ public sealed class AppConfig
             }
             catch (JsonException ex)
             {
-                Logger.Warn($"Config file is malformed, could not update '{names}': {ex.Message}");
-                return;
+                // Writing over it would replace whatever the file holds with only the values being saved.
+                throw new ConfigSaveException($"The config file is not valid JSON, so it was left as it is: {DescribeLoadError(ex)}", ex);
             }
 
             foreach (var (propertyName, value) in values)
@@ -122,16 +131,54 @@ public sealed class AppConfig
             var updated = JsonSerializer.Serialize(dict, JsonOptions);
             try
             {
-                File.WriteAllText(settingsPath, updated);
+                WriteReplacing(settingsPath, updated);
                 _lastWriteTimeUtc = File.GetLastWriteTimeUtc(settingsPath);
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                Logger.Warn($"Could not write config for '{names}': {ex.Message}");
+                // Thrown before the new values reach memory, where they would pass for settings the file holds.
+                throw new ConfigSaveException($"Could not write the config file: {ex.Message}", ex);
             }
-            _settings = Deserialize(updated);
-            InvalidateCaches();
+            try
+            {
+                _settings = Deserialize(updated);
+                InvalidateCaches();
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+            {
+                Logger.Warn($"Config written, but it no longer loads; keeping the last good settings: {ex.Message}");
+            }
         }
+    }
+
+    /// <summary>
+    /// Writes <paramref name="contents"/> to a temporary file beside <paramref name="path"/> and swaps it in, so the
+    /// name never holds a cut-off version. Writing in place truncates the file first, so a write
+    /// refused partway — a full disk, a crash, another program's lock on part of the file — leaves a cut-off config
+    /// that the next start cannot load, while memory still holds the settings it replaced. A failed save can leave the
+    /// temporary file behind; the next save writes over it.
+    /// </summary>
+    /// <remarks>
+    /// The swap is <see cref="File.Replace(string, string, string)"/> rather than a replacing
+    /// <see cref="File.Move(string, string, bool)"/>. It is the call Microsoft names for replacing a document-like file
+    /// whole, it keeps the file's own permissions, attributes and creation time, and it still succeeds while another
+    /// program reads the file with deletion shared, where the move fails whenever any other handle has the file open.
+    /// Neither gets past a reader that does not share deletion, which is how <see cref="Reload"/> reads; the two never
+    /// overlap, because both run under <see cref="_lock"/>. The swap needs permission to delete the file and to create
+    /// one in its folder, not to write the file: a deny on writing, which stops an in-place write, does not stop it,
+    /// and ReplaceFile carries the deny onto the new file.
+    /// </remarks>
+    private static void WriteReplacing(string path, string contents)
+    {
+        var temporary = path + ".tmp";
+        using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            stream.Write(Encoding.UTF8.GetBytes(contents));
+            // On disk before the swap, so a power loss just after it cannot leave the name on unwritten data.
+            stream.Flush(flushToDisk: true);
+        }
+
+        File.Replace(temporary, path, destinationBackupFileName: null);
     }
 
     private SettingsData Load(string? path = null)
@@ -170,27 +217,33 @@ public sealed class AppConfig
             {
                 var json = File.ReadAllText(filePath);
                 _settings = Deserialize(json);
-                _lastWriteTimeUtc = currentWriteTime;
-                InvalidateCaches();
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
             {
-                // Malformed JSON (e.g. partially-written file) — keep last good config
-                // Don't advance _lastWriteTimeUtc so the file will be re-read on next access
+                // A bad, locked or mid-edit file keeps the last good settings rather than escaping every getter.
+                // _lastWriteTimeUtc stays behind so the next read retries, which is why the warning is keyed to the write time.
+                if (_reportedFailureWriteTimeUtc != currentWriteTime)
+                {
+                    _reportedFailureWriteTimeUtc = currentWriteTime;
+                    Logger.Warn($"Config file '{filePath}' could not be reloaded; keeping the last good settings: {ex.Message}");
+                }
+                return;
             }
-            catch (IOException)
-            {
-                // File locked or inaccessible — keep last good config
-                // Don't advance _lastWriteTimeUtc so the file will be re-read on next access
-            }
-            catch (InvalidOperationException)
-            {
-                // Failed validation (e.g. a required setting momentarily deleted while the user
-                // edits the file) — keep last good config. Without this the exception escapes
-                // every config property getter and takes the app down mid-session.
-                // Don't advance _lastWriteTimeUtc so the file will be re-read on next access
-            }
+
+            _lastWriteTimeUtc = currentWriteTime;
+            InvalidateCaches();
         }
+    }
+
+    /// <summary>
+    /// A load failure as the startup dialog shows it: the parser's first sentence and the line it
+    /// failed on. The rest of the message is a path and byte offsets meant for a debugger.
+    /// </summary>
+    public static string DescribeLoadError(JsonException ex)
+    {
+        var end = ex.Message.IndexOf(". ", StringComparison.Ordinal);
+        var sentence = end >= 0 ? ex.Message[..(end + 1)] : ex.Message;
+        return ex.LineNumber is { } line ? $"{sentence} (line {line + 1})" : sentence;
     }
 
     private void InvalidateCaches()
@@ -346,22 +399,31 @@ public sealed class AppConfig
         return key?.GetValue(AppName) != null;
     }
 
+    /// <exception cref="InvalidOperationException">The startup key could not be opened, or the app's own path is not available to register.</exception>
     public static void SetStartWithWindows(bool enabled)
     {
-        using var key = Registry.CurrentUser.OpenSubKey(RegistryRunKey, true);
-        if (key == null) return;
+        using var key = Registry.CurrentUser.OpenSubKey(RegistryRunKey, true) ?? throw new InvalidOperationException($@"The Windows startup key 'HKEY_CURRENT_USER\{RegistryRunKey}' could not be opened.");
 
         if (enabled)
         {
-            var exePath = Environment.ProcessPath;
-            if (exePath != null)
-                key.SetValue(AppName, $"\"{exePath}\"");
+            var exePath = Environment.ProcessPath ?? throw new InvalidOperationException("The path of this app's executable is not available, so it cannot be registered to start with Windows.");
+            key.SetValue(AppName, $"\"{exePath}\"");
         }
         else
         {
             key.DeleteValue(AppName, false);
         }
     }
+}
+
+/// <summary>A settings change that did not reach config.json, so the in-memory settings were left as they were.</summary>
+public sealed class ConfigSaveException : Exception
+{
+    public ConfigSaveException() { }
+
+    public ConfigSaveException(string message) : base(message) { }
+
+    public ConfigSaveException(string message, Exception innerException) : base(message, innerException) { }
 }
 
 /// <summary>

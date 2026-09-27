@@ -82,8 +82,8 @@ internal static class DialogControls
     }
 
     /// <summary>
-    /// Shows the folder picker and returns the chosen path, or null if it was cancelled. The owner
-    /// is optional so the WPF settings window, which has no IWin32Window, can use the same picker.
+    /// Shows the folder picker and returns the chosen path, or null if it was cancelled. With no owner the
+    /// picker is owned by the active window.
     /// </summary>
     public static string? PickFolder(IWin32Window? owner, string? initialDir)
     {

@@ -78,9 +78,9 @@ public sealed class DiagnosticFile
 
         try
         {
-            // Shared read: the log's own writer holds that file open all session, which File.ReadAllText
-            // does not allow.
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            // Shared read: the log's own writer holds that file open all session, and a config save swaps
+            // config.json in with File.Replace, which needs deletion shared; File.ReadAllText allows neither.
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             using var reader = new StreamReader(stream);
             return new DiagnosticFile { Path = path, Status = "ok", Content = reader.ReadToEnd() };
         }

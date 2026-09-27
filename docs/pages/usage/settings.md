@@ -15,7 +15,7 @@ Clicking **Save** writes only the settings that changed and applies them straigh
 
 ## The four pages
 
-- **General** — start with Windows, and the shortcut and count for the recent achievements panel.
+- **General** — start with Windows, and the shortcut and count for the recent achievements panel. When the app cannot read the Windows startup entry, that switch is unavailable and its card says so; the log has the reason.
 - **Notifications** — everything about the popup: language, font, size, background colour, position, duration, sound, and whether a game's own settings may override them. **Show me** fires a real notification with the settings as they stand, and the footer states the popup's computed width and duration.
 - **Folders** — game folders and GSE Saves folders, one card each, with a live status line saying what is actually there (how many games were found, or that a drive is not connected).
 - **Advanced** — the Steam Web API and Firecrawl keys.

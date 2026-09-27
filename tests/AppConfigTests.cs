@@ -1,15 +1,21 @@
 using System.IO;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text.Json;
 using AchievementOverlay;
 using Xunit;
 
 namespace AchievementOverlay.Tests;
 
+[Collection("App log")]
 public class AppConfigTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _settingsPath;
     private readonly string _gseSavesDir;
+
+    // How many saves SaveNewVersion has made; each moves the write time a further second ahead.
+    private int _savedVersions;
 
     public AppConfigTests()
     {
@@ -243,6 +249,40 @@ public class AppConfigTests : IDisposable
         Assert.Throws<FileNotFoundException>(() => new AppConfig(_settingsPath));
     }
 
+    [Theory]
+    [InlineData("\"recentAchievementsShortcut\": \"Ctrl+Shift+H\"", "recentAchievementsShortcut")]
+    [InlineData("\"language\": \"english\"", "language")]
+    public void NullForASettingThatNeedsAValue_IsAnInvalidConfigNamingTheKey(string setting, string key)
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson().Replace(setting, $"\"{key}\": null", StringComparison.Ordinal));
+
+        var ex = Assert.Throws<JsonException>(() => new AppConfig(_settingsPath));
+        var shown = AppConfig.DescribeLoadError(ex);
+        Assert.Contains($"'{key}'", shown, StringComparison.Ordinal);
+        Assert.EndsWith(")", shown, StringComparison.Ordinal);
+        Assert.Contains("(line ", shown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UpdateConfigValue_FileGainedANullSinceLoad_KeepsTheLastGoodSettings()
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+        File.WriteAllText(_settingsPath, MinimalConfigJson().Replace("\"language\": \"english\"", "\"language\": null", StringComparison.Ordinal));
+
+        config.UpdateConfigValue("SoundEnabled", false, _settingsPath);
+
+        Assert.Equal("english", config.GetCurrent().Language);
+    }
+
+    [Fact]
+    public void NullForAnOptionalSetting_StillLoads()
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson("\"steamWebApiKey\": null,"));
+
+        Assert.Null(new AppConfig(_settingsPath).SteamWebApiKey);
+    }
+
     [Fact]
     public void HotReload_DetectsFileChanges()
     {
@@ -301,6 +341,179 @@ public class AppConfigTests : IDisposable
 
         Assert.Equal("english", config.Language);
     }
+
+    [Theory]
+    [InlineData("\"language\": \"english\",", "\"language\": \"english\"", "LineNumber")]
+    [InlineData("\"recentAchievementsCount\": 5", "\"recentAchievementsCount\": 0", "'recentAchievementsCount' is missing or invalid")]
+    public void HotReload_BadEditReadManyTimes_KeepsLastGoodConfigAndWarnsOnce(string find, string replace, string reported)
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+        SaveNewVersion(MinimalConfigJson().Replace(find, replace, StringComparison.Ordinal));
+
+        // Every property read retries the file, and none of those retries may add a second warning.
+        WhileLogging(() =>
+        {
+            for (var read = 0; read < 5; read++)
+            {
+                Assert.Equal("english", config.Language);
+                Assert.Equal(5, config.RecentAchievementsCount);
+            }
+        });
+
+        Assert.Contains(reported, Assert.Single(LogLines("WARN")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UpdateConfigValue_FolderThisAccountMayNotCreateFilesIn_ThrowsAndLeavesTheFileAsItIs()
+    {
+        // A save is written beside the file and swapped in, so it needs to create a file in the folder, not only to
+        // replace this one.
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+        var before = File.ReadAllBytes(_settingsPath);
+
+        Exception? thrown = null;
+        WhileFolderDenied(FileSystemRights.CreateFiles, () => thrown = Record.Exception(() => config.UpdateConfigValue("SoundEnabled", false, _settingsPath)));
+
+        Assert.IsType<ConfigSaveException>(thrown);
+        Assert.Equal(before, File.ReadAllBytes(_settingsPath));
+        Assert.True(config.GetCurrent().SoundEnabled);
+    }
+
+    [Fact]
+    public void UpdateConfigValue_FileAnotherProgramHoldsOpen_ThrowsAndKeepsTheSettingsTheFileHas()
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+        var before = File.ReadAllBytes(_settingsPath);
+
+        // Held open for reading with only reads shared: the save can read the file but not replace it.
+        Exception? thrown;
+        using (new FileStream(_settingsPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            thrown = Record.Exception(() => config.UpdateConfigValue("SoundEnabled", false, _settingsPath));
+
+        Assert.True(config.GetCurrent().SoundEnabled);
+        Assert.IsType<ConfigSaveException>(thrown);
+        Assert.Equal(before, File.ReadAllBytes(_settingsPath));
+    }
+
+    [Fact]
+    public void UpdateConfigValue_WriteRefusedPartway_LeavesTheFileAsItWas()
+    {
+        // Another program holds the file open, sharing reading and writing but not deletion, with everything from 64 KB
+        // on locked. The file is shorter than that, so a save can read it, and what it writes is longer: written in
+        // place, it would be refused at the locked range with the file already cut down.
+        const int lockedFrom = 64 * 1024;
+        const int lockedLength = 1024 * 1024 * 1024;
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+        var before = File.ReadAllBytes(_settingsPath);
+
+        Exception? thrown;
+        using (var holder = new FileStream(_settingsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            holder.Lock(lockedFrom, lockedLength);
+            thrown = Record.Exception(() => config.UpdateConfigValue("Language", new string('x', 2 * lockedFrom), _settingsPath));
+            holder.Unlock(lockedFrom, lockedLength);
+        }
+
+        Assert.IsType<ConfigSaveException>(thrown);
+        Assert.Equal(before, File.ReadAllBytes(_settingsPath));
+        Assert.Equal("english", config.GetCurrent().Language);
+    }
+
+    [Fact]
+    public void UpdateConfigValue_FileAnotherProgramReadsSharingDeletion_IsStillSaved()
+    {
+        // A reader that lets the file be replaced under it — how a viewer following a file opens it — does not stop a save.
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+
+        using (new FileStream(_settingsPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
+            config.UpdateConfigValue("SoundEnabled", false, _settingsPath);
+
+        Assert.False(config.GetCurrent().SoundEnabled);
+        Assert.Contains("\"soundEnabled\": false", File.ReadAllText(_settingsPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UpdateConfigValue_Saved_LeavesNoTemporaryFile()
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+
+        config.UpdateConfigValue("SoundEnabled", false, _settingsPath);
+
+        Assert.False(config.GetCurrent().SoundEnabled);
+        Assert.Equal(new[] { _settingsPath }, Directory.GetFiles(_tempDir));
+    }
+
+    [Fact]
+    public void UpdateConfigValue_FileNoLongerValidJson_ThrowsAndLeavesTheFileAsItIs()
+    {
+        File.WriteAllText(_settingsPath, MinimalConfigJson());
+        var config = new AppConfig(_settingsPath);
+        SaveNewVersion("{ not valid json");
+
+        Assert.Throws<ConfigSaveException>(() => config.UpdateConfigValue("SoundEnabled", false, _settingsPath));
+        Assert.Equal("{ not valid json", File.ReadAllText(_settingsPath));
+    }
+
+    /// <summary>
+    /// A save as the app sees one: new content under a write time later than any earlier save's, so
+    /// two saves in quick succession are still two versions of the file.
+    /// </summary>
+    private void SaveNewVersion(string json)
+    {
+        File.WriteAllText(_settingsPath, json);
+        File.SetLastWriteTimeUtc(_settingsPath, DateTime.UtcNow.AddSeconds(++_savedVersions));
+    }
+
+    /// <summary>Runs <paramref name="act"/> while this account is denied <paramref name="rights"/> on the folder holding the config file.</summary>
+    private void WhileFolderDenied(FileSystemRights rights, Action act)
+    {
+        var folder = new DirectoryInfo(_tempDir);
+        WhileDenied<DirectorySecurity>(folder.GetAccessControl, folder.SetAccessControl, rights, act);
+    }
+
+    private static void WhileDenied<TSecurity>(Func<TSecurity> read, Action<TSecurity> write, FileSystemRights rights, Action act) where TSecurity : FileSystemSecurity
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var security = read();
+        var deny = new FileSystemAccessRule(identity.User!, rights, AccessControlType.Deny);
+        security.AddAccessRule(deny);
+        write(security);
+        try
+        {
+            act();
+        }
+        finally
+        {
+            security.RemoveAccessRule(deny);
+            write(security);
+        }
+    }
+
+    /// <summary>Runs <paramref name="act"/> with the app's own log open, as it is for the whole of a session.</summary>
+    private static void WhileLogging(Action act)
+    {
+        Logger.Init();
+        try
+        {
+            act();
+        }
+        finally
+        {
+            Logger.Close();
+        }
+    }
+
+    /// <summary>
+    /// The app log's lines at <paramref name="level"/> that name this test's config file. That file sits
+    /// in a folder named by a fresh GUID, so lines left by earlier runs never match.
+    /// </summary>
+    private List<string> LogLines(string level) => File.ReadLines(Logger.LogPath).Where(line => line.Contains($"[{level}]", StringComparison.Ordinal) && line.Contains(_settingsPath, StringComparison.Ordinal)).ToList();
 
     [Fact]
     public void UpdateConfigValue_UpdatesSingleProperty()

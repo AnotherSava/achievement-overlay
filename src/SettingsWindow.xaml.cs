@@ -16,16 +16,27 @@ using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 namespace AchievementOverlay;
 
 /// <summary>
-/// What the settings window collected. The window writes nothing itself — the host persists the
-/// changed config values and applies the one setting that doesn't live in config at all: the
-/// Windows startup registry entry.
+/// What the settings window collected, handed to the host's save function. The window writes nothing
+/// itself — the host persists the changed config values and applies the one setting that doesn't live
+/// in config at all: the Windows startup registry entry.
 /// </summary>
 public sealed class SettingsResult
 {
     /// <summary>Config values the user actually changed, keyed by <see cref="SettingsData"/> property name.</summary>
     public required IReadOnlyDictionary<string, object?> ChangedSettings { get; init; }
 
-    public required bool StartWithWindows { get; init; }
+    /// <summary>
+    /// The Start with Windows value to write, or null when there is none: the user left it as it was,
+    /// or the startup entry could not be read, so there was no state to change.
+    /// </summary>
+    public required bool? StartWithWindows { get; init; }
+
+    /// <summary>
+    /// What a save writes to the startup entry: the choice when it differs from a state that was
+    /// actually read, and nothing otherwise. An unread entry gives nothing to compare against, so a
+    /// switch that was only showing "unavailable" can never be written back as a value.
+    /// </summary>
+    internal static bool? StartWithWindowsChange(bool? opened, bool chosen) => opened is { } before && chosen != before ? chosen : null;
 }
 
 /// <summary>
@@ -36,7 +47,7 @@ public sealed class SettingsResult
 /// switch; only the chrome the theme has no opinion about is styled here.
 /// Pause notifications is deliberately absent: it is a momentary tray toggle, not a setting.
 /// </summary>
-public partial class SettingsWindow : Window
+public partial class SettingsWindow : Window, IWin32Window
 {
     /// <summary>
     /// Families offered for the popup. A shortlist rather than every installed font: achievement
@@ -69,6 +80,8 @@ public partial class SettingsWindow : Window
     };
 
     private readonly SettingsData _current;
+    /// <summary>The startup state the window opened against; null when the entry could not be read.</summary>
+    private readonly bool? _startWithWindows;
 
     /// <summary>
     /// Pairs each cell of the position grid to the value it stands for, so loading and collecting read
@@ -93,18 +106,37 @@ public partial class SettingsWindow : Window
     private LowLevelKeyboardHook? _shortcutHook;
     private NotificationScale _lastScale;
     private bool _loaded;
+    private readonly Func<IWin32Window, SettingsResult, bool> _save;
 
-    /// <summary>Set once the user saves; null while the window is open or after a cancel.</summary>
+    /// <summary>What the host saved; null while the window is open, and after a cancel, a close, or saves that all failed.</summary>
     public SettingsResult? Result { get; private set; }
 
+    /// <summary>
+    /// This window's handle, so the message boxes the host shows during a save are owned by it: an owned box stays in
+    /// front of the window and disables it until dismissed, so Save cannot start another save beneath a message about
+    /// the last one.
+    /// </summary>
+    public IntPtr Handle => new System.Windows.Interop.WindowInteropHelper(this).Handle;
+
+    /// <param name="startWithWindows">
+    /// Whether the app starts with Windows, or null when the startup entry could not be read — the
+    /// switch is then shown as unavailable rather than as off.
+    /// </param>
+    /// <param name="save">
+    /// The host's save, called by Save with this window as the owner of any message it shows and what the window
+    /// collected. It returns false when nothing was saved, and the window then stays open with every edit in place, to
+    /// be saved again or cancelled. No other way out of the window calls it — Cancel or the close button.
+    /// </param>
     /// <param name="soundPlayer">
     /// The host's player, so "Show me" previews the sound through the same code the real unlock uses.
     /// </param>
-    public SettingsWindow(AppConfig config, bool startWithWindows, IReadOnlyCollection<string> availableLanguages,
-                          UnlockSoundPlayer? soundPlayer = null)
+    public SettingsWindow(AppConfig config, bool? startWithWindows, IReadOnlyCollection<string> availableLanguages,
+                          Func<IWin32Window, SettingsResult, bool> save, UnlockSoundPlayer? soundPlayer = null)
     {
         InitializeComponent();
+        _save = save;
         _soundPlayer = soundPlayer;
+        _startWithWindows = startWithWindows;
         _positionCells = new[]
         {
             (PosTopLeft, NotificationAnchor.TopLeft),
@@ -125,7 +157,7 @@ public partial class SettingsWindow : Window
         DialogChrome.ApplyThemeBrushes(Resources);
         DialogChrome.ClampToScreen(this);
         DialogChrome.LoadWindowIcon(this);
-        LoadValues(startWithWindows, availableLanguages);
+        LoadValues(availableLanguages);
         _loaded = true;
         UpdateScaleState();
         UpdateSoundState();
@@ -145,9 +177,14 @@ public partial class SettingsWindow : Window
 
     // --- Values ---
 
-    private void LoadValues(bool startWithWindows, IReadOnlyCollection<string> availableLanguages)
+    private void LoadValues(IReadOnlyCollection<string> availableLanguages)
     {
-        StartWithWindowsToggle.IsChecked = startWithWindows;
+        // An entry that could not be read is shown as unavailable rather than as off: the switch is
+        // disabled and the card says why.
+        StartWithWindowsToggle.IsChecked = _startWithWindows == true;
+        StartWithWindowsToggle.IsEnabled = _startWithWindows != null;
+        if (_startWithWindows == null)
+            StartWithWindowsDescription.Text = "The Windows startup entry could not be read, so this can't be shown or changed here. The log has the reason.";
         ShortcutBox.Text = _current.RecentAchievementsShortcut;
         RecentCountBox.Text = Math.Clamp(_current.RecentAchievementsCount, 1, 20).ToString();
 
@@ -639,7 +676,7 @@ public partial class SettingsWindow : Window
     private void AddFolder(List<string> folders, ItemsControl list, Func<string, (string Text, string BrushKey)> describe)
     {
         var last = folders.Count > 0 ? AppConfig.ExpandEnvironmentVariables(folders[^1]) : null;
-        var picked = DialogControls.PickFolder(null, last);
+        var picked = DialogControls.PickFolder(this, last);
         if (picked == null)
             return;
 
@@ -693,7 +730,7 @@ public partial class SettingsWindow : Window
 
     private void ChangeFolder(List<string> folders, int index, ItemsControl list, Func<string, (string Text, string BrushKey)> describe)
     {
-        var picked = DialogControls.PickFolder(null, AppConfig.ExpandEnvironmentVariables(folders[index]));
+        var picked = DialogControls.PickFolder(this, AppConfig.ExpandEnvironmentVariables(folders[index]));
         if (picked == null)
             return;
 
@@ -791,11 +828,17 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        Result = new SettingsResult
+        var result = new SettingsResult
         {
             ChangedSettings = SettingsDiff.Compute(_current, Collect()),
-            StartWithWindows = StartWithWindowsToggle.IsChecked == true
+            StartWithWindows = SettingsResult.StartWithWindowsChange(_startWithWindows, StartWithWindowsToggle.IsChecked == true)
         };
+
+        // A failed save leaves the window open with every edit still in it; the host has already said why.
+        if (!_save(this, result))
+            return;
+
+        Result = result;
         DialogResult = true;
     }
 
