@@ -36,6 +36,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     private AddGameForm? _addGameForm;
     private SettingsWindow? _settingsWindow;
     private DiagnosticReportWindow? _reportWindow;
+    /// <summary>Set when Exit had to close one of the two WPF dialogs first; see <see cref="CompletePendingExit"/>.</summary>
+    private bool _exitPending;
     /// <summary>Null when the Windows startup entry could not be read, which leaves the setting unavailable.</summary>
     private bool? _startWithWindowsEnabled;
     private bool _disposed;
@@ -415,6 +417,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         finally
         {
             _reportWindow = null;
+            if (_exitPending)
+                CompletePendingExit();
         }
     }
 
@@ -440,17 +444,24 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             // Inside the try, so a window that fails to construct still re-registers the shortcut suspended above.
             _settingsWindow = new SettingsWindow(_config, _startWithWindowsEnabled, AvailableLanguages(), ApplySettings, _soundPlayer);
-            // Save runs ApplySettings with the window still open, and the window closes only once that succeeds.
+            // Save runs ApplySettings with the window still open, and the window closes only once that succeeds. Exit
+            // closes it without going through Save, and ShowDialog then returns false, as for Cancel.
             if (_settingsWindow.ShowDialog() == true && _settingsWindow.Result is { } result)
                 shortcutSaved = result.ChangedSettings.ContainsKey(nameof(SettingsData.RecentAchievementsShortcut));
         }
         finally
         {
             _settingsWindow = null;
-            RebuildHotkey(); // after a cancel this re-registers the unchanged value
+            // Here rather than after the try, so an exit waiting on this window finishes even if
+            // ShowDialog threw; the tray it disposes has no shortcut left to re-register.
+            if (_exitPending)
+                CompletePendingExit();
+            else
+                RebuildHotkey(); // after a cancel this re-registers the unchanged value
         }
 
-        if (shortcutSaved)
+        // A pending exit has disposed the tray by now, and no warning may follow it.
+        if (shortcutSaved && !_exitPending)
             WarnIfShortcutUnavailable();
     }
 
@@ -577,6 +588,47 @@ public sealed class TrayApplicationContext : ApplicationContext
     }
 
     private void ExitApplication()
+    {
+        // Application.Exit gives up on a form that refuses to close, and the wizard refuses mid-run, so
+        // ask it first: disposing removes the tray icon, and an app left running after that would
+        // have no way left to exit it.
+        if (_addGameForm != null && !_addGameForm.TryClose())
+        {
+            Logger.Info("Exit postponed: a game was still being added, and that run is being cancelled.");
+            MessageBox.Show(_addGameForm, "Choose Exit again once the Add game window has finished.\r\n\r\nA game was still being added, so that is being cancelled first.", "Achievement Overlay", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        // The settings and report windows are WPF dialogs: ShowDialog runs a dispatcher loop of its own,
+        // and the tray menu stays live under it, so this can be running inside that loop. Exiting from
+        // here posts WM_QUIT to it, and a dispatcher loop ends on WM_QUIT without passing it on — so
+        // ShowDialog would return with its window still open, and the code after it would run on a
+        // disposed tray. Close them instead, and let the method that opened each finish the exit once
+        // its ShowDialog has returned.
+        if (_settingsWindow != null || _reportWindow != null)
+        {
+            Logger.Info("Exit waits for the open dialog to close.");
+            _exitPending = true;
+            _settingsWindow?.Close();
+            _reportWindow?.Close();
+            return;
+        }
+
+        DisposeAndExit();
+    }
+
+    /// <summary>
+    /// Finishes an exit that had to close a dialog first. Called by the method that opened the dialog,
+    /// once its ShowDialog has returned or thrown; with one dialog opened from inside the other, the
+    /// inner one returns first and the exit waits for the outer.
+    /// </summary>
+    private void CompletePendingExit()
+    {
+        if (_settingsWindow == null && _reportWindow == null)
+            DisposeAndExit();
+    }
+
+    private void DisposeAndExit()
     {
         Logger.Info("Shutting down...");
         Dispose();

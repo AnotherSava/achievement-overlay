@@ -107,6 +107,8 @@ public partial class SettingsWindow : Window, IWin32Window
     private NotificationScale _lastScale;
     private bool _loaded;
     private readonly Func<IWin32Window, SettingsResult, bool> _save;
+    /// <summary>Set once the window has closed, which Exit can do while the host's save is still showing a message over it.</summary>
+    private bool _closed;
 
     /// <summary>What the host saved; null while the window is open, and after a cancel, a close, or saves that all failed.</summary>
     public SettingsResult? Result { get; private set; }
@@ -125,7 +127,8 @@ public partial class SettingsWindow : Window, IWin32Window
     /// <param name="save">
     /// The host's save, called by Save with this window as the owner of any message it shows and what the window
     /// collected. It returns false when nothing was saved, and the window then stays open with every edit in place, to
-    /// be saved again or cancelled. No other way out of the window calls it — Cancel or the close button.
+    /// be saved again or cancelled. No other way out of the window calls it — Cancel, the close button, or the host
+    /// closing the window for Exit.
     /// </param>
     /// <param name="soundPlayer">
     /// The host's player, so "Show me" previews the sound through the same code the real unlock uses.
@@ -834,8 +837,9 @@ public partial class SettingsWindow : Window, IWin32Window
             StartWithWindows = SettingsResult.StartWithWindowsChange(_startWithWindows, StartWithWindowsToggle.IsChecked == true)
         };
 
-        // A failed save leaves the window open with every edit still in it; the host has already said why.
-        if (!_save(this, result))
+        // A failed save leaves the window open with every edit still in it; the host has already said why. A window
+        // that Exit closed while the host was showing a message takes no DialogResult.
+        if (!_save(this, result) || _closed)
             return;
 
         Result = result;
@@ -846,6 +850,7 @@ public partial class SettingsWindow : Window, IWin32Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _closed = true;
         // Closing while the field still has focus doesn't always raise the blur, and a stray
         // system-wide hook would keep filtering every keystroke on the machine.
         EndShortcutCapture();

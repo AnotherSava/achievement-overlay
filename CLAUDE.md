@@ -108,8 +108,8 @@ against, keyed by property name — to the save function the host passed in,
 `TrayApplicationContext.ApplySettings`, which persists them through `AppConfig.UpdateConfigValues`
 (one file write, not one per field) and re-wires whatever binds a changed value at startup. The
 window closes only when that returns true: a save that fails leaves it open with every edit in
-place, to be saved again or cancelled. Nothing else reaches the save function — Cancel and the
-close button save nothing. The messages `ApplySettings` shows are owned
+place, to be saved again or cancelled. Nothing else reaches the save function — Cancel, the close
+button, and Exit closing the window all save nothing. The messages `ApplySettings` shows are owned
 by the window, which passes itself in as their owner (it implements WinForms' `IWin32Window` for
 that): an owned box stays in front of the window and disables it until dismissed, so Save cannot
 start a second save beneath a message about the first.

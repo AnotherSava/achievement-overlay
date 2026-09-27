@@ -103,6 +103,8 @@ public sealed class AddGameForm : Form, IConfigProgress
     private int _hiddenCount;
     private CancellationTokenSource? _cts;
     private bool _running;
+    /// <summary>Whether the last close request was refused, which a run in progress does.</summary>
+    private bool _closeRefused;
 
     public AddGameForm(AppConfig config, Action<string> onGameConfigured)
     {
@@ -882,9 +884,21 @@ public sealed class AddGameForm : Form, IConfigProgress
         {
             _cts?.Cancel();
             e.Cancel = true;
+            _closeRefused = true;
             return;
         }
         base.OnFormClosing(e);
+        _closeRefused = e.Cancel;
+    }
+
+    /// <summary>
+    /// Asks the wizard to close, and says whether it did. A run in progress refuses: the run is
+    /// cancelled instead, and the wizard stays open to show it stopping.
+    /// </summary>
+    public bool TryClose()
+    {
+        Close();
+        return !_closeRefused;
     }
 
     protected override void OnLoad(EventArgs e)
