@@ -10,7 +10,7 @@ namespace AchievementOverlay;
 /// The popup has four foregrounds, and they were tuned by hand for one dark fill. Deriving them is
 /// what makes the fill safe to change: a light background flips the ink, and the secondary lines are
 /// lifted until they clear a contrast floor. Two limits are accepted rather than engineered around,
-/// and both are stated in docs/plans/2026-08-30-popup-position-and-background.md — contrast is judged
+/// and both are stated in docs/plans/completed/2026-08-30-popup-position-and-background.md — contrast is judged
 /// against the fill as chosen, ignoring its alpha, because what shows through a translucent popup is a
 /// game frame nobody can predict; and near <see cref="InkCrossover"/> no ink exceeds 4.58:1, so the
 /// game line cannot reach WCAG AA there. It does not reach AA on the shipped default either.

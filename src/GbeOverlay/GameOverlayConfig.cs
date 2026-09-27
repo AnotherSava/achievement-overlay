@@ -9,7 +9,7 @@ namespace AchievementOverlay.GbeOverlay;
 /// correct. Position and background colour are app settings in their own right; a game's ini still
 /// does not move or recolour a popup the user placed deliberately.
 /// The reasoning is in docs/plans/completed/2026-08-18-per-game-overlay-settings.md and
-/// docs/plans/2026-08-30-popup-position-and-background.md.
+/// docs/plans/completed/2026-08-30-popup-position-and-background.md.
 /// </summary>
 public sealed record GameOverlayConfig(double? AchievementDurationSeconds, string? FontOverride)
 {

@@ -116,8 +116,8 @@ by the window, which passes itself in as their owner (it implements WinForms' `I
 that): an owned box stays in front of the window and disables it until dismissed, so Save cannot
 start a second save beneath a message about the first.
 
-That diff is load-bearing rather than an optimisation: it's how the host knows to re-register the
-hotkey, rescan `GameCache`, or rebuild `AchievementWatcher` over new `gseSavesPaths` (it
+The diff is not an optimisation: it's how the host knows to warn about a shortcut another app
+already holds, rescan `GameCache`, or rebuild `AchievementWatcher` over new `gseSavesPaths` (it
 binds its paths at construction, and `Start()` re-seeds from disk so the new paths' backlog is
 recorded rather than replayed). Values read live on every use — sound, duration, language, font,
 scale, recent count — need nothing beyond the write.
@@ -343,7 +343,7 @@ unit-tested without a window, and `Resolve` is the single expression of it — t
 recent panel and the settings preview all go through it, so the three cannot disagree about a font or
 a duration.
 
-Load-bearing details:
+Details the code depends on:
 
 - **A game usually has more than one `steam_settings` folder, and they hold different things.** A
   repack decorates the copy at the game root while the emulator reads a bare one beside its DLL

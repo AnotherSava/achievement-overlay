@@ -8,7 +8,7 @@ using System.Windows.Forms;
 namespace AchievementOverlay;
 
 /// <summary>
-/// Shared utilities: app version, icon management, screen geometry.
+/// Shared utilities: app version, filesystem, icon management, screen geometry.
 /// </summary>
 public static class AppUtilities
 {
