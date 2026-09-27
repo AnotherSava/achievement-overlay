@@ -54,17 +54,11 @@ public class SteamDbScraperTests
     }
 
     [Fact]
-    public void ParseDescriptions_NoAchievements_ReturnsEmpty()
-    {
-        Assert.Empty(SteamDbScraper.ParseDescriptions("Just a\nchallenge page\nwith no data"));
-    }
+    public void ParseDescriptions_NoAchievements_ReturnsEmpty() => Assert.Empty(SteamDbScraper.ParseDescriptions("Just a\nchallenge page\nwith no data"));
 
+    // A stray percentage not followed by an identifier-shaped token must not produce an entry.
     [Fact]
-    public void ParseDescriptions_PercentWithoutApiName_Skipped()
-    {
-        // A stray percentage not followed by an identifier-shaped token must not produce an entry.
-        Assert.Empty(SteamDbScraper.ParseDescriptions("Some text\n42%\nhas spaces here"));
-    }
+    public void ParseDescriptions_PercentWithoutApiName_Skipped() => Assert.Empty(SteamDbScraper.ParseDescriptions("Some text\n42%\nhas spaces here"));
 
     [Fact]
     public void ExtractMarkdown_PullsDataMarkdown()
@@ -74,16 +68,10 @@ public class SteamDbScraperTests
     }
 
     [Fact]
-    public void ExtractMarkdown_SuccessFalse_ReturnsNull()
-    {
-        Assert.Null(SteamDbScraper.ExtractMarkdown("""{"success": false, "error": "blocked"}"""));
-    }
+    public void ExtractMarkdown_SuccessFalse_ReturnsNull() => Assert.Null(SteamDbScraper.ExtractMarkdown("""{"success": false, "error": "blocked"}"""));
 
     [Fact]
-    public void ExtractMarkdown_Malformed_ReturnsNull()
-    {
-        Assert.Null(SteamDbScraper.ExtractMarkdown("not json"));
-    }
+    public void ExtractMarkdown_Malformed_ReturnsNull() => Assert.Null(SteamDbScraper.ExtractMarkdown("not json"));
 
     [Fact]
     public void ExtractApiError_JoinsErrorAndDetails()
@@ -93,16 +81,10 @@ public class SteamDbScraperTests
     }
 
     [Fact]
-    public void ExtractApiError_NoErrorField_ReturnsNull()
-    {
-        Assert.Null(SteamDbScraper.ExtractApiError("""{"success": true, "data": {}}"""));
-    }
+    public void ExtractApiError_NoErrorField_ReturnsNull() => Assert.Null(SteamDbScraper.ExtractApiError("""{"success": true, "data": {}}"""));
 
     [Fact]
-    public void ExtractApiError_NotJson_ReturnsNull()
-    {
-        Assert.Null(SteamDbScraper.ExtractApiError("<html>502 Bad Gateway</html>"));
-    }
+    public void ExtractApiError_NotJson_ReturnsNull() => Assert.Null(SteamDbScraper.ExtractApiError("<html>502 Bad Gateway</html>"));
 
     [Fact]
     public void Interpret_Success_ReturnsDescriptions()

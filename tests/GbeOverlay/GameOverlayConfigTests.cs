@@ -9,28 +9,19 @@ public class GameOverlayConfigTests
         GameOverlayConfig.Parse(IniFile.Parse("[overlay::appearance]\n" + body));
 
     [Fact]
-    public void Parse_Duration_ReadsSeconds()
-    {
-        Assert.Equal(12.0, Parse("Notification_Duration_Achievement=12.0\n").AchievementDurationSeconds);
-    }
+    public void Parse_Duration_ReadsSeconds() => Assert.Equal(12.0, Parse("Notification_Duration_Achievement=12.0\n").AchievementDurationSeconds);
 
+    // GBE reads these with std::stof, which stops at the first character it can't use.
     [Fact]
-    public void Parse_DurationWithTrailingText_TakesTheNumericPrefix()
-    {
-        // GBE reads these with std::stof, which stops at the first character it can't use.
-        Assert.Equal(7.0, Parse("Notification_Duration_Achievement=7.0s\n").AchievementDurationSeconds);
-    }
+    public void Parse_DurationWithTrailingText_TakesTheNumericPrefix() => Assert.Equal(7.0, Parse("Notification_Duration_Achievement=7.0s\n").AchievementDurationSeconds);
 
+    // GBE suppresses the popup entirely for these; deliberately not reproduced, or one game's
+    // stale ini would silently stop this app from notifying at all.
     [Theory]
     [InlineData("0")]
     [InlineData("0.0")]
     [InlineData("-3")]
-    public void Parse_ZeroOrNegativeDuration_LeavesTheKeyUnset(string value)
-    {
-        // GBE suppresses the popup entirely for these; deliberately not reproduced, or one game's
-        // stale ini would silently stop this app from notifying at all.
-        Assert.Null(Parse($"Notification_Duration_Achievement={value}\n").AchievementDurationSeconds);
-    }
+    public void Parse_ZeroOrNegativeDuration_LeavesTheKeyUnset(string value) => Assert.Null(Parse($"Notification_Duration_Achievement={value}\n").AchievementDurationSeconds);
 
     [Fact]
     public void Parse_UnparseableDuration_LeavesTheKeyUnsetAndKeepsTheNext()
@@ -42,10 +33,7 @@ public class GameOverlayConfigTests
     }
 
     [Fact]
-    public void Parse_FontOverride_IsReadAsWritten()
-    {
-        Assert.Equal("poppins.ttf", Parse("Font_Override=  poppins.ttf  \n").FontOverride);
-    }
+    public void Parse_FontOverride_IsReadAsWritten() => Assert.Equal("poppins.ttf", Parse("Font_Override=  poppins.ttf  \n").FontOverride);
 
     [Fact]
     public void Parse_KeysInAnotherConfigFileSection_AreStillFound()
@@ -75,8 +63,5 @@ public class GameOverlayConfigTests
     [InlineData("abc", null)]
     [InlineData("", null)]
     [InlineData(".", null)]
-    public void ParseLeadingDouble_MatchesStofSemantics(string text, double? expected)
-    {
-        Assert.Equal(expected, GameOverlayConfig.ParseLeadingDouble(text));
-    }
+    public void ParseLeadingDouble_MatchesStofSemantics(string text, double? expected) => Assert.Equal(expected, GameOverlayConfig.ParseLeadingDouble(text));
 }

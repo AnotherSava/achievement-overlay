@@ -3,7 +3,6 @@ using System.Drawing;
 using System.IO;
 using System.Security;
 using System.Text.Json;
-using System.Windows.Forms;
 using AchievementOverlay.GbeConfig;
 using AchievementOverlay.GbeOverlay;
 
@@ -24,8 +23,10 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly AchievementHistory _achievementHistory = null!;
     private readonly RecentAchievementsDisplay _recentDisplay = null!;
     private readonly NotifyIcon _trayIcon = null!;
+#pragma warning disable CA2213 // Owned by the tray's ContextMenuStrip through Items, and disposed with it
     private readonly ToolStripMenuItem _recentItem = null!;
     private readonly ToolStripMenuItem _pauseItem = null!;
+#pragma warning restore CA2213
 
     // Rebuilt in place when the settings dialog changes the paths they watch / the keys they bind.
     private AchievementWatcher _watcher = null!;
@@ -33,7 +34,9 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private readonly Icon _activeIcon = null!;
     private readonly Icon _pausedIcon = null!;
+#pragma warning disable CA2213 // OpenAddGameDialog's finally disposes it once ShowDialog returns; disposing it here would skip its veto on exiting mid-run
     private AddGameForm? _addGameForm;
+#pragma warning restore CA2213
     private SettingsWindow? _settingsWindow;
     private DiagnosticReportWindow? _reportWindow;
     /// <summary>Set when Exit had to close one of the two WPF dialogs first; see <see cref="CompletePendingExit"/>.</summary>
@@ -132,9 +135,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         openConfigItem.Click += (_, _) =>
         {
             if (File.Exists(AppConfig.ConfigFilePath))
-                Process.Start("explorer.exe", $"/select,\"{AppConfig.ConfigFilePath}\"");
+                Process.Start("explorer.exe", $"/select,\"{AppConfig.ConfigFilePath}\"")?.Dispose();
             else
-                Process.Start("explorer.exe", AppContext.BaseDirectory);
+                Process.Start("explorer.exe", AppContext.BaseDirectory)?.Dispose();
         };
 
         var exitItem = new ToolStripMenuItem("Exit");
@@ -206,15 +209,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         return watcher;
     }
 
-    private void OnNewAchievement(object? sender, NewAchievementEventArgs e)
-    {
-        _notificationQueue.Enqueue(e);
-    }
+    private void OnNewAchievement(object? sender, NewAchievementEventArgs e) => _notificationQueue.Enqueue(e);
 
-    private void OnGameFolderObserved(object? sender, GameFolderObservedEventArgs e)
-    {
-        TryNotifyTrackingConfigured(e.AppId, e.States);
-    }
+    private void OnGameFolderObserved(object? sender, GameFolderObservedEventArgs e) => TryNotifyTrackingConfigured(e.AppId, e.States);
 
     /// <summary>
     /// Evaluates every already-existing GSE Saves folder for the synthetic "tracking configured"
@@ -321,7 +318,9 @@ public sealed class TrayApplicationContext : ApplicationContext
             {
                 return AchievementMetadata.ParseUnlockStates(File.ReadAllText(file));
             }
+#pragma warning disable CA1031 // Per-path boundary: logs the failure at Warn and reports the file as unreadable
             catch (Exception ex)
+#pragma warning restore CA1031
             {
                 Logger.Warn($"Could not read achievements for appid {appId}: {ex.Message}");
                 unreadable = true;
@@ -564,7 +563,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         var shortcut = _config.RecentAchievementsShortcut;
         _hotkey?.Dispose();
-        _hotkey = new GlobalHotkey(RecentHotkeyId, shortcut, () => _recentDisplay.Toggle());
+        _hotkey = new GlobalHotkey(RecentHotkeyId, shortcut, _recentDisplay.Toggle);
         _recentItem.ShortcutKeyDisplayString = _hotkey.IsRegistered ? shortcut : "";
         if (!_hotkey.IsRegistered)
             Logger.Warn($"Could not register hotkey '{shortcut}' — use the tray menu instead");
@@ -579,7 +578,9 @@ public sealed class TrayApplicationContext : ApplicationContext
             _startWithWindowsEnabled = enabled;
             Logger.Info($"Start with Windows: {enabled}");
         }
+#pragma warning disable CA1031 // UI boundary: logs at Error and shows the failure in a message box
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Error($"Failed to set Start with Windows: {ex.Message}");
             MessageBox.Show(owner, $"Could not change the Windows startup entry:\r\n\r\n{ex.Message}",
@@ -644,6 +645,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         if (disposing)
         {
             _trayIcon.Visible = false;
+            _trayIcon.ContextMenuStrip?.Dispose();
             _trayIcon.Dispose();
             _hotkey?.Dispose();
             _recentDisplay.Dispose();

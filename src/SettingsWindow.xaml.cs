@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -105,7 +106,7 @@ public partial class SettingsWindow : Window, IWin32Window
     private readonly List<string> _savesFolders;
     private LowLevelKeyboardHook? _shortcutHook;
     private NotificationScale _lastScale;
-    private bool _loaded;
+    private readonly bool _loaded;
     private readonly Func<IWin32Window, SettingsResult, bool> _save;
     /// <summary>Set once the window has closed, which Exit can do while the host's save is still showing a message over it.</summary>
     private bool _closed;
@@ -189,7 +190,7 @@ public partial class SettingsWindow : Window, IWin32Window
         if (_startWithWindows == null)
             StartWithWindowsDescription.Text = "The Windows startup entry could not be read, so this can't be shown or changed here. The log has the reason.";
         ShortcutBox.Text = _current.RecentAchievementsShortcut;
-        RecentCountBox.Text = Math.Clamp(_current.RecentAchievementsCount, 1, 20).ToString();
+        RecentCountBox.Text = Math.Clamp(_current.RecentAchievementsCount, 1, 20).ToString(CultureInfo.CurrentCulture);
 
         // english is always offered (it is the fallback), and so is whatever is configured now, so
         // opening the window can never silently drop a language the games happen not to declare.
@@ -587,7 +588,7 @@ public partial class SettingsWindow : Window, IWin32Window
 
     private void OnRecentCountDown(object sender, RoutedEventArgs e) => StepCount(-1);
 
-    private void StepCount(int delta) => RecentCountBox.Text = Math.Clamp(ParseCount() + delta, 1, 20).ToString();
+    private void StepCount(int delta) => RecentCountBox.Text = Math.Clamp(ParseCount() + delta, 1, 20).ToString(CultureInfo.CurrentCulture);
 
     // --- Shortcut capture ---
 
@@ -633,7 +634,9 @@ public partial class SettingsWindow : Window, IWin32Window
                 shift: modifiers.HasFlag(ModifierKeys.Shift),
                 alt: modifiers.HasFlag(ModifierKeys.Alt),
                 win: modifiers.HasFlag(ModifierKeys.Windows)))
+        {
             e.Handled = true;
+        }
     }
 
     /// <summary>
@@ -649,9 +652,7 @@ public partial class SettingsWindow : Window, IWin32Window
 
         // A modifier on its own — wait for the key it modifies. The hook reports the physical side
         // (LControlKey), the WPF event the generic one, so both have to be listed.
-        if (key is WinFormsKeys.None or WinFormsKeys.ControlKey or WinFormsKeys.ShiftKey or WinFormsKeys.Menu
-            or WinFormsKeys.LControlKey or WinFormsKeys.RControlKey or WinFormsKeys.LShiftKey or WinFormsKeys.RShiftKey
-            or WinFormsKeys.LMenu or WinFormsKeys.RMenu or WinFormsKeys.LWin or WinFormsKeys.RWin)
+        if (key is WinFormsKeys.None or WinFormsKeys.ControlKey or WinFormsKeys.ShiftKey or WinFormsKeys.Menu or WinFormsKeys.LControlKey or WinFormsKeys.RControlKey or WinFormsKeys.LShiftKey or WinFormsKeys.RShiftKey or WinFormsKeys.LMenu or WinFormsKeys.RMenu or WinFormsKeys.LWin or WinFormsKeys.RWin)
             return false;
 
         if (key is WinFormsKeys.Back or WinFormsKeys.Delete)
@@ -754,7 +755,9 @@ public partial class SettingsWindow : Window, IWin32Window
                 ? ("no games with achievement metadata found", "StatusWarn")
                 : ($"{count} game{(count == 1 ? "" : "s")} with achievement metadata", "StatusGood");
         }
+#pragma warning disable CA1031 // Status-line boundary: shows the failure on the folder's card
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             return ($"could not be scanned: {ex.Message}", "StatusWarn");
         }
@@ -771,7 +774,9 @@ public partial class SettingsWindow : Window, IWin32Window
             var count = Directory.GetDirectories(path).Length;
             return ($"found · {count} game folder{(count == 1 ? "" : "s")} inside", "StatusGood");
         }
+#pragma warning disable CA1031 // Status-line boundary: shows the failure on the folder's card
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             return ($"could not be read: {ex.Message}", "StatusWarn");
         }

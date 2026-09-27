@@ -1,7 +1,6 @@
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Windows.Forms;
 
 namespace AchievementOverlay;
 
@@ -149,7 +148,9 @@ internal static class NativeFolderIcon
             using var icon = Icon.FromHandle(info.hIcon);
             return icon.ToBitmap();
         }
+#pragma warning disable CA1031 // Icon boundary: logs the failure at Warn and the browse buttons show text instead
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Warn($"Could not load the shell folder icon: {ex.Message}");
             return null;

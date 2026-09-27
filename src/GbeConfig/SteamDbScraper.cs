@@ -64,8 +64,7 @@ public static partial class SteamDbScraper
     {
         var url = StatsPageUrl(appId);
         if (string.IsNullOrWhiteSpace(firecrawlApiKey))
-            return SteamDbScrapeResult.Failed("No Firecrawl API key is saved, and SteamDB sits behind Cloudflare, "
-                + "which blocks a plain HTTP request.");
+            return SteamDbScrapeResult.Failed("No Firecrawl API key is saved, and SteamDB sits behind Cloudflare, which blocks a plain HTTP request.");
 
         var body = JsonSerializer.Serialize(new
         {
@@ -75,7 +74,7 @@ public static partial class SteamDbScraper
             waitFor = RenderWaitMs
         });
 
-        var request = new HttpRequestMessage(HttpMethod.Post, FirecrawlEndpoint)
+        using var request = new HttpRequestMessage(HttpMethod.Post, FirecrawlEndpoint)
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
@@ -129,11 +128,9 @@ public static partial class SteamDbScraper
             return $"Firecrawl got Cloudflare's bot check instead of {url} — SteamDB blocked the scrape.";
 
         if (LooksUnrendered(markdown))
-            return $"SteamDB's achievement table was still loading when {url} was captured — it renders "
-                + $"client-side, and the {RenderWaitMs / 1000}s render wait wasn't enough this time.";
+            return $"SteamDB's achievement table was still loading when {url} was captured — it renders client-side, and the {RenderWaitMs / 1000}s render wait wasn't enough this time.";
 
-        return $"Firecrawl returned {markdown.Length} characters from {url}, but no achievements could be "
-            + "parsed out of them — SteamDB may have changed its page layout.";
+        return $"Firecrawl returned {markdown.Length} characters from {url}, but no achievements could be parsed out of them — SteamDB may have changed its page layout.";
     }
 
     /// <summary>Explains a non-2xx Firecrawl response, naming the common causes by status code.</summary>
@@ -163,8 +160,7 @@ public static partial class SteamDbScraper
             var root = doc.RootElement;
             if (root.TryGetProperty("success", out var ok) && ok.ValueKind == JsonValueKind.False)
                 return null;
-            if (root.TryGetProperty("data", out var data) && data.TryGetProperty("markdown", out var md)
-                && md.ValueKind == JsonValueKind.String)
+            if (root.TryGetProperty("data", out var data) && data.TryGetProperty("markdown", out var md) && md.ValueKind == JsonValueKind.String)
                 return md.GetString();
         }
         catch (JsonException)

@@ -1,3 +1,6 @@
+# Every text file is stored and checked out with LF, whatever a clone's core.autocrlf says.
+* text=auto eol=lf
+
 # Transcrypt: these files are stored encrypted in git and stay plaintext in the
 # working tree. A fresh clone reads them as base64 until it is unlocked with the
 # shared key — see "Encrypted files" in CLAUDE.md.

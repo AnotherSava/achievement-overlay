@@ -147,8 +147,7 @@ public static class DiagnosticReport
     /// </summary>
     public static bool IsSecretSetting(string name)
     {
-        if (string.Equals(name, nameof(SettingsData.SteamWebApiKey), StringComparison.OrdinalIgnoreCase)
-            || string.Equals(name, nameof(SettingsData.FirecrawlApiKey), StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(name, nameof(SettingsData.SteamWebApiKey), StringComparison.OrdinalIgnoreCase) || string.Equals(name, nameof(SettingsData.FirecrawlApiKey), StringComparison.OrdinalIgnoreCase))
             return true;
 
         // "apikey" rather than "key", so a setting like recentAchievementsShortcut — or a hotkey by

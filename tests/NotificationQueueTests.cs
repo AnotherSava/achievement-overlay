@@ -1,12 +1,13 @@
 using System.IO;
 using System.Text.Json;
-using AchievementOverlay;
 using Xunit;
 
 namespace AchievementOverlay.Tests;
 
-public class NotificationQueueTests : IDisposable
+public sealed class NotificationQueueTests : IDisposable
 {
+    private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = true };
+
     private readonly string _tempDir;
     private readonly string _gamesDir;
     private readonly string _settingsPath;
@@ -57,14 +58,14 @@ public class NotificationQueueTests : IDisposable
         var steamSettings = Path.Combine(gameDir, "steam_settings");
         Directory.CreateDirectory(steamSettings);
 
-        var json = JsonSerializer.Serialize(achievements, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(achievements, IndentedJson);
         File.WriteAllText(Path.Combine(steamSettings, "achievements.json"), json);
     }
 
     [Fact]
     public void ResolveMetadata_KnownGame_ReturnsDisplayInfo()
     {
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
 
         var args = new NewAchievementEventArgs
         {
@@ -92,7 +93,7 @@ public class NotificationQueueTests : IDisposable
         });
         File.WriteAllBytes(Path.Combine(_gamesDir, "PaddedGame", "steam_settings", "001.jpg"), new byte[] { 0xFF, 0xD8 });
         _gameCache.ScanAll();
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
 
         var item = queue.ResolveMetadata(new NewAchievementEventArgs
         {
@@ -109,7 +110,7 @@ public class NotificationQueueTests : IDisposable
     [Fact]
     public void ResolveMetadata_UnknownGame_ReturnsNull()
     {
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
 
         var args = new NewAchievementEventArgs
         {
@@ -126,7 +127,7 @@ public class NotificationQueueTests : IDisposable
     [Fact]
     public void ResolveMetadata_UnknownAchievement_ReturnsNull()
     {
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
 
         var args = new NewAchievementEventArgs
         {
@@ -157,7 +158,7 @@ public class NotificationQueueTests : IDisposable
 
         var multiCache = new GameCache(new[] { _gamesDir });
         multiCache.ScanAll();
-        var queue = new NotificationQueue(multiCache, _config);
+        using var queue = new NotificationQueue(multiCache, _config);
 
         var args = new NewAchievementEventArgs
         {
@@ -176,7 +177,7 @@ public class NotificationQueueTests : IDisposable
     [Fact]
     public void Enqueue_AddsItemToQueue()
     {
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
 
         var args = new NewAchievementEventArgs
         {
@@ -194,7 +195,7 @@ public class NotificationQueueTests : IDisposable
     [Fact]
     public void Enqueue_UnknownGame_SkipsNotification()
     {
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
 
         var args = new NewAchievementEventArgs
         {
@@ -212,7 +213,7 @@ public class NotificationQueueTests : IDisposable
     [Fact]
     public void Enqueue_MultipleItems_AllQueued()
     {
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
 
         queue.Enqueue(new NewAchievementEventArgs { AppId = "12345", AchievementName = "ACH01", EarnedTime = 1 });
         queue.Enqueue(new NewAchievementEventArgs { AppId = "12345", AchievementName = "ACH02", EarnedTime = 2 });
@@ -224,7 +225,7 @@ public class NotificationQueueTests : IDisposable
     [Fact]
     public void EnqueueSynthetic_QueuesItem_WithoutSchema()
     {
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
 
         // An appid/title absent from any game schema — the normal Enqueue path would skip it.
         queue.EnqueueSynthetic("99999", "Achievement tracking configured", "TestGame is set up.", iconPath: null);
@@ -236,15 +237,14 @@ public class NotificationQueueTests : IDisposable
     [Fact]
     public void IsPaused_DefaultFalse()
     {
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
         Assert.False(queue.IsPaused);
     }
 
     [Fact]
     public void IsPaused_CanBeToggled()
     {
-        var queue = new NotificationQueue(_gameCache, _config);
-        queue.IsPaused = true;
+        using var queue = new NotificationQueue(_gameCache, _config) { IsPaused = true };
         Assert.True(queue.IsPaused);
         queue.IsPaused = false;
         Assert.False(queue.IsPaused);
@@ -272,7 +272,7 @@ public class NotificationQueueTests : IDisposable
 
         var freshCache = new GameCache(new[] { _gamesDir });
         freshCache.ScanAll();
-        var queue = new NotificationQueue(freshCache, _config);
+        using var queue = new NotificationQueue(freshCache, _config);
 
         var args = new NewAchievementEventArgs
         {
@@ -295,7 +295,10 @@ public class NotificationQueueTests : IDisposable
             if (Directory.Exists(_tempDir))
                 Directory.Delete(_tempDir, true);
         }
-        catch { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A temp folder a watcher still holds must not fail the test that used it.
+        }
     }
 
     // --- Self-describing unlock files (issue #5) ---
@@ -306,7 +309,7 @@ public class NotificationQueueTests : IDisposable
     [Fact]
     public void ResolveMetadata_UnknownGameWithInlineText_ResolvesFromUnlockState()
     {
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
 
         var item = queue.ResolveMetadata(new NewAchievementEventArgs
         {
@@ -330,7 +333,7 @@ public class NotificationQueueTests : IDisposable
         Directory.CreateDirectory(imgDir);
         File.WriteAllBytes(Path.Combine(imgDir, "ach01.png"), new byte[] { 0x89, 0x50, 0x4E, 0x47 });
 
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
 
         var item = queue.ResolveMetadata(new NewAchievementEventArgs
         {
@@ -354,7 +357,7 @@ public class NotificationQueueTests : IDisposable
         Directory.CreateDirectory(imgDir);
         File.WriteAllBytes(Path.Combine(imgDir, "ach01.png"), new byte[] { 0x89, 0x50, 0x4E, 0x47 });
 
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
 
         var item = queue.ResolveMetadata(new NewAchievementEventArgs
         {
@@ -375,7 +378,7 @@ public class NotificationQueueTests : IDisposable
     [Fact]
     public void ResolveMetadata_KnownGameAchievementAbsentFromSchema_UsesInlineText()
     {
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
 
         var item = queue.ResolveMetadata(new NewAchievementEventArgs
         {
@@ -395,7 +398,7 @@ public class NotificationQueueTests : IDisposable
     [Fact]
     public void Enqueue_UnknownGameWithInlineText_QueuesNotification()
     {
-        var queue = new NotificationQueue(_gameCache, _config);
+        using var queue = new NotificationQueue(_gameCache, _config);
 
         queue.Enqueue(new NewAchievementEventArgs
         {

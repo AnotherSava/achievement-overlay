@@ -4,7 +4,7 @@ using Xunit;
 
 namespace AchievementOverlay.Tests.GbeConfig;
 
-public class GbeBinaryManagerTests : IDisposable
+public sealed class GbeBinaryManagerTests : IDisposable
 {
     private readonly string _tempDir;
 
@@ -83,8 +83,5 @@ public class GbeBinaryManagerTests : IDisposable
     }
 
     [Fact]
-    public void LocateBinaries_NonexistentDir_ReturnsNull()
-    {
-        Assert.Null(GbeBinaryManager.LocateBinaries(Path.Combine(_tempDir, "nope"), "v1"));
-    }
+    public void LocateBinaries_NonexistentDir_ReturnsNull() => Assert.Null(GbeBinaryManager.LocateBinaries(Path.Combine(_tempDir, "nope"), "v1"));
 }

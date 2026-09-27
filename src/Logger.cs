@@ -48,9 +48,9 @@ public static class Logger
                 _writer.WriteLine($"{SessionBannerPrefix} {Timestamp()}, {AppUtilities.InformationalVersion} =====");
             }
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Can't create log file — logging silently disabled
+            // No log file can be created next to the exe, so this session runs without logging.
         }
     }
 

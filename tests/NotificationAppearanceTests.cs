@@ -73,24 +73,15 @@ public class NotificationAppearanceTests
     }
 
     [Fact]
-    public void Resolve_GameDuration_OverridesTheAppDuration()
-    {
-        Assert.Equal(12, NotificationAppearance.Resolve(App(), Game(duration: 12)).DurationSeconds);
-    }
+    public void Resolve_GameDuration_OverridesTheAppDuration() => Assert.Equal(12, NotificationAppearance.Resolve(App(), Game(duration: 12)).DurationSeconds);
 
     [Fact]
-    public void Resolve_FractionalGameDuration_IsRounded()
-    {
-        Assert.Equal(8, NotificationAppearance.Resolve(App(), Game(duration: 7.6)).DurationSeconds);
-    }
+    public void Resolve_FractionalGameDuration_IsRounded() => Assert.Equal(8, NotificationAppearance.Resolve(App(), Game(duration: 7.6)).DurationSeconds);
 
     [Theory]
     [InlineData(0.2, NotificationAppearance.MinGameDurationSeconds)]
     [InlineData(600, NotificationAppearance.MaxGameDurationSeconds)]
-    public void Resolve_GameDurationOutOfRange_IsClamped(double seconds, int expected)
-    {
-        Assert.Equal(expected, NotificationAppearance.Resolve(App(), Game(duration: seconds)).DurationSeconds);
-    }
+    public void Resolve_GameDurationOutOfRange_IsClamped(double seconds, int expected) => Assert.Equal(expected, NotificationAppearance.Resolve(App(), Game(duration: seconds)).DurationSeconds);
 
     [Fact]
     public void Resolve_GameSound_OverridesTheAppSound()

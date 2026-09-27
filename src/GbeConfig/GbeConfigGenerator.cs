@@ -262,10 +262,9 @@ public sealed class GbeConfigGenerator
         const int errorVirusDeleted = unchecked((int)0x800700E2);
         for (var e = ex; e != null; e = e.InnerException)
         {
-            if (e.HResult == errorVirusInfected || e.HResult == errorVirusDeleted)
+            if (e.HResult is errorVirusInfected or errorVirusDeleted)
                 return true;
-            if (e.Message.Contains("virus", StringComparison.OrdinalIgnoreCase)
-                || e.Message.Contains("potentially unwanted", StringComparison.OrdinalIgnoreCase))
+            if (e.Message.Contains("virus", StringComparison.OrdinalIgnoreCase) || e.Message.Contains("potentially unwanted", StringComparison.OrdinalIgnoreCase))
                 return true;
         }
         return false;

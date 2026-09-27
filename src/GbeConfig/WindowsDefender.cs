@@ -52,7 +52,9 @@ public static class WindowsDefender
         {
             return ExclusionResult.Cancelled;
         }
+#pragma warning disable CA1031 // Elevated-process boundary: logs the cause at Warn; the wizard reports the failure
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Warn($"Adding Defender exclusions failed: {ex.Message}");
             return ExclusionResult.Failed;

@@ -247,7 +247,7 @@ public static class AchievementMetadata
             return $"digits, unpadded (\"{list[0]}\")";
 
         var widths = padded.Select(n => n.Length).Distinct().OrderBy(w => w).ToList();
-        var width = widths.Count == 1 ? widths[0].ToString() : string.Join("/", widths);
+        var width = string.Join("/", widths);
         return $"digits, zero-padded to {width} (\"{padded[0]}\")";
     }
 
@@ -292,8 +292,7 @@ public static class AchievementMetadata
 
         foreach (var property in element.Value.EnumerateObject())
         {
-            if (property.Value.ValueKind == JsonValueKind.String
-                && !property.NameEquals(TokenKey))
+            if (property.Value.ValueKind == JsonValueKind.String && !property.NameEquals(TokenKey))
                 into.Add(property.Name);
         }
     }
@@ -304,8 +303,7 @@ public static class AchievementMetadata
     /// </summary>
     public static string GetDisplayText(JsonElement? element, string language)
     {
-        if (element == null || element.Value.ValueKind == JsonValueKind.Undefined
-                           || element.Value.ValueKind == JsonValueKind.Null)
+        if (element == null || element.Value.ValueKind == JsonValueKind.Undefined || element.Value.ValueKind == JsonValueKind.Null)
             return "";
 
         if (element.Value.ValueKind == JsonValueKind.String)
@@ -408,7 +406,7 @@ public static class AchievementMetadata
         return unpadded.Length > 0 ? unpadded : "0";
     }
 
-    /// <summary>Messages already logged by <see cref="WarnOnce"/>, so each is written once.</summary>
+    /// <summary>Messages already logged by <see cref="WarnOnce(string, string)"/>, so each is written once.</summary>
     private static readonly ConcurrentDictionary<string, byte> WarnedOnce = new();
 
     /// <summary>
@@ -563,13 +561,8 @@ public static class AchievementMetadata
 
         return new ResolvedAchievement
         {
-            DisplayName = FirstNonEmpty(
-                GetDisplayText(leadingName, language),
-                GetDisplayText(fillingName, language),
-                achievementName),
-            Description = FirstNonEmpty(
-                GetDisplayText(leadingDescription, language),
-                GetDisplayText(fillingDescription, language)),
+            DisplayName = FirstNonEmpty(GetDisplayText(leadingName, language), GetDisplayText(fillingName, language), achievementName),
+            Description = FirstNonEmpty(GetDisplayText(leadingDescription, language), GetDisplayText(fillingDescription, language)),
             // Only the schema can supply an icon: writers that inline their text ship none, and the
             // GSE Saves folder is never probed for images.
             IconPath = definition != null ? ResolveIconPath(definition, metadataDir) : null

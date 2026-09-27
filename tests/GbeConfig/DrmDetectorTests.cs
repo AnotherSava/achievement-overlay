@@ -5,7 +5,7 @@ using Xunit;
 
 namespace AchievementOverlay.Tests.GbeConfig;
 
-public class DrmDetectorTests : IDisposable
+public sealed class DrmDetectorTests : IDisposable
 {
     private readonly string _tempDir;
 

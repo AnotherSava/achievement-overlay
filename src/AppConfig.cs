@@ -34,7 +34,7 @@ public sealed class AppConfig
     private DateTime? _reportedFailureWriteTimeUtc;
 
     private SettingsData _settings = null!;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly string _settingsFilePath;
 
     public AppConfig()
@@ -52,8 +52,8 @@ public sealed class AppConfig
         _settings = Load(settingsPath);
     }
 
-    public string[] GamesPaths { get { Reload(); return _gamesPaths ??= ParseGamesPaths(_settings.GamesPaths); } }
-    public string[] GseSavesPaths { get { Reload(); return _gseSavesPaths ??= ParseGamesPaths(_settings.GseSavesPaths); } }
+    public IReadOnlyList<string> GamesPaths { get { Reload(); return _gamesPaths ??= ParseGamesPaths(_settings.GamesPaths); } }
+    public IReadOnlyList<string> GseSavesPaths { get { Reload(); return _gseSavesPaths ??= ParseGamesPaths(_settings.GseSavesPaths); } }
     public string Language { get { Reload(); return _settings.Language; } }
     public bool SoundEnabled { get { Reload(); return _settings.SoundEnabled; } }
     public string SoundPath { get { Reload(); return _settings.SoundPath; } }
@@ -64,8 +64,8 @@ public sealed class AppConfig
     public string? SteamWebApiKey { get { Reload(); return _settings.SteamWebApiKey; } }
     public string? FirecrawlApiKey { get { Reload(); return _settings.FirecrawlApiKey; } }
 
-    private string[]? _gseSavesPaths;
-    private string[]? _gamesPaths;
+    private IReadOnlyList<string>? _gseSavesPaths;
+    private IReadOnlyList<string>? _gamesPaths;
 
     public SettingsData GetCurrent()
     {
@@ -75,15 +75,9 @@ public sealed class AppConfig
 
     /// <summary>Writes one setting through <see cref="UpdateConfigValues(IReadOnlyDictionary{string, object})"/>.</summary>
     /// <exception cref="ConfigSaveException">The value was not saved.</exception>
-    public void UpdateConfigValue(string propertyName, object value)
-    {
-        UpdateConfigValue(propertyName, value, _settingsFilePath);
-    }
+    public void UpdateConfigValue(string propertyName, object value) => UpdateConfigValue(propertyName, value, _settingsFilePath);
 
-    internal void UpdateConfigValue(string propertyName, object value, string settingsPath)
-    {
-        UpdateConfigValues(new Dictionary<string, object?> { [propertyName] = value }, settingsPath);
-    }
+    internal void UpdateConfigValue(string propertyName, object value, string settingsPath) => UpdateConfigValues(new Dictionary<string, object?> { [propertyName] = value }, settingsPath);
 
     /// <summary>
     /// Writes several settings in one read-modify-write pass, keyed by <see cref="SettingsData"/>
@@ -92,10 +86,7 @@ public sealed class AppConfig
     /// replaced whole rather than written in place; <see cref="WriteReplacing"/> says why.
     /// </summary>
     /// <exception cref="ConfigSaveException">Nothing was saved, and the in-memory settings are unchanged.</exception>
-    public void UpdateConfigValues(IReadOnlyDictionary<string, object?> values)
-    {
-        UpdateConfigValues(values, _settingsFilePath);
-    }
+    public void UpdateConfigValues(IReadOnlyDictionary<string, object?> values) => UpdateConfigValues(values, _settingsFilePath);
 
     internal void UpdateConfigValues(IReadOnlyDictionary<string, object?> values, string settingsPath)
     {
@@ -114,8 +105,7 @@ public sealed class AppConfig
             Dictionary<string, JsonElement> dict;
             try
             {
-                dict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, JsonOptions)
-                       ?? new Dictionary<string, JsonElement>();
+                dict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, JsonOptions) ?? new();
             }
             catch (JsonException ex)
             {
@@ -397,11 +387,6 @@ public sealed class AppConfig
             .Where(p => !string.IsNullOrEmpty(p))
             .ToArray();
 
-    private static string ExpandAndCache(ref string? cached, string raw)
-    {
-        return cached ??= ExpandEnvironmentVariables(raw);
-    }
-
     // --- Registry auto-start ---
 
     private const string RegistryRunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
@@ -475,7 +460,7 @@ public sealed class SettingsData
     /// Which corner or edge popups appear at. Absent reads as bottom-right — the enum's member 0 —
     /// so an existing install keeps the only position the app has ever had. The converter is on the
     /// type; the name has to camel-case to the JSON key, because that is how
-    /// <see cref="AppConfig.UpdateConfigValues"/> derives it when the settings window saves.
+    /// <see cref="AppConfig.UpdateConfigValues(IReadOnlyDictionary{string, object})"/> derives it when the settings window saves.
     /// </summary>
     [JsonPropertyName("notificationPosition")]
     public NotificationAnchor NotificationPosition { get; set; }

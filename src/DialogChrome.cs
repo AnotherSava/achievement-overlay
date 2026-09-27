@@ -22,7 +22,7 @@ public static class DialogChrome
     {
         var dark = IsSystemInDarkMode();
         void Set(string key, string hex) =>
-            resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)!);
+            resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
 
         Set("WindowBackground", dark ? "#202020" : "#F3F3F3");
         Set("PageBackground", dark ? "#272727" : "#FBFBFB");
@@ -48,7 +48,9 @@ public static class DialogChrome
             using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
             return key?.GetValue("AppsUseLightTheme") is int light && light == 0;
         }
+#pragma warning disable CA1031 // Dialog boundary: logs the failure at Warn and opens the dialog in light mode
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Warn($"Could not read the Windows theme, so the dialog opens in light mode: {ex.Message}");
             return false; // unreadable registry is not a reason to fail to open a dialog

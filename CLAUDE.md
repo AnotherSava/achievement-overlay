@@ -432,6 +432,21 @@ has them. A `CS8625` in a test reached a release that way once. Before the build
 conventions checker (`~/.claude/conventions/check.py`), which re-measures every rule this repo has
 adopted per `.claude/conventions`; a clone without that checker prints `SKIPPED` for the step.
 
+**The build is also the linter.** `Directory.Build.props` turns on `AnalysisMode=All` and
+`EnforceCodeStyleInBuild` for every project; `.editorconfig` holds the rules, with preference options
+set to the style the code already uses and a reason beside every rule that is off. So `-warnaserror`,
+in the gate and in CI, fails on a lint finding. `GenerateDocumentationFile` is on only because IDE0005
+reports in a build only with it — CS1591 is off and `PublishDocumentationFile` is false, so no XML
+ships. A deliberate catch-all that logs at Warn/Error or shows the error takes a
+`#pragma warning disable CA1031 // <boundary>: <what it logs or shows>` pair around its `catch` line,
+at column 0 (IDE0055 rejects an indented directive); a catch that swallows silently gets fixed
+instead of suppressed. Line endings are LF everywhere: `.gitattributes` checks them out and commits
+them that way, and `end_of_line = lf` makes editors and `dotnet format whitespace` write LF, though
+the build does not check them. `global.json` pins the SDK to the 10.0.4xx band (`latestPatch`) and
+CI installs from it: the analyzers ship with the compiler, so another feature band reports a
+different set of findings — 10.0.401 flags `!` suppressions and `using`s as unnecessary where
+10.0.112 is silent, so a tree clean here failed on an unpinned CI.
+
 ## Replaying a diagnostic report
 
 `tools/ReplayReport/` feeds a user's **Report a problem…** file back through the resolver and prints

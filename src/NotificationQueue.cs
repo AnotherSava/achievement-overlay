@@ -176,7 +176,9 @@ public sealed class NotificationQueue : IDisposable
 
             window.ShowNotification(item.AchievementName, item.Description, item.IconPath, gameWindowRect);
         }
+#pragma warning disable CA1031 // Per-notification boundary: logs at Error and moves on to the next popup
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Error($"Error dispatching notification: {ex.ToString().ReplaceLineEndings(" | ")}");
             ScheduleRetry(_gapTimer ??= CreateTimer(), GapBetweenNotifications);

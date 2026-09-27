@@ -255,7 +255,7 @@ public sealed class AchievementWatcher : IDisposable
         }
 
         // Read file with retry for locked files
-        string? json = await ReadFileWithRetryAsync(filePath);
+        var json = await ReadFileWithRetryAsync(filePath);
         if (json == null)
             return;
 

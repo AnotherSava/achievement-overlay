@@ -1,4 +1,3 @@
-using AchievementOverlay;
 using Xunit;
 using Color = System.Windows.Media.Color;
 using Colors = System.Windows.Media.Colors;
@@ -66,19 +65,13 @@ public class PopupPaletteTests
     [InlineData(0x1A, 0x1A, 0x2E)]
     [InlineData(0x00, 0x00, 0x00)]
     [InlineData(0x20, 0x00, 0x40)]
-    public void For_DarkBackgrounds_TakeWhiteInk(byte r, byte g, byte b)
-    {
-        Assert.Equal(Colors.White, PopupPalette.For(Color.FromRgb(r, g, b)).Title);
-    }
+    public void For_DarkBackgrounds_TakeWhiteInk(byte r, byte g, byte b) => Assert.Equal(Colors.White, PopupPalette.For(Color.FromRgb(r, g, b)).Title);
 
     [Theory]
     [InlineData(0xFF, 0xFF, 0xFF)]
     [InlineData(0xFF, 0xFF, 0x00)]
     [InlineData(0xEE, 0xEE, 0xEE)]
-    public void For_LightBackgrounds_TakeBlackInk(byte r, byte g, byte b)
-    {
-        Assert.Equal(Colors.Black, PopupPalette.For(Color.FromRgb(r, g, b)).Title);
-    }
+    public void For_LightBackgrounds_TakeBlackInk(byte r, byte g, byte b) => Assert.Equal(Colors.Black, PopupPalette.For(Color.FromRgb(r, g, b)).Title);
 
     [Fact]
     public void For_FlipsInkEitherSideOfTheCrossover()

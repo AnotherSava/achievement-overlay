@@ -56,8 +56,8 @@ public sealed partial class DiagnosticReportWindow : Window
         public string Pane { get; set; } = "";
     }
 
-    private readonly string[] _gseSavesPaths;
-    private readonly string[] _gamesPaths;
+    private readonly IReadOnlyList<string> _gseSavesPaths;
+    private readonly IReadOnlyList<string> _gamesPaths;
     private readonly List<ReportSection> _sections;
 
     /// <summary>
@@ -69,7 +69,7 @@ public sealed partial class DiagnosticReportWindow : Window
 
     private string _reportText = "";
 
-    public DiagnosticReportWindow(IReadOnlyList<DiagnosticGameChoice> choices, string[] gseSavesPaths, string[] gamesPaths)
+    public DiagnosticReportWindow(IReadOnlyList<DiagnosticGameChoice> choices, IReadOnlyList<string> gseSavesPaths, IReadOnlyList<string> gamesPaths)
     {
         _gseSavesPaths = gseSavesPaths;
         _gamesPaths = gamesPaths;
@@ -166,7 +166,9 @@ public sealed partial class DiagnosticReportWindow : Window
             _reportText = DiagnosticReport.Compose(
                 DiagnosticReport.Collect(choice.AppId, choice.Game, _gseSavesPaths, _gamesPaths), Chosen());
         }
+#pragma warning disable CA1031 // UI boundary: logs the failure at Error and shows "could not be built" in the pane and footer
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             _reportText = "";
             Logger.Error($"Could not build the diagnostic report for appid {choice.AppId}: {ex.Message}");
@@ -278,7 +280,9 @@ public sealed partial class DiagnosticReportWindow : Window
             System.Windows.Forms.Clipboard.SetText(_reportText);
             FooterStatus.Text = "Copied to the clipboard.";
         }
+#pragma warning disable CA1031 // UI boundary: logs the failure at Warn and shows it on the footer status line
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Warn($"Could not copy the diagnostic report: {ex.Message}");
             FooterStatus.Text = "Could not copy — another program is holding the clipboard.";
@@ -306,9 +310,11 @@ public sealed partial class DiagnosticReportWindow : Window
             File.WriteAllText(dialog.FileName, _reportText);
             Logger.Info($"Saved diagnostic report for appid {choice.AppId} to '{dialog.FileName}'.");
             FooterStatus.Text = $"Saved to {dialog.FileName}";
-            Process.Start("explorer.exe", $"/select,\"{dialog.FileName}\"");
+            Process.Start("explorer.exe", $"/select,\"{dialog.FileName}\"")?.Dispose();
         }
+#pragma warning disable CA1031 // UI boundary: logs the failure at Error and shows it in a message box
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             Logger.Error($"Could not save the diagnostic report: {ex.Message}");
             // Qualified: WinForms is in global scope here, and both namespaces have a MessageBox.

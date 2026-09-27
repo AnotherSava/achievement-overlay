@@ -1,9 +1,8 @@
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
-using SharpCompress.Archives;
 using SharpCompress.Archives.SevenZip;
-using SharpCompress.Common;
 using SharpCompress.Readers;
 
 namespace AchievementOverlay.GbeConfig;
@@ -40,10 +39,7 @@ public static class GbeBinaryManager
 
         if (!downloadLatest)
         {
-            var located = LocateBinaries(folder, "(local)");
-            if (located == null)
-                throw new FileNotFoundException(
-                    $"No GBE release found in '{folder}'. Enable 'Download the latest GBE release', or point at a folder containing one.");
+            var located = LocateBinaries(folder, "(local)") ?? throw new FileNotFoundException($"No GBE release found in '{folder}'. Enable 'Download the latest GBE release', or point at a folder containing one.");
             log.Report(ConfigLogLevel.Info, $"Using existing GBE release in '{folder}'.");
             return located;
         }
@@ -105,7 +101,7 @@ public static class GbeBinaryManager
 
     private static async Task<(string Tag, string DownloadUrl)> GetLatestReleaseAsync(HttpClient http, CancellationToken ct)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, LatestReleaseApi);
+        using var request = new HttpRequestMessage(HttpMethod.Get, LatestReleaseApi);
         request.Headers.UserAgent.ParseAdd("AchievementOverlay");
         request.Headers.Accept.ParseAdd("application/vnd.github+json");
 
@@ -196,9 +192,7 @@ public static class GbeBinaryManager
                 Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
 
             using var entryStream = reader.OpenEntryStream();
-            using Stream outStream = safe
-                ? new FileStream(outPath, FileMode.Create, FileAccess.Write, FileShare.None)
-                : Stream.Null;
+            using var outStream = safe ? new FileStream(outPath, FileMode.Create, FileAccess.Write, FileShare.None) : Stream.Null;
             int read;
             while ((read = entryStream.Read(buffer, 0, buffer.Length)) > 0)
             {
@@ -218,5 +212,5 @@ public static class GbeBinaryManager
         }
     }
 
-    private static string Mb(long bytes) => (bytes / 1024.0 / 1024.0).ToString("0.0");
+    private static string Mb(long bytes) => (bytes / 1024.0 / 1024.0).ToString("0.0", CultureInfo.CurrentCulture);
 }

@@ -4,7 +4,7 @@ using Xunit;
 
 namespace AchievementOverlay.Tests.GbeConfig;
 
-public class AppIdResolverTests : IDisposable
+public sealed class AppIdResolverTests : IDisposable
 {
     private readonly string _tempDir;
 
@@ -27,10 +27,7 @@ public class AppIdResolverTests : IDisposable
     [InlineData("steamappid=99", "99")]
     [InlineData("steamappid=9", null)] // single digit not matched
     [InlineData("no appid here", null)]
-    public void ParseAppIdFromText_MatchesKnownForms(string text, string? expected)
-    {
-        Assert.Equal(expected, AppIdResolver.ParseAppIdFromText(text));
-    }
+    public void ParseAppIdFromText_MatchesKnownForms(string text, string? expected) => Assert.Equal(expected, AppIdResolver.ParseAppIdFromText(text));
 
     [Fact]
     public void ParseAppIdFromStoreHtml_ExtractsFirstAppId()
@@ -40,10 +37,7 @@ public class AppIdResolverTests : IDisposable
     }
 
     [Fact]
-    public void ParseAppIdFromStoreHtml_NoMatch_ReturnsNull()
-    {
-        Assert.Null(AppIdResolver.ParseAppIdFromStoreHtml("<div>nothing</div>"));
-    }
+    public void ParseAppIdFromStoreHtml_NoMatch_ReturnsNull() => Assert.Null(AppIdResolver.ParseAppIdFromStoreHtml("<div>nothing</div>"));
 
     [Fact]
     public void FromAppIdTxt_ReadsNestedFile()
@@ -56,10 +50,7 @@ public class AppIdResolverTests : IDisposable
     }
 
     [Fact]
-    public void FromAppIdTxt_NoFile_ReturnsNull()
-    {
-        Assert.Null(AppIdResolver.FromAppIdTxt(_tempDir));
-    }
+    public void FromAppIdTxt_NoFile_ReturnsNull() => Assert.Null(AppIdResolver.FromAppIdTxt(_tempDir));
 
     [Fact]
     public void FromIniFiles_FindsAppIdInIni()

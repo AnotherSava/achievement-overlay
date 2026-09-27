@@ -253,7 +253,9 @@ public partial class NotificationWindow : Window
                 AchievementIcon.Source = bitmap;
                 return;
             }
+#pragma warning disable CA1031 // Per-icon boundary: WIC reports a bad image through many exception types; logs at Warn and draws the default icon
             catch (Exception ex)
+#pragma warning restore CA1031
             {
                 Logger.Warn($"Could not load achievement icon '{iconPath}': {ex.Message}");
             }
