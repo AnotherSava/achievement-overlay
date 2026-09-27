@@ -309,7 +309,7 @@ internal static class Program
     /// several and lacking this one.
     /// <para>
     /// An empty language set does not on its own mean plain strings: <see cref="AchievementMetadata
-    /// .CollectLanguages"/> harvests keys off multi-language objects, so it is equally empty for a
+    /// .CollectLanguages"/> harvests language keys off multi-language objects, so it is equally empty for a
     /// source carrying no text whatsoever — a plain GBE unlock file, which is the common case. The
     /// shape is asked for separately, or the header would assert "text in one language" on the same
     /// line as "no inline text".

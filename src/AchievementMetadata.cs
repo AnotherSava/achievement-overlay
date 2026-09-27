@@ -266,6 +266,23 @@ public static class AchievementMetadata
     /// </summary>
     private const string TokenKey = "token";
 
+    /// <summary>
+    /// The value a multi-language object holds under <paramref name="language"/>, blank or not, or null
+    /// when it has no such key. The key is matched ignoring case, because schemas disagree on case for
+    /// the same language (one game ships "LATAM", another "latam") and one value in config has to serve
+    /// every game.
+    /// </summary>
+    private static string? FindLanguage(JsonElement element, string language)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.String && string.Equals(property.Name, language, StringComparison.OrdinalIgnoreCase))
+                return property.Value.GetString();
+        }
+
+        return null;
+    }
+
     private static void AddObjectKeys(HashSet<string> into, JsonElement? element)
     {
         if (element?.ValueKind != JsonValueKind.Object)
@@ -294,34 +311,20 @@ public static class AchievementMetadata
 
         if (element.Value.ValueKind == JsonValueKind.Object)
         {
-            // Try requested language first
-            if (element.Value.TryGetProperty(language, out var langValue)
-                && langValue.ValueKind == JsonValueKind.String)
-                return langValue.GetString() ?? "";
-
-            // Schemas disagree on case for the same language (one game ships "LATAM", another
-            // "latam"), and one value in config has to serve every game, so retry ignoring case
-            // before treating it as unavailable.
-            foreach (var prop in element.Value.EnumerateObject())
-            {
-                if (prop.Value.ValueKind == JsonValueKind.String
-                    && string.Equals(prop.Name, language, StringComparison.OrdinalIgnoreCase))
-                    return prop.Value.GetString() ?? "";
-            }
+            if (FindLanguage(element.Value, language) is { } selected)
+                return selected;
 
             // Fallback to english. Warned once per language: the message says nothing about which
             // achievement it came from, and a schema that lacks the language lacks it for every entry.
             WarnOnce($"Language '{language}' not available, falling back to english");
-            if (language != "english"
-                && element.Value.TryGetProperty("english", out var engValue)
-                && engValue.ValueKind == JsonValueKind.String)
-                return engValue.GetString() ?? "";
+            if (FindLanguage(element.Value, "english") is { } english)
+                return english;
 
             // Fallback to first available value
-            foreach (var prop in element.Value.EnumerateObject())
+            foreach (var property in element.Value.EnumerateObject())
             {
-                if (prop.Value.ValueKind == JsonValueKind.String)
-                    return prop.Value.GetString() ?? "";
+                if (property.Value.ValueKind == JsonValueKind.String)
+                    return property.Value.GetString() ?? "";
             }
         }
 
@@ -373,8 +376,9 @@ public static class AchievementMetadata
 
         if (collision != null)
         {
-            // Refusing costs only the icon — the caller still has the unlock file's own text — where
-            // guessing attaches another achievement's icon with nothing to say which one it picked.
+            // Refusing costs this achievement the schema's icon and text, leaving whatever text the
+            // unlock file carries; guessing would show another achievement's with nothing to say
+            // which one it picked.
             WarnOnce($"Achievement '{achievementName}' matches both {collision} in the schema once leading zeros are ignored; resolving it without the schema");
             return null;
         }
@@ -581,10 +585,9 @@ public static class AchievementMetadata
 
     /// <summary>
     /// Whether this text is written in the selected language: a multi-language object holding a value
-    /// under that key with something in it. A plain string is deliberately false — it is text in some
-    /// language and nothing in the file says which, so it must not outrank a source that names the
-    /// language asked for. Steam's localisation <see cref="TokenKey"/> is excluded here as it is
-    /// everywhere else.
+    /// under that key with something in it, found as <see cref="FindLanguage"/> finds it for display. A
+    /// plain string is deliberately false — it is text in some language and nothing in the file says
+    /// which, so it must not outrank a source that names the language asked for.
     /// <para>
     /// Blank is false, and whitespace counts as blank. An empty value changes no outcome on its own —
     /// <see cref="GetDisplayText"/> returns "" for it and <see cref="FirstNonEmpty"/> falls through to
@@ -593,21 +596,9 @@ public static class AchievementMetadata
     /// </para>
     /// </summary>
     private static bool CarriesLanguage(JsonElement? element, string language)
-    {
-        if (element?.ValueKind != JsonValueKind.Object || string.IsNullOrEmpty(language))
-            return false;
+        => element?.ValueKind == JsonValueKind.Object && !string.IsNullOrWhiteSpace(FindLanguage(element.Value, language));
 
-        foreach (var property in element.Value.EnumerateObject())
-        {
-            if (property.Value.ValueKind == JsonValueKind.String
-                && !property.NameEquals(TokenKey)
-                && string.Equals(property.Name, language, StringComparison.OrdinalIgnoreCase))
-                return !string.IsNullOrWhiteSpace(property.Value.GetString());
-        }
-
-        return false;
-    }
-
+    /// <summary>The first candidate that is not empty, or "" when every one is.</summary>
     private static string FirstNonEmpty(params string[] candidates)
         => Array.Find(candidates, c => !string.IsNullOrEmpty(c)) ?? "";
 }
