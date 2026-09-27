@@ -44,8 +44,6 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     public TrayApplicationContext()
     {
-        Logger.Init();
-
         Logger.Info($"Achievement Overlay: {AppUtilities.VersionLabel}");
 
         try
@@ -573,15 +571,14 @@ public sealed class TrayApplicationContext : ApplicationContext
             _soundPlayer.Dispose();
             _activeIcon?.Dispose();
             _pausedIcon?.Dispose();
-            Logger.Close();
         }
         base.Dispose(disposing);
     }
 
     private static void ShowConfigError(string heading, string detail)
     {
-        var logContent = Logger.ReadAll();
-        Logger.Close();
+        // This run's log is what explains the error; the file holds every run since it last rolled.
+        var log = DiagnosticFile.Read(Logger.LogPath);
         var page = new TaskDialogPage
         {
             Heading = heading,
@@ -590,8 +587,8 @@ public sealed class TrayApplicationContext : ApplicationContext
             Caption = "Achievement Overlay",
             Buttons = { TaskDialogButton.OK }
         };
-        if (!string.IsNullOrEmpty(logContent))
-            page.Expander = new TaskDialogExpander { Text = logContent, CollapsedButtonText = "Details", ExpandedButtonText = "Details", Position = TaskDialogExpanderPosition.AfterFootnote };
+        if (log.Content != null)
+            page.Expander = new TaskDialogExpander { Text = string.Join(Environment.NewLine, DiagnosticReport.TakeRecentSessions(log.Content, 1).Lines), CollapsedButtonText = "Details", ExpandedButtonText = "Details", Position = TaskDialogExpanderPosition.AfterFootnote };
         TaskDialog.ShowDialog(page);
         Environment.Exit(1);
     }

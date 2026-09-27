@@ -169,7 +169,10 @@ public sealed class GbeConfigGenerator
         var iconResult = await IconDownloader.DownloadAllAsync(schema, imageDir, _http, overwrite: _req.Force, ct: ct);
         Info($"Icons: {iconResult.Downloaded} downloaded, {iconResult.Skipped} skipped, {iconResult.Failed} failed.");
         if (iconResult.Failed > 0)
+        {
+            Warn($"{iconResult.Failed} icon(s) failed to download, the first with: {iconResult.FirstError}");
             partial = true;
+        }
 
         // --- Write config files ---
         await File.WriteAllTextAsync(Path.Combine(steamSettingsDir, "achievements.json"),

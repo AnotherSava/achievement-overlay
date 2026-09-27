@@ -128,7 +128,7 @@ public sealed class GameCache
         }
         catch (Exception ex)
         {
-            Logger.Info($"  Error scanning '{basePath}': {ex.Message}");
+            Logger.Warn($"  Error scanning '{basePath}': {ex.Message}");
             return 0;
         }
 
@@ -171,7 +171,7 @@ public sealed class GameCache
             }
             catch (Exception ex)
             {
-                Logger.Info($"  Error processing '{appIdFile}': {ex.Message}");
+                Logger.Warn($"  Error processing '{appIdFile}': {ex.Message}");
             }
         }
 

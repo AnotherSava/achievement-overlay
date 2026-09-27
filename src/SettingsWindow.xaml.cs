@@ -535,10 +535,7 @@ public partial class SettingsWindow : Window
     private void DismissPreviews()
     {
         foreach (var preview in _previews.ToList())
-        {
-            try { preview.DismissImmediately(); }
-            catch { /* already closing */ }
-        }
+            preview.DismissImmediately();
         _previews.Clear();
     }
 

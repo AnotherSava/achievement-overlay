@@ -48,8 +48,9 @@ public static class DialogChrome
             using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
             return key?.GetValue("AppsUseLightTheme") is int light && light == 0;
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.Warn($"Could not read the Windows theme, so the dialog opens in light mode: {ex.Message}");
             return false; // unreadable registry is not a reason to fail to open a dialog
         }
     }

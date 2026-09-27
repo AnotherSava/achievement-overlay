@@ -943,7 +943,9 @@ public sealed class AddGameForm : Form, IConfigProgress
             _ => ""
         };
         _logBox.AppendText(prefix + message + Environment.NewLine);
-        Logger.Info($"[add-game] {level}: {message}");
+        // At the line's own level, so a reader scanning the log for [WARN] and [ERROR] finds the wizard's too.
+        Action<string> log = level switch { ConfigLogLevel.Warning => Logger.Warn, ConfigLogLevel.Error => Logger.Error, _ => Logger.Info };
+        log($"[add-game] {level}: {message}");
 
         // Each step becomes a checklist row: finish the previous one, start spinning the new one.
         if (level == ConfigLogLevel.Step)

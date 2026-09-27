@@ -37,17 +37,24 @@ public static class WindowsDefender
             {
                 using var process = Process.Start(psi);
                 if (process == null)
+                {
+                    Logger.Warn("Adding Defender exclusions failed: powershell did not start");
                     return ExclusionResult.Failed;
+                }
                 process.WaitForExit();
-                return process.ExitCode == 0 ? ExclusionResult.Added : ExclusionResult.Failed;
+                if (process.ExitCode == 0)
+                    return ExclusionResult.Added;
+                Logger.Warn($"Adding Defender exclusions failed: powershell exited with {process.ExitCode}");
+                return ExclusionResult.Failed;
             });
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) // ERROR_CANCELLED — UAC declined
         {
             return ExclusionResult.Cancelled;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Logger.Warn($"Adding Defender exclusions failed: {ex.Message}");
             return ExclusionResult.Failed;
         }
     }

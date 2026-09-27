@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -31,7 +32,9 @@ public sealed class DiagnosticReportInputs
     public IReadOnlyList<string> SettingsDirs { get; init; } = Array.Empty<string>();
 
     public DiagnosticFile Config { get; init; } = DiagnosticFile.Absent;
-    public string Log { get; init; } = "";
+
+    /// <summary>The app's own log, read while its writer still holds it open.</summary>
+    public DiagnosticFile Log { get; init; } = DiagnosticFile.Absent;
 
     /// <summary>
     /// The configured <c>gamesPaths</c> and <c>gseSavesPaths</c>, expanded. The report's config section
@@ -75,7 +78,11 @@ public sealed class DiagnosticFile
 
         try
         {
-            return new DiagnosticFile { Path = path, Status = "ok", Content = File.ReadAllText(path) };
+            // Shared read: the log's own writer holds that file open all session, which File.ReadAllText
+            // does not allow.
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(stream);
+            return new DiagnosticFile { Path = path, Status = "ok", Content = reader.ReadToEnd() };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -187,9 +194,7 @@ public static class DiagnosticReport
                 ["generated"] = inputs.GeneratedAt
             },
             ["config"] = sections.Config ? Describe(inputs.Config, redactConfig: true) : Excluded(),
-            ["log"] = sections.Log
-                ? DescribeLog(BuildLog(inputs.Log, ReportedSessions, inputs.AppId, inputs.ConfiguredRoots, inputs.GameFolders))
-                : Excluded(),
+            ["log"] = sections.Log ? DescribeLogPart(inputs) : Excluded(),
             // Each part is a top-level key so the document matches the parts the review window opens
             // one at a time: nesting the schema under the game identity put the bulk of the file
             // inside the pane meant to show a handful of lines.
@@ -416,6 +421,9 @@ public static class DiagnosticReport
         };
     }
 
+    /// <summary>The log's sessions when it was read, or its status (missing, unreadable) when it was not.</summary>
+    private static JsonNode DescribeLogPart(DiagnosticReportInputs inputs) => inputs.Log.Content == null ? Describe(inputs.Log, redactConfig: false) : DescribeLog(BuildLog(inputs.Log.Content, ReportedSessions, inputs.AppId, inputs.ConfiguredRoots, inputs.GameFolders));
+
     private static JsonNode DescribeLog(LogExcerpt excerpt) => new JsonObject
     {
         ["sessionsIncluded"] = excerpt.SessionsIncluded,
@@ -506,10 +514,9 @@ public static class DiagnosticReport
     // --- Reading (the only part that touches disk) ---
 
     /// <summary>
-    /// Gathers a report for one game: its schema, its unlock file, the app's config and the whole
-    /// log. The log is taken whole rather than filtered to the game — the lines that matter most
-    /// name no game at all (an unavailable language, a refused schema match), and a session's log
-    /// measures a few KB, so filtering would drop evidence to save nothing.
+    /// Gathers a report for one game: its schema, its unlock file, the app's config and the log. The
+    /// log is read whole; <see cref="Compose"/> keeps the recent runs and drops only the lines naming
+    /// another game.
     /// </summary>
     public static DiagnosticReportInputs Collect(
         string appId, GameInfo? game, IReadOnlyCollection<string> gseSavesPaths, IReadOnlyCollection<string> gamesPaths)
@@ -524,14 +531,14 @@ public static class DiagnosticReport
         return new DiagnosticReportInputs
         {
             Version = AppUtilities.InformationalVersion,
-            GeneratedAt = DateTimeOffset.Now.ToString("yyyy-MM-dd'T'HH:mm:ssK"),
+            GeneratedAt = DateTimeOffset.Now.ToString("yyyy-MM-dd'T'HH:mm:ssK", CultureInfo.InvariantCulture),
             AppId = appId,
             GameName = game?.GameName,
             SettingsDirs = game?.SettingsDirs ?? Array.Empty<string>(),
             Schema = DiagnosticFile.Read(game?.MetadataPath),
             Unlock = DiagnosticFile.Read(unlockPath),
             Config = DiagnosticFile.Read(AppConfig.ConfigFilePath),
-            Log = Logger.ReadAll(),
+            Log = DiagnosticFile.Read(Logger.LogPath),
             ConfiguredRoots = gseSavesPaths.Concat(gamesPaths).Select(Path.TrimEndingDirectorySeparator).ToList(),
             GameFolders = gameFolders
         };

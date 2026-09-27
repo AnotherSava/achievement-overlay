@@ -173,7 +173,7 @@ public sealed class NotificationQueue : IDisposable
         }
         catch (Exception ex)
         {
-            Logger.Info($"Error dispatching notification: {ex.Message}");
+            Logger.Error($"Error dispatching notification: {ex.ToString().ReplaceLineEndings(" | ")}");
             ScheduleRetry(_gapTimer ??= CreateTimer(), GapBetweenNotifications);
         }
     }

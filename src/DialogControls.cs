@@ -149,8 +149,9 @@ internal static class NativeFolderIcon
             using var icon = Icon.FromHandle(info.hIcon);
             return icon.ToBitmap();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Logger.Warn($"Could not load the shell folder icon: {ex.Message}");
             return null;
         }
         finally

@@ -253,9 +253,9 @@ public partial class NotificationWindow : Window
                 AchievementIcon.Source = bitmap;
                 return;
             }
-            catch
+            catch (Exception ex)
             {
-                // Fall through to default
+                Logger.Warn($"Could not load achievement icon '{iconPath}': {ex.Message}");
             }
         }
 

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -172,8 +173,9 @@ public sealed class RecentAchievementsDisplay : IDisposable
                 _escHotkey = null;
             }
         }
-        catch
+        catch (Win32Exception ex)
         {
+            Logger.Warn($"Could not create the window for the Esc hotkey: {ex.Message}");
             _escHotkey = null;
         }
     }
@@ -188,10 +190,7 @@ public sealed class RecentAchievementsDisplay : IDisposable
         _escHotkey = null;
 
         foreach (var window in _windows)
-        {
-            try { window.DismissImmediately(); }
-            catch { /* window may already be closed */ }
-        }
+            window.DismissImmediately();
         _windows.Clear();
     }
 
