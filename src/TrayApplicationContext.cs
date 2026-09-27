@@ -31,8 +31,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     private AchievementWatcher _watcher = null!;
     private GlobalHotkey? _hotkey;
 
-    private Icon? _activeIcon;
-    private Icon? _pausedIcon;
+    private readonly Icon _activeIcon = null!;
+    private readonly Icon _pausedIcon = null!;
     private AddGameForm? _addGameForm;
     private SettingsWindow? _settingsWindow;
     private DiagnosticReportWindow? _reportWindow;
@@ -100,8 +100,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         _recentDisplay = new RecentAchievementsDisplay(_achievementHistory, _config, _soundPlayer);
         _startWithWindowsEnabled = GetStartWithWindows();
 
-        _activeIcon = AppUtilities.LoadOrCreateIcon(false);
-        _pausedIcon = AppUtilities.LoadOrCreateIcon(true);
+        _activeIcon = AppUtilities.LoadAppIcon(false);
+        _pausedIcon = AppUtilities.LoadAppIcon(true);
 
         _pauseItem = new ToolStripMenuItem("Pause notifications")
         {
@@ -111,7 +111,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _pauseItem.CheckedChanged += (_, _) =>
         {
             _notificationQueue.IsPaused = _pauseItem.Checked;
-            _trayIcon!.Icon = _pauseItem.Checked ? _pausedIcon! : _activeIcon!;
+            _trayIcon!.Icon = _pauseItem.Checked ? _pausedIcon : _activeIcon;
             Logger.Info($"Notifications paused: {_pauseItem.Checked}");
         };
 
@@ -650,8 +650,8 @@ public sealed class TrayApplicationContext : ApplicationContext
             _watcher.Dispose();
             _notificationQueue.Dispose();
             _soundPlayer.Dispose();
-            _activeIcon?.Dispose();
-            _pausedIcon?.Dispose();
+            _activeIcon.Dispose();
+            _pausedIcon.Dispose();
         }
         base.Dispose(disposing);
     }

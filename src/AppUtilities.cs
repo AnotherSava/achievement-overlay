@@ -1,5 +1,4 @@
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -58,46 +57,22 @@ public static class AppUtilities
 
     // --- Icon management ---
 
-    public static Icon LoadOrCreateIcon(bool grayscale)
+    /// <summary>The app icon's manifest resource name, as the csproj's <c>LogicalName</c> gives it.</summary>
+    internal const string IconResourceName = "AchievementOverlay.icon.ico";
+
+    public static Icon LoadAppIcon(bool grayscale)
     {
-        var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("AchievementOverlay.icon.ico");
-        if (stream != null)
+        // Icon(Stream) reads the whole stream into its own buffer, so the icon outlives the stream.
+        using var stream = EmbeddedAssets.Open(IconResourceName);
+        var icon = new Icon(stream);
+        if (!grayscale) return icon;
+
+        using (icon)
+        using (var bmp = icon.ToBitmap())
+        using (var grayBmp = ToGrayscale(bmp))
         {
-            var icon = new Icon(stream);
-            if (!grayscale) return icon;
-
-            using (icon)
-            using (var bmp = icon.ToBitmap())
-            using (var grayBmp = ToGrayscale(bmp))
-            {
-                return CloneIconFromHandle(grayBmp.GetHicon());
-            }
+            return CloneIconFromHandle(grayBmp.GetHicon());
         }
-
-        return CreateDefaultIcon(grayscale);
-    }
-
-    private static Icon CreateDefaultIcon(bool grayscale)
-    {
-        using var bmp = new Bitmap(16, 16);
-        using var g = Graphics.FromImage(bmp);
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-
-        var fillColor = grayscale ? Color.Gray : Color.FromArgb(0xDA, 0xA5, 0x20);
-        var borderColor = grayscale ? Color.DarkGray : Color.FromArgb(0xFF, 0xD7, 0x00);
-
-        using var fillBrush = new SolidBrush(fillColor);
-        using var borderPen = new Pen(borderColor, 1);
-        g.FillEllipse(fillBrush, 1, 1, 13, 13);
-        g.DrawEllipse(borderPen, 1, 1, 13, 13);
-
-        var starColor = grayscale ? Color.LightGray : Color.FromArgb(0xFF, 0xF8, 0xDC);
-        using var font = new Font("Segoe UI", 7f, System.Drawing.FontStyle.Bold);
-        using var starBrush = new SolidBrush(starColor);
-        var starSize = g.MeasureString("\u2605", font);
-        g.DrawString("\u2605", font, starBrush, (16 - starSize.Width) / 2, (16 - starSize.Height) / 2);
-
-        return CloneIconFromHandle(bmp.GetHicon());
     }
 
     private static Bitmap ToGrayscale(Bitmap source)

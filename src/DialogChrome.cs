@@ -58,16 +58,8 @@ public static class DialogChrome
     /// <summary>WPF wants an ImageSource, so the embedded .ico is decoded rather than reused as a GDI icon.</summary>
     public static void LoadWindowIcon(Window window)
     {
-        try
-        {
-            using var stream = typeof(DialogChrome).Assembly.GetManifestResourceStream("AchievementOverlay.icon.ico");
-            if (stream != null)
-                window.Icon = BitmapFrame.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
-        }
-        catch (Exception ex)
-        {
-            Logger.Warn($"Could not load the window icon: {ex.Message}");
-        }
+        using var stream = EmbeddedAssets.Open(AppUtilities.IconResourceName);
+        window.Icon = BitmapFrame.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
     }
 
     /// <summary>

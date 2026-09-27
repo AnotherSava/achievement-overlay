@@ -112,7 +112,7 @@ public sealed class AddGameForm : Form, IConfigProgress
         _onGameConfigured = onGameConfigured;
 
         Text = "Add game";
-        Icon = AppUtilities.LoadOrCreateIcon(false);
+        Icon = AppUtilities.LoadAppIcon(false);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;

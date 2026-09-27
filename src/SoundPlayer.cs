@@ -15,6 +15,9 @@ public sealed class UnlockSoundPlayer : IDisposable
     /// </summary>
     private const int MaxCachedPlayers = 8;
 
+    /// <summary>The default sound's manifest resource name, as the csproj's <c>LogicalName</c> gives it.</summary>
+    private const string DefaultSoundResourceName = "AchievementOverlay.achievement_sound.wav";
+
     private System.Media.SoundPlayer? _defaultPlayer;
     private readonly Dictionary<string, System.Media.SoundPlayer> _customPlayers = new(StringComparer.OrdinalIgnoreCase);
 
@@ -79,15 +82,9 @@ public sealed class UnlockSoundPlayer : IDisposable
         {
             if (_defaultPlayer == null)
             {
-                var stream = typeof(UnlockSoundPlayer).Assembly
-                    .GetManifestResourceStream("AchievementOverlay.achievement_sound.wav");
-
-                if (stream == null)
-                {
-                    Logger.Warn("Embedded default sound not found");
-                    return;
-                }
-
+                // Load() copies the stream into the player's own buffer, every later Play() reads that buffer, and
+                // SoundPlayer never disposes a stream it is given, so the stream is disposed at the end of this block.
+                using var stream = EmbeddedAssets.Open(DefaultSoundResourceName);
                 _defaultPlayer = new System.Media.SoundPlayer(stream);
                 _defaultPlayer.Load();
             }
