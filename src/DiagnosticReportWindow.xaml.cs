@@ -235,7 +235,7 @@ public sealed partial class DiagnosticReportWindow : Window
         {
             case "missing": return "That file is not there.";
             case "unreadable": return "That file could not be read.";
-            case "unparsable": return "That file is not valid JSON. The report carries the start of it, so what is wrong with it is visible.";
+            case "unparsable": return node["excerpt"] == null ? "That file is not valid JSON. The report carries the parser's error, which names the line, but not the text, which would carry your API keys." : "That file is not valid JSON. The report carries the start of it, so what is wrong with it is visible.";
             case "not configured": return "This game has none.";
         }
 

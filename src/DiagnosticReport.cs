@@ -129,7 +129,7 @@ public static class DiagnosticReport
     /// <summary>What a redacted credential is replaced with — deliberately obvious in a review pane.</summary>
     public const string Redacted = "xxxxxx";
 
-    /// <summary>How much of an unparsable file is quoted, so a malformed config stays diagnosable without pasting a whole game's schema.</summary>
+    /// <summary>How much of an unparsable file is quoted, so a malformed unlock file stays diagnosable without pasting a whole game's schema.</summary>
     private const int ExcerptLength = 2000;
 
     /// <summary>
@@ -498,7 +498,9 @@ public static class DiagnosticReport
     /// <summary>
     /// One file as it appears in the report: its path and status always, its parsed contents when it
     /// parsed, and an excerpt when it did not — a file that fails to parse is the bug in some reports,
-    /// so the report has to carry enough of it to see why.
+    /// so the report has to carry enough of it to see why. The config gets no excerpt: redaction works
+    /// on the parsed file, so its raw text would publish the API keys, and the parser's error still
+    /// names the line, counted from 1 as an editor counts it.
     /// </summary>
     private static JsonNode Describe(DiagnosticFile file, bool redactConfig)
     {
@@ -517,8 +519,9 @@ public static class DiagnosticReport
         catch (JsonException ex)
         {
             node["status"] = "unparsable";
-            node["error"] = ex.Message;
-            node["excerpt"] = file.Content.Length > ExcerptLength ? file.Content[..ExcerptLength] : file.Content;
+            node["error"] = redactConfig ? AppConfig.DescribeLoadError(ex) : ex.Message;
+            if (!redactConfig)
+                node["excerpt"] = file.Content.Length > ExcerptLength ? file.Content[..ExcerptLength] : file.Content;
         }
 
         return node;

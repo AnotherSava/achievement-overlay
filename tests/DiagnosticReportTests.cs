@@ -109,6 +109,20 @@ public class DiagnosticReportTests
     }
 
     [Fact]
+    public void Compose_UnparsableConfig_CarriesNeitherItsApiKeysNorAnExcerpt()
+    {
+        // A hand edit broken while the app runs leaves config.json unparsable, and redaction needs it parsed.
+        var json = DiagnosticReport.Compose(Inputs(config: Present("""{"steamWebApiKey":"0123456789ABCDEF","firecrawlApiKey":"fc-secret","language":""")));
+
+        var config = JsonNode.Parse(json)!["config"]!;
+        Assert.Equal("unparsable", (string?)config["status"]);
+        Assert.Contains("(line 1)", (string?)config["error"], StringComparison.Ordinal);
+        Assert.Null(config["excerpt"]);
+        Assert.DoesNotContain("0123456789ABCDEF", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("fc-secret", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Compose_KeepsSelfDescribingUnlockTextIntact()
     {
         var report = Compose(Inputs(unlock: Present("""{"1":{"earned":1,"displayName":"This is Sparta!","description":"Complete the Battle of 300."}}""")));

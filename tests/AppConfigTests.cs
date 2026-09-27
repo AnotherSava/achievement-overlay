@@ -797,10 +797,10 @@ public class AppConfigTests : IDisposable
     [Fact]
     public void CollapseEnvironmentVariablesInText_CollapsesAJsonEscapedPath()
     {
-        // A report quotes an unparsable file as raw JSON, where every backslash is written twice.
+        // A report quotes an unparsable schema or unlock file as raw JSON, where every backslash is written twice.
         var escaped = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).Replace(@"\", @"\\", StringComparison.Ordinal);
 
-        Assert.Equal(@"{ ""soundPath"": ""%userprofile%\\Music\\a.wav"" }", AppConfig.CollapseEnvironmentVariablesInText(@"{ ""soundPath"": """ + escaped + @"\\Music\\a.wav"" }"));
+        Assert.Equal(@"[{ ""icon"": ""%userprofile%\\Pictures\\a.jpg"" }]", AppConfig.CollapseEnvironmentVariablesInText(@"[{ ""icon"": """ + escaped + @"\\Pictures\\a.jpg"" }]"));
     }
 
     [Fact]
