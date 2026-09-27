@@ -705,6 +705,42 @@ public class DiagnosticReportTests
     }
 
     [Fact]
+    public void KeepLinesForGame_TheWarningAboutAGameInTwoGseSavesPaths_ReachesThatGamesReport()
+    {
+        // The watcher names every folder the game has; each is the game's own, not only the one whose
+        // unlock file the report carries.
+        var tempDir = Path.Combine(Path.GetTempPath(), "TwoSavesPaths_" + Guid.NewGuid().ToString("N"));
+        var first = Path.Combine(tempDir, "GSE Saves");
+        var second = Path.Combine(tempDir, "Goldberg SteamEmu Saves");
+        try
+        {
+            foreach (var root in new[] { first, second })
+                File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(root, "4242")).FullName, "achievements.json"), "{}");
+
+            Logger.Init();
+            try
+            {
+                using var watcher = new AchievementWatcher(new[] { first, second });
+                watcher.Start();
+            }
+            finally
+            {
+                Logger.Close();
+            }
+
+            var warning = File.ReadLines(Logger.LogPath).Single(line => line.Contains("[WARN]", StringComparison.Ordinal) && line.Contains(tempDir, StringComparison.Ordinal));
+            var inputs = DiagnosticReport.Collect("4242", null, new[] { first, second }, Array.Empty<string>());
+
+            Assert.Single(DiagnosticReport.KeepLinesForGame(new[] { warning }, "4242", inputs.ConfiguredRoots, inputs.GameFolders));
+            Assert.Empty(DiagnosticReport.KeepLinesForGame(new[] { warning }, "4243", inputs.ConfiguredRoots, inputs.GameFolders));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
     public void Compose_LeavesAPathOutsideTheProfileAlone() =>
         Assert.Equal(@"C:\Games\Odyssey",
             (string?)Compose(Inputs(config: Present("""{"gamesPaths":"C:\\Games\\Odyssey"}""")))["config"]!["content"]!["gamesPaths"]);

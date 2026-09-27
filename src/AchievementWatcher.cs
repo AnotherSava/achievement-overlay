@@ -141,6 +141,19 @@ public sealed class AchievementWatcher : IDisposable
 
             Logger.Info($"Watching for achievements in '{path}'");
         }
+
+        WarnAboutGamesInSeveralPaths();
+    }
+
+    /// <summary>Warns about every game with an unlock file under more than one watched GSE Saves path, where an unlock recorded in one can be announced again.</summary>
+    private void WarnAboutGamesInSeveralPaths()
+    {
+        var folders = _gseSavesPaths.SelectMany(Directory.GetDirectories).Where(dir => File.Exists(Path.Combine(dir, "achievements.json")));
+        foreach (var game in folders.GroupBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).Where(game => game.Skip(1).Any()))
+        {
+            var quoted = game.Select(folder => $"'{folder}'").ToList();
+            Logger.Warn($"appid {game.Key}: move the folder the game no longer writes to out of the GSE Saves paths, or remove its path from 'gseSavesPaths', then restart the app — it has an unlock file in each of {string.Join(", ", quoted[..^1])} and {quoted[^1]}, so an achievement recorded in one can be announced again when another is written.");
+        }
     }
 
     /// <summary>

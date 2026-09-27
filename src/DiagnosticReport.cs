@@ -539,8 +539,9 @@ public static class DiagnosticReport
     {
         var unlockPath = FindUnlockFile(appId, gseSavesPaths);
         var gameFolders = new List<string>(game?.SettingsDirs ?? Array.Empty<string>());
-        if (unlockPath != null)
-            gameFolders.Add(Path.GetDirectoryName(unlockPath)!);
+        // Every GSE Saves folder named after the game is its own, not only the one whose unlock file the
+        // report carries: the watcher's warning about a game in two of those paths names each of them.
+        gameFolders.AddRange(gseSavesPaths.Select(path => Path.Combine(path, appId)));
         // The app's own folder holds config.json and the log, both of which this report already carries.
         gameFolders.Add(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory));
 

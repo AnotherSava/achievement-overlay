@@ -84,6 +84,8 @@ The engine lives under `src/GbeConfig/`. Modules keep parsing logic in pure stat
 
 After a run, `TrayApplicationContext.RegisterNewGame` ensures the game's folder is covered by `gamesPaths` (using `GamesPathPlanner`) and rescans `GameCache`, so the game is tracked without a restart. The watcher is left alone: it seeds every game in the GSE Saves paths at `Start()`, and a game whose folder appears later has its pre-`Start()` backlog seeded on first sight, whether or not it is configured yet. Re-seeding here could only record unlocks its diff has not reached yet — swallowing any unlock written while the game is being added.
 
+The watcher's record of what has been announced (`_seenAchievements`) is per game, not per folder, so a game with an unlock file under two GSE Saves paths has each folder's earned times judged against the other's and an achievement can be announced again; keying it by folder would instead show two popups per unlock for a junction or sync copy of one folder. So the watcher warns: `WarnAboutGamesInSeveralPaths`, run at the end of `Start()` and therefore also after a GSE Saves change in Settings rebuilds the watcher, logs every such appid with its folders and the remedy.
+
 The original plan for this feature (written for a CLI; the front-end was later changed to the dialog) is at `docs/plans/completed/2026-06-18-gbe-config-generator.md`.
 
 ## Settings window

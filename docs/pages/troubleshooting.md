@@ -54,6 +54,10 @@ The log shows `[WARN] Language '...' not available, falling back to english`. Pi
 
 A game tracked through a non-GBE emulator can have two sources of text, its `steam_settings/` schema and the emulator's own writing in the unlock file. Whichever of them is written in the language you picked is used, field by field, so a localised schema is not held back by an emulator that inlines English. Text stored as a plain string rather than a per-language object counts as being in no particular language, since nothing in the file says which — see [Other emulators](usage/other-emulators#getting-icons-and-the-game-name-back).
 
+## The same achievement appears again
+
+If a game has a folder under two of your `gseSavesPaths` — say `%appdata%\GSE Saves\<app_id>` and `%appdata%\Goldberg SteamEmu Saves\<app_id>`, left behind by an older emulator build — an achievement recorded in one of them can be announced again when the other is written, and the log says so at startup and whenever you change the GSE Saves folders in [Settings](usage/settings): `[WARN] appid <app_id>: move the folder the game no longer writes to out of the GSE Saves paths, or remove its path from 'gseSavesPaths', then restart the app`, followed by the folders it found. Move that folder rather than delete it, since it holds that install's record of what you earned.
+
 ## The hotkey does nothing
 
 If you pick a shortcut another application already owns, the [Settings](usage/settings) window says so when you save; the log also shows `[WARN] Could not register hotkey`. Pick a different combination under **Shortcut**. The tray menu item still works as a fallback.
