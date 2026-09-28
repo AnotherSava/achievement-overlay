@@ -84,7 +84,7 @@ docs/                         this documentation site
 
 **Anything positional or colour-related lives in a pure module.** Three separate code paths draw a popup — the unlock notification, the recent achievements panel, and the settings window's **Show me** preview — and they must agree about where an edge is, which way a stack grows and what colour the text is. `NotificationPlacement` and `PopupPalette` are pure functions those three all call, which is why they can be unit-tested with no window and no dispatcher, and why the three cannot drift apart.
 
-**The settings window writes nothing.** It returns the values that changed, computed by `SettingsDiff`; the tray context persists them in one file write and re-wires whatever binds a changed value at startup. The diff is what tells the host to re-register the hotkey, rescan the game cache, or rebuild the watcher.
+**The settings window writes nothing.** It returns the values that changed, computed by `SettingsDiff`; the tray context persists them in one file write and re-wires whatever binds a changed value at startup. The diff is what tells the host to warn about a shortcut another app already holds, rescan the game cache, or rebuild the watcher.
 
 **Test-only code does not go in `src/`.** Tests exercise the public surface and real behaviour; `InternalsVisibleTo` gives them access to internals rather than production code exposing hooks it does not otherwise need.
 
