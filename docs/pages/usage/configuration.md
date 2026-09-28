@@ -17,8 +17,8 @@ To leave a text setting at its default, write it empty (`""`), not `null`: an em
 
 | Setting | Description | Default |
 |---|---|---|
-| `gamesPaths` | Semicolon-separated list of directories to scan for games with `steam_appid.txt` (in the game root or inside `steam_settings/`). A folder listed twice, or inside another entry, is scanned once. May be left empty if all your games are tracked via [Other emulators](other-emulators), but the key itself must be present. | `C:\Games` |
-| `gseSavesPaths` | Semicolon-separated list of GSE Saves directories. Supports `%appdata%` and other env vars. | `%appdata%\GSE Saves` |
+| `gamesPaths` | Semicolon-separated list of directories to scan for games with `steam_appid.txt` (in the game root or inside `steam_settings/`). A folder listed twice is used once, however each entry spells it (`C:\Games`, `C:/Games`, `C:\Games\`), and the log names the later entry as skipped. A folder inside another entry is scanned as part of it. May be left empty if all your games are tracked via [Other emulators](other-emulators), but the key itself must be present. | `C:\Games` |
+| `gseSavesPaths` | Semicolon-separated list of GSE Saves directories. Supports `%appdata%` and other env vars. A folder listed twice is watched once, however each entry spells it, and the log names the later entry as skipped. | `%appdata%\GSE Saves` |
 | `language` | Preferred language for achievement display text (**Achievement text** in the settings window). Falls back to english. | `english` |
 | `font` | Font family for the popup's name, description and game line. Empty uses the built-in default; an unavailable family falls back to it too. | `Segoe UI` |
 | `scale` | How wide the popup is drawn: `"15%"` is a share of the display's width, `"384px"` an absolute width. Clamped to a readable range either way, and never below the popup's design width. | `15%` |

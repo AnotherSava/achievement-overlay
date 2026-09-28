@@ -241,6 +241,67 @@ public sealed class AppConfigTests : IDisposable
         Assert.Equal(Path.Combine(appdata, "Games"), result[0]);
     }
 
+    [Theory]
+    [InlineData(@"C:\Games;C:\Games")]
+    [InlineData(@"C:\Games;C:\Games\")]
+    [InlineData(@"C:\Games;C:/Games")]
+    [InlineData(@"C:\Games;c:\GAMES")]
+    [InlineData(@"C:\Games;C:\Games\Old\..")]
+    public void ParseGamesPaths_SameFolderInAnotherSpelling_KeepsTheFirst(string value) => Assert.Equal(new[] { @"C:\Games" }, AppConfig.ParseGamesPaths(value));
+
+    [Fact]
+    public void ParseGamesPaths_VariableAndTheFolderItExpandsTo_KeepsTheFirst()
+    {
+        var appdata = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        Assert.Equal(new[] { Path.Combine(appdata, "GSE Saves") }, AppConfig.ParseGamesPaths($@"%appdata%\GSE Saves;{appdata}\GSE Saves\"));
+    }
+
+    // The order the Settings window meets: a picked folder is stored collapsed, after the entries already listed.
+    [Fact]
+    public void ParseGamesPaths_FolderAndThenTheVariableNamingIt_KeepsTheFirst()
+    {
+        var appdata = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        Assert.Equal(new[] { $@"{appdata}\GSE Saves" }, AppConfig.ParseGamesPaths($@"{appdata}\GSE Saves;%appdata%\GSE Saves"));
+    }
+
+    [Theory]
+    [InlineData(@"D:\;D:\Games")]
+    [InlineData(@"D:\Games;D:\")]
+    [InlineData(@"C:\Games;C:\GamesOther")]
+    public void ParseGamesPaths_DifferentFolders_KeepsThemAll(string value) => Assert.Equal(value.Split(';'), AppConfig.ParseGamesPaths(value));
+
+    [Fact]
+    public void PairWithSameFolder_PairsEachLaterSpellingWithTheFirst() =>
+        Assert.Equal(new (string, string?)[] { (@"C:\Games", null), (@"D:\X", null), (@"C:/Games", @"C:\Games"), (@"c:\games\", @"C:\Games") }, AppConfig.PairWithSameFolder(new[] { @"C:\Games", @"D:\X", @"C:/Games", @"c:\games\" }));
+
+    [Fact]
+    public void FindSameFolder_OnlyInsideOrSharingTheName_FindsNone() => Assert.Null(AppConfig.FindSameFolder(new[] { @"C:\Games\X", @"C:\", @"C:\GamesOther" }, @"C:\Games"));
+
+    [Fact]
+    public void FindSameFolder_SeveralSpellings_ReturnsTheFirstAsWritten() => Assert.Equal(@"C:/Games", AppConfig.FindSameFolder(new[] { @"D:\X", @"C:/Games", @"C:\Games" }, @"c:\games\"));
+
+    [Theory]
+    [InlineData("gamesPaths")]
+    [InlineData("gseSavesPaths")]
+    public void PathSetting_SameFolderInAnotherSpelling_IsSkippedWithOneWarningNamingTheSetting(string key)
+    {
+        var respelled = _gseSavesDir.Replace('\\', '/');
+        var data = new Dictionary<string, object> { ["gseSavesPaths"] = _gseSavesDir, ["gamesPaths"] = _gseSavesDir, ["language"] = "english", ["soundEnabled"] = true, ["soundPath"] = "", ["displayDuration"] = 7, ["recentAchievementsShortcut"] = "Ctrl+Shift+H", ["recentAchievementsCount"] = 5 };
+        data[key] = $"{_gseSavesDir};{respelled}";
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(data));
+        var config = new AppConfig(_settingsPath);
+
+        // Every read after the first is served from the parsed list, and none may warn again.
+        AppLog.While(() =>
+        {
+            for (var read = 0; read < 3; read++)
+                Assert.Equal(new[] { _gseSavesDir }, key == "gamesPaths" ? config.GamesPaths : config.GseSavesPaths);
+        });
+
+        var warning = Assert.Single(File.ReadLines(Logger.LogPath), line => line.Contains("[WARN]", StringComparison.Ordinal) && line.Contains(respelled, StringComparison.Ordinal));
+        Assert.Contains($"Remove '{respelled}' from '{key}' — it names the same folder as '{_gseSavesDir}'", warning, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void MissingFile_ThrowsFileNotFoundException()
     {
@@ -735,6 +796,28 @@ public sealed class AppConfigTests : IDisposable
 
         var ex = Assert.Throws<InvalidOperationException>(() => new AppConfig(_settingsPath));
         Assert.Contains("gamesPaths", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("gamesPaths")]
+    [InlineData("gseSavesPaths")]
+    public void PathEntryExpandingToOnlySpaces_ThrowsNamingTheSettingAndTheEntry(string key)
+    {
+        var variable = "ACHIEVEMENT_OVERLAY_TEST_" + Guid.NewGuid().ToString("N");
+        Environment.SetEnvironmentVariable(variable, "   ");
+        try
+        {
+            var data = new Dictionary<string, object> { ["gseSavesPaths"] = _gseSavesDir, ["gamesPaths"] = @"C:\Games", ["language"] = "english", ["soundEnabled"] = true, ["soundPath"] = "", ["displayDuration"] = 7, ["recentAchievementsShortcut"] = "Ctrl+Shift+H", ["recentAchievementsCount"] = 5 };
+            data[key] = $"{data[key]};%{variable}%";
+            File.WriteAllText(_settingsPath, JsonSerializer.Serialize(data));
+
+            var ex = Assert.Throws<InvalidOperationException>(() => new AppConfig(_settingsPath));
+            Assert.Contains($"'{key}' entry '%{variable}%' does not name a folder", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, null);
+        }
     }
 
     [Fact]

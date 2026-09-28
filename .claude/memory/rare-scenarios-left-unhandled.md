@@ -9,7 +9,8 @@ On 2026-09-27 an audit removed the handling for these scenarios, and the owner a
 the standard in [[feedback_realism_before_hardening]]: a scenario that is rare and harmless or cheap
 to handle by hand gets no code. Where it matters, each entry says what happens instead. The Games
 folders entries were never handled: a review of the `FolderPath` change found them the same day, and
-they were left under the same standard.
+they were left under the same standard. The diagnostic-report entry about the same-folder warning was
+added on 2026-09-28 with the change that skips such entries, and the owner accepted it the same way.
 
 The watcher:
 
@@ -67,9 +68,6 @@ Config, logging and startup:
 
 Games folders:
 
-- A `gamesPaths` entry that `Path.GetFullPath` rejects: a hand-typed `\u0000` in `config.json`, or a
-  variable expanding to whitespace only. `GameCache.ScanAll` parses every entry before its per-root
-  boundary, so the exception ends startup.
 - A System-attributed folder inside another `gamesPaths` entry: the minimal set drops the inner entry
   as covered, and the outer walk skips System folders, so its games are not found. Only OS folders
   carry that attribute.
@@ -86,6 +84,10 @@ The diagnostic report:
 - UNC and network-share paths in the log filter, and a second path after an unquoted one in a log
   line: a reporter removes such a line by hand.
 - `file:///` URLs in log lines: nothing in the app logs one.
+- The warning about a path entry naming an earlier entry's folder, when either entry is spelled with a
+  trailing or doubled separator or a `..`: the report's roots are the de-duplicated, trimmed paths,
+  so the line is dropped and counted among the lines about other games. The config section still
+  carries both entries.
 
 A game with folders under two GSE Saves paths gets a log warning at startup, and again after a GSE
 Saves change in Settings, and nothing more.

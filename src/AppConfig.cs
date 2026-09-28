@@ -52,8 +52,8 @@ public sealed class AppConfig
         _settings = Load(settingsPath);
     }
 
-    public IReadOnlyList<string> GamesPaths { get { Reload(); return _gamesPaths ??= ParseGamesPaths(_settings.GamesPaths); } }
-    public IReadOnlyList<string> GseSavesPaths { get { Reload(); return _gseSavesPaths ??= ParseGamesPaths(_settings.GseSavesPaths); } }
+    public IReadOnlyList<string> GamesPaths { get { Reload(); return _gamesPaths ??= ParsePathSetting("gamesPaths", _settings.GamesPaths); } }
+    public IReadOnlyList<string> GseSavesPaths { get { Reload(); return _gseSavesPaths ??= ParsePathSetting("gseSavesPaths", _settings.GseSavesPaths); } }
     public string Language { get { Reload(); return _settings.Language; } }
     public bool SoundEnabled { get { Reload(); return _settings.SoundEnabled; } }
     public string SoundPath { get { Reload(); return _settings.SoundPath; } }
@@ -260,8 +260,26 @@ public sealed class AppConfig
         if (settings.GamesPaths == null) errors.Add("'gamesPaths' is missing");
         if (settings.DisplayDuration <= 0) errors.Add("'displayDuration' is missing or invalid");
         if (settings.RecentAchievementsCount <= 0) errors.Add("'recentAchievementsCount' is missing or invalid");
+        // Every reader of these parses each entry as a folder, so one that cannot be parsed is refused
+        // here by name, rather than thrown from whichever read meets it first.
+        foreach (var (key, value) in new[] { ("gamesPaths", settings.GamesPaths), ("gseSavesPaths", settings.GseSavesPaths) })
+            errors.AddRange(SplitRawPaths(value).Where(entry => !NamesAFolder(entry)).Select(entry => $"'{key}' entry '{entry}' does not name a folder"));
         if (errors.Count > 0)
             throw new InvalidOperationException("Invalid config: " + string.Join("\n", errors));
+    }
+
+    /// <summary>Whether <paramref name="entry"/>, once expanded, is a path <see cref="FolderPath.Parse"/> reads — a variable holding only spaces is not.</summary>
+    private static bool NamesAFolder(string entry)
+    {
+        try
+        {
+            _ = FolderPath.Parse(ExpandEnvironmentVariables(entry));
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 
     public static string ExpandEnvironmentVariables(string path)
@@ -374,14 +392,57 @@ public sealed class AppConfig
             : value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     /// <summary>
-    /// The same list, expanded and ready to use. Splits through <see cref="SplitRawPaths"/> so the
-    /// ';' convention is stated once — the raw and expanded readings can't disagree about it.
+    /// The same list, expanded and ready to use, without the entries <see cref="PairWithSameFolder"/>
+    /// finds naming an earlier entry's folder. Splits through <see cref="SplitRawPaths"/> so the ';'
+    /// convention is stated once — the raw and expanded readings can't disagree about it.
     /// </summary>
     public static string[] ParseGamesPaths(string? gamesPaths) =>
-        SplitRawPaths(gamesPaths)
-            .Select(ExpandEnvironmentVariables)
+        PairWithSameFolder(SplitRawPaths(gamesPaths))
+            .Where(pair => pair.SameFolderAs == null)
+            .Select(pair => ExpandEnvironmentVariables(pair.Entry))
             .Where(p => !string.IsNullOrEmpty(p))
             .ToArray();
+
+    /// <summary>
+    /// Pairs each raw entry of a path setting with the earlier entry naming the same folder, which it
+    /// is skipped for, or with null when it is the first to name its folder. Only the same folder: an
+    /// entry inside another stays, because a games root covers the folders below it while a GSE Saves
+    /// path holds only the appid folders directly inside it.
+    /// </summary>
+    public static IEnumerable<(string Entry, string? SameFolderAs)> PairWithSameFolder(IReadOnlyList<string> entries) =>
+        entries.Select((entry, i) => (entry, FindSameFolder(entries.Take(i), entry)));
+
+    /// <summary>
+    /// The first of <paramref name="entries"/> naming the same folder as <paramref name="entry"/>, all
+    /// raw as config writes them, or null when none does. They are compared as <see cref="FolderPath"/>s
+    /// once expanded, so <c>C:/Games</c>, <c>C:\Games\</c> and <c>c:\games</c> are one folder, and
+    /// <c>%appdata%\GSE Saves</c> is the folder it expands to.
+    /// </summary>
+    public static string? FindSameFolder(IEnumerable<string> entries, string entry)
+    {
+        var folder = FolderPath.Parse(ExpandEnvironmentVariables(entry));
+        return entries.FirstOrDefault(other =>
+        {
+            var candidate = FolderPath.Parse(ExpandEnvironmentVariables(other));
+            return candidate.Contains(folder) && folder.Contains(candidate);
+        });
+    }
+
+    /// <summary>
+    /// <see cref="ParseGamesPaths"/> of the setting stored under <paramref name="key"/>, warning about
+    /// each entry it skips. The getters keep the result until the file is reloaded or saved, so one such
+    /// entry is one warning per version of the file rather than one per read.
+    /// </summary>
+    private static string[] ParsePathSetting(string key, string? value)
+    {
+        foreach (var (entry, sameFolderAs) in PairWithSameFolder(SplitRawPaths(value)))
+        {
+            if (sameFolderAs != null)
+                Logger.Warn($"Remove '{entry}' from '{key}' — it names the same folder as '{sameFolderAs}', so it is skipped.");
+        }
+
+        return ParseGamesPaths(value);
+    }
 
     // --- Registry auto-start ---
 

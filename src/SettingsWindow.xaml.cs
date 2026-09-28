@@ -686,7 +686,7 @@ public partial class SettingsWindow : Window, IWin32Window
 
         // Packed back into variable form so a picked AppData folder stays portable between machines.
         var stored = AppConfig.CollapseEnvironmentVariables(picked);
-        if (folders.Any(f => string.Equals(AppConfig.ExpandEnvironmentVariables(f), picked, StringComparison.OrdinalIgnoreCase)))
+        if (RefuseListedFolder(folders, picked, stored))
             return;
 
         folders.Add(stored);
@@ -700,10 +700,12 @@ public partial class SettingsWindow : Window, IWin32Window
     private void RebuildFolderList(ItemsControl list, List<string> folders, Func<string, (string Text, string BrushKey)> describe)
     {
         list.Items.Clear();
+        var sameFolderAs = AppConfig.PairWithSameFolder(folders).Select(pair => pair.SameFolderAs).ToList();
         for (var i = 0; i < folders.Count; i++)
         {
             var index = i;
-            var (statusText, brushKey) = describe(folders[i]);
+            // A skip is otherwise said only in the log, and this list is where the entry gets removed.
+            var (statusText, brushKey) = sameFolderAs[i] == null ? describe(folders[i]) : ("same folder as an entry above — skipped", "StatusWarn");
 
             var text = new StackPanel();
             text.Children.Add(new TextBlock { Text = folders[i], FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis });
@@ -738,8 +740,29 @@ public partial class SettingsWindow : Window, IWin32Window
         if (picked == null)
             return;
 
-        folders[index] = AppConfig.CollapseEnvironmentVariables(picked);
+        var stored = AppConfig.CollapseEnvironmentVariables(picked);
+        // The card's own entry is left out: picking its folder again only respells it.
+        if (RefuseListedFolder(folders.Where((_, i) => i != index), picked, stored))
+            return;
+
+        folders[index] = stored;
         RebuildFolderList(list, folders, describe);
+    }
+
+    /// <summary>
+    /// Says so and returns true when one of <paramref name="others"/> names the folder just picked, in
+    /// whatever spelling: config skips a second entry for a folder (<see cref="AppConfig.ParseGamesPaths"/>),
+    /// so one would only be a card that does nothing.
+    /// </summary>
+    private bool RefuseListedFolder(IEnumerable<string> others, string picked, string stored)
+    {
+        var listed = AppConfig.FindSameFolder(others, stored);
+        if (listed == null)
+            return false;
+
+        var message = listed == picked ? $"{picked} is already in the list." : $"{picked} is already in the list as '{listed}'.";
+        MessageBox.Show(this, message, "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
+        return true;
     }
 
     private static (string Text, string BrushKey) DescribeGameFolder(string raw)
