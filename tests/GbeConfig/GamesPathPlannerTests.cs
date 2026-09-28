@@ -56,6 +56,21 @@ public class GamesPathPlannerTests
         Assert.Null(result);
     }
 
+    [Theory]
+    [InlineData("C:/Games/")]
+    [InlineData("C:/Games")]
+    [InlineData(@"c:\games\\")]
+    public void PlanRootToAdd_RootInAnotherSpelling_StillCovers(string existing) => Assert.Null(GamesPathPlanner.PlanRootToAdd(new[] { existing }, @"C:\Games\Foo"));
+
+    [Fact]
+    public void PlanRootToAdd_DriveRootCoversAGameOnIt_ReturnsNull()
+    {
+        // A drive root already ends in its separator ('D:\'). A prefix test that appends another one
+        // matches no game on the drive, and each Add game there then writes 'D:\' into config again.
+        var result = GamesPathPlanner.PlanRootToAdd(new[] { @"D:\" }, @"D:\Persona 5 Royal");
+        Assert.Null(result);
+    }
+
     [Fact]
     public void PlanRootToAdd_EmptyExistingPaths_AddsParent()
     {

@@ -174,7 +174,7 @@ public static class GbeBinaryManager
         long done = 0;
         var lastPct = -1;
 
-        var destFull = Path.GetFullPath(destination) + Path.DirectorySeparatorChar;
+        var destFolder = FolderPath.Parse(destination);
         using var reader = archive.ExtractAllEntries();
         var buffer = new byte[81920];
         while (reader.MoveToNextEntry())
@@ -187,7 +187,7 @@ public static class GbeBinaryManager
             // Always drain the entry stream (write to file, or to Null if the path is unsafe) so the
             // sequential reader stays in sync on solid archives.
             var outPath = Path.GetFullPath(Path.Combine(destination, entry.Key.Replace('/', Path.DirectorySeparatorChar)));
-            var safe = outPath.StartsWith(destFull, StringComparison.OrdinalIgnoreCase);
+            var safe = destFolder.Contains(FolderPath.Parse(outPath));
             if (safe)
                 Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
 

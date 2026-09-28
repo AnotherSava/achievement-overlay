@@ -84,6 +84,8 @@ The engine lives under `src/GbeConfig/`. Modules keep parsing logic in pure stat
 
 After a run, `TrayApplicationContext.RegisterNewGame` ensures the game's folder is covered by `gamesPaths` (using `GamesPathPlanner`) and rescans `GameCache`, so the game is tracked without a restart. The watcher is left alone: it seeds every game in the GSE Saves paths at `Start()`, and a game whose folder appears later has its pre-`Start()` backlog seeded on first sight, whether or not it is configured yet. Re-seeding here could only record unlocks its diff has not reached yet — swallowing any unlock written while the game is being added.
 
+Covered means the same folder or one inside it. Every same-or-inside check in the app goes through `FolderPath`, which compares a folder as its root (`D:\`) plus the folder names below it, case-insensitively: a drive root is a root with no names, and `C:\GamesOther` differs from `C:\Games` by a whole name, so neither needs a special case. The exception is `DiagnosticReport`, which finds paths inside log text and so matches them as text. The scan in `GameCache.ScanAll` walks `FolderPath.Minimal` of `gamesPaths`, so a folder listed twice or inside another entry is walked once (an Info line names the entry that covers it). Each game is named after its first folder below the *deepest* configured root containing it: with `D:\;D:\Games`, a game at `D:\Games\X` is "X", not "Games"; a game sitting at a root takes that folder's own name (`D:\` for a drive root); and a root that is the game's own `steam_settings` folder names it by its own folder, which no configured root contains. The minimal set is never written back; `config.json` keeps the entries as written.
+
 The watcher's record of what has been announced (`_seenAchievements`) is per game, not per folder, so a game with an unlock file under two GSE Saves paths has each folder's earned times judged against the other's and an achievement can be announced again; keying it by folder would instead show two popups per unlock for a junction or sync copy of one folder. So the watcher warns: `WarnAboutGamesInSeveralPaths`, run at the end of `Start()` and therefore also after a GSE Saves change in Settings rebuilds the watcher, logs every such appid with its folders and the remedy.
 
 The original plan for this feature (written for a CLI; the front-end was later changed to the dialog) is at `docs/plans/completed/2026-06-18-gbe-config-generator.md`.
@@ -185,8 +187,9 @@ Page-specific notes:
   `AppConfig.CollapseEnvironmentVariables`, the inverse of `ExpandEnvironmentVariables`. Without that,
   editing the default `%appdata%\GSE Saves` would pin it to one machine's user profile, which matters
   because this config is used from more than one. Collapsing takes the *deepest* matching folder
-  (`%localappdata%` over `%userprofile%`) and only on a separator boundary, so `C:\Users\Bobby` never
-  collapses against `C:\Users\Bob`. Existing entries are left exactly as written.
+  (`%localappdata%` over `%userprofile%`), and `FolderPath` decides containment on whole folder
+  names, so `C:\Users\Bobby` never collapses against `C:\Users\Bob`. Existing entries are left
+  exactly as written.
 - **Popup position** carries GBE's own six spellings, so the value matches what a
   `configs.overlay.ini` says. Six rather than four because the one argument for cutting the centre
   pair — that centring exposes the work-area-versus-game-window mismatch — turns out to apply to the

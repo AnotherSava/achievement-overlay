@@ -30,6 +30,9 @@ public sealed class GameInfo
 /// </summary>
 public sealed class GameCache
 {
+    // Compares a scan's grouping key: the appid exactly, and the folder without case, as Windows compares folders.
+    private static readonly IEqualityComparer<(string AppId, string GameFolder)> SameGame = EqualityComparer<(string AppId, string GameFolder)>.Create((x, y) => x.AppId == y.AppId && string.Equals(x.GameFolder, y.GameFolder, StringComparison.OrdinalIgnoreCase), key => HashCode.Combine(key.AppId, StringComparer.OrdinalIgnoreCase.GetHashCode(key.GameFolder)));
+
     private readonly ConcurrentDictionary<string, GameInfo> _cache = new();
 
     // Appids a LookupScanningOnce miss has already spent a rescan on. Concurrent because unlocks are
@@ -55,25 +58,43 @@ public sealed class GameCache
     private IReadOnlyList<string> GetGamesPaths() => _config?.GamesPaths ?? _staticGamesPaths ?? Array.Empty<string>();
 
     /// <summary>
-    /// Performs initial scan of all configured game paths.
+    /// Scans every configured game path. Each folder is walked once: an entry inside another, or
+    /// naming the same folder again, is scanned as part of that one — config is left as written.
     /// </summary>
     public void ScanAll()
     {
         Logger.Info("Starting game cache scan...");
         var count = 0;
 
-        foreach (var basePath in GetGamesPaths())
+        var configured = GetGamesPaths().Select(path => (Path: path, Folder: FolderPath.Parse(path))).ToList();
+        var roots = configured.Select(entry => entry.Folder).ToList();
+        var survivors = FolderPath.Minimal(roots);
+        var scanned = configured.Where(entry => survivors.Any(survivor => ReferenceEquals(survivor, entry.Folder))).ToList();
+
+        // Said in the log, so a report shows why a configured folder has no scan of its own.
+        foreach (var (path, folder) in configured)
+        {
+            var covering = scanned.First(entry => entry.Folder.Contains(folder));
+            if (!ReferenceEquals(covering.Folder, folder))
+                Logger.Info($"  Game path '{AsReported(path)}' is covered by '{AsReported(covering.Path)}', so it is not scanned separately");
+        }
+
+        foreach (var (basePath, _) in scanned)
         {
             if (!Directory.Exists(basePath))
             {
-                Logger.Warn($"  Game path does not exist, skipping: '{basePath}'");
+                Logger.Warn($"  Game path does not exist, skipping: '{AsReported(basePath)}'");
                 continue;
             }
 
-            count += ScanDirectory(basePath);
+            count += ScanDirectory(basePath, roots);
         }
 
         Logger.Info($"Game cache scan complete. Found {count} game(s) with achievement metadata:");
+
+        // A configured path as a diagnostic report spells its configured roots: without a trailing
+        // separator. The report reads 'D:\Games\' as a folder inside the root 'D:\Games' and drops the line.
+        static string AsReported(string path) => Path.TrimEndingDirectorySeparator(path);
     }
 
     public IEnumerable<string> GetAllAppIds() => _cache.Keys;
@@ -119,7 +140,11 @@ public sealed class GameCache
     /// </summary>
     public IReadOnlyCollection<GameInfo> GetAll() => _cache.Values.ToList().AsReadOnly();
 
-    private int ScanDirectory(string basePath)
+    /// <summary>
+    /// Scans one root. <paramref name="roots"/> is every configured root, the ones scanned as part of
+    /// this one included, because a game is named after its folder below the deepest of them.
+    /// </summary>
+    private int ScanDirectory(string basePath, IReadOnlyList<FolderPath> roots)
     {
         IEnumerable<string> appIdFiles;
         try
@@ -134,9 +159,11 @@ public sealed class GameCache
             return 0;
         }
 
-        // Keyed by appid *and* game folder, not appid alone: two installs claiming one appid are two
-        // games, and folding their folders together would answer an unlock with a mixture of both.
-        var byGame = new Dictionary<(string AppId, string GameName), List<string>>();
+        // Keyed by appid *and* first-level game folder, not appid alone: two installs claiming one appid
+        // are two games, and folding their folders together would answer an unlock with a mixture of
+        // both. By the folder rather than the name it gives the game, because each install is named
+        // below its own deepest root, so installs under two nested roots can share a name.
+        var byGame = new Dictionary<(string AppId, string GameFolder), (string GameName, List<string> Dirs)>(SameGame);
 
         foreach (var appIdFile in appIdFiles)
         {
@@ -164,12 +191,12 @@ public sealed class GameCache
                     continue;
                 }
 
-                var key = (appId, ExtractGameName(basePath, gameDir));
-                if (!byGame.TryGetValue(key, out var dirs))
-                    byGame[key] = dirs = new List<string>();
+                var (gameFolder, gameName) = NameGame(FolderPath.Parse(gameDir), roots);
+                if (!byGame.TryGetValue((appId, gameFolder), out var game))
+                    byGame[(appId, gameFolder)] = game = (gameName, new List<string>());
                 // A steam_appid.txt at the game root and one inside steam_settings/ name the same folder.
-                if (!dirs.Contains(settingsDir, StringComparer.OrdinalIgnoreCase))
-                    dirs.Add(settingsDir);
+                if (!game.Dirs.Contains(settingsDir, StringComparer.OrdinalIgnoreCase))
+                    game.Dirs.Add(settingsDir);
             }
 #pragma warning disable CA1031 // Per-game boundary: logs the failure at Warn and scans the other games
             catch (Exception ex)
@@ -179,7 +206,7 @@ public sealed class GameCache
             }
         }
 
-        foreach (var ((appId, gameName), dirs) in byGame)
+        foreach (var ((appId, _), (gameName, dirs)) in byGame)
         {
             // Deepest first: the emulator loads from beside its DLL, which is the nested copy in every
             // layout seen so far (bin/coldclient, www/greenworks/lib, Binaries/Win64). Ordering by
@@ -228,15 +255,18 @@ public sealed class GameCache
     }
 
     /// <summary>
-    /// Extracts the first-level subfolder name of <paramref name="gameDir"/> relative to <paramref name="basePath"/>.
-    /// E.g. basePath=C:\Games, gameDir=C:\Games\Aphelion\...\Win64 → "Aphelion".
+    /// A game's first-level folder, which it is grouped by, and its name, which is that folder's: the
+    /// first folder below the deepest configured root holding it. So with both <c>D:\</c> and
+    /// <c>D:\Games</c> configured, <c>D:\Games\Aphelion\...\Win64</c> is <c>D:\Games\Aphelion</c>,
+    /// "Aphelion", rather than <c>D:\Games</c>, "Games". A game sitting at a root is that folder, and so
+    /// is a game no root holds: one found under a root that is its own <c>steam_settings</c> folder,
+    /// which leaves the game the folder above it.
     /// </summary>
-    private static string ExtractGameName(string basePath, string gameDir)
+    private static (string Folder, string Name) NameGame(FolderPath game, IReadOnlyList<FolderPath> roots)
     {
-        var baseFull = Path.TrimEndingDirectorySeparator(Path.GetFullPath(basePath));
-        var gameFull = Path.GetFullPath(gameDir);
-        var relative = Path.GetRelativePath(baseFull, gameFull);
-        return relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
+        var anchor = roots.Where(root => root.Contains(game)).MaxBy(root => root.Names.Count) ?? game;
+        var name = game.FirstNameBelow(anchor);
+        return (anchor.Names.Count < game.Names.Count ? Path.Join(anchor.ToString(), name) : game.ToString(), name);
     }
 
     private static string ReadAppId(string appIdFilePath)

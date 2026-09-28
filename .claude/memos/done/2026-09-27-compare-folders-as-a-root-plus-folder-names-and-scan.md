@@ -1,0 +1,18 @@
+---
+created: 2026-09-27 15:54:39
+---
+
+# Compare folders as a root plus folder names, and scan gamesPaths as a minimal set
+
+The bug. GamesPathPlanner.Covers (src/GbeConfig/GamesPathPlanner.cs) builds its prefix as `root + Path.DirectorySeparatorChar`. A drive root's canonical form keeps its separator (`D:\`; `D:` alone means the current directory on D), so an existing root of `D:\` becomes the prefix `D:\`, which no game path starts with. Measured 2026-09-27 with `dotnet fsi`: existing root `D:\`, game `D:\Persona 5 Royal` → covers=false, and the planned root is the game's parent, `D:\` again. Each Add game for a game directly under a drive root appends another `D:\` (TrayApplicationContext.RegisterNewGame). AppConfig.ParseGamesPaths keeps every copy and GameCache.ScanAll walks each, so the drive is scanned once per copy and the logged "Found N game(s)" counts each game once per copy. Overlapping entries do the same without the bug: `D:\;D:\Games` walks `D:\Games` twice today.
+
+The class. "Is this path the folder or inside it" is written four ways: GamesPathPlanner.Covers (wrong at a drive root, live), AppConfig.StartsWithFolder (wrong at a drive root, but only ever handed expanded environment variables), AchievementMetadata.TryResolve's icon path-traversal guard and GbeBinaryManager.Extract7z's zip-slip guard (both `GetFullPath(base) + separator`, wrong if a base ever ends in one). GameCache.ExtractGameName uses Path.GetRelativePath and names a game at its root itself ".". DiagnosticReport.IsDisclosedPath is deliberately different (a configured root matches only as itself, in free log text) and stays out.
+
+The design, agreed 2026-09-27:
+- A folder is compared as its root (Path.GetPathRoot of the full path: `D:\`) plus the list of folder names below it. "Inside" is same root and a name-wise prefix, case-insensitive. A drive root is an empty list, so there is no separator to append, and `C:\GamesOther` cannot match `C:\Games` because names compare whole.
+- Parsed where paths are used, never stored: config.json keeps its raw strings (`%appdata%\GSE Saves` stays hand-editable and portable, per CLAUDE.md's Folder cards note), AppConfig remains the one place that expands variables, and one parser takes the expanded path through GetFullPath and splits it.
+- All four checks go through it; Covers and StartsWithFolder are deleted.
+- GameCache scans gamesPaths as a minimal set: an entry equal to or inside another is dropped, so each folder is walked once. Each game is still named after its first folder below the deepest configured root that contains it, which keeps `D:\;D:\Games` naming games under `D:\Games` by their own folders rather than "Games". Grouping is keyed by that first-level folder (the deepest root plus the name), not by the name alone, so same-named installs under nested roots stay separate. A root that is the game's own `steam_settings` folder is contained by no root and names the game by its own folder. The config itself is not rewritten.
+- gseSavesPaths are not merged: they are seeded one level deep and watched recursively, so a nested pair there is not simply redundant.
+
+Tests: parsing (forward slashes, trailing separator, case, `..`), containment (drive root, a root containing itself, a shared-prefix sibling, other drive), the minimal set (duplicates, nesting in either order, order kept), the planner case of an existing `D:\` covering `D:\X` (the existing drive-root test covers only a game that *is* a drive root), and GameCache over nested roots caching each game once under its own folder name. A config that already holds duplicate entries is left as it is.

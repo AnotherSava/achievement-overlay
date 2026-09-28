@@ -542,16 +542,11 @@ public class DiagnosticReportTests
             // Unique per call, so the line is found among whatever earlier runs left in the log.
             var achievement = "ACH_" + Guid.NewGuid().ToString("N");
 
-            Logger.Init();
-            try
+            AppLog.While(() =>
             {
                 using var queue = new NotificationQueue(new GameCache(new[] { gamesDir }), new AppConfig(configPath));
                 queue.Enqueue(new NewAchievementEventArgs { AppId = appId, AchievementName = achievement, EarnedTime = 1 });
-            }
-            finally
-            {
-                Logger.Close();
-            }
+            });
 
             return File.ReadLines(Logger.LogPath).Single(line => line.Contains(achievement, StringComparison.Ordinal));
         }
@@ -715,16 +710,11 @@ public class DiagnosticReportTests
             foreach (var root in new[] { first, second })
                 File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(root, "4242")).FullName, "achievements.json"), "{}");
 
-            Logger.Init();
-            try
+            AppLog.While(() =>
             {
                 using var watcher = new AchievementWatcher(new[] { first, second });
                 watcher.Start();
-            }
-            finally
-            {
-                Logger.Close();
-            }
+            });
 
             var warning = File.ReadLines(Logger.LogPath).Single(line => line.Contains("[WARN]", StringComparison.Ordinal) && line.Contains(tempDir, StringComparison.Ordinal));
             var inputs = DiagnosticReport.Collect("4242", null, new[] { first, second }, Array.Empty<string>());

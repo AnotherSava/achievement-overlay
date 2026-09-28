@@ -13,33 +13,15 @@ public static class GamesPathPlanner
     /// Returns the directory to add to <c>gamesPaths</c> so <paramref name="gameDir"/> is
     /// scanned, or null if an existing root already covers it. The added root is the
     /// game's parent folder (so the game's own folder name becomes the cache's GameName);
-    /// if the game sits at a drive root, the game folder itself is returned.
+    /// a game folder that is itself a drive root has no parent, so it is returned as it is.
     /// </summary>
     public static string? PlanRootToAdd(IEnumerable<string> existingPaths, string gameDir)
     {
-        var game = Normalize(gameDir);
+        var game = FolderPath.Parse(gameDir);
 
-        foreach (var existing in existingPaths)
-        {
-            if (string.IsNullOrWhiteSpace(existing))
-                continue;
-            if (Covers(Normalize(existing), game))
-                return null;
-        }
+        if (existingPaths.Where(existing => !string.IsNullOrWhiteSpace(existing)).Any(existing => FolderPath.Parse(existing).Contains(game)))
+            return null;
 
-        var parent = Directory.GetParent(game)?.FullName;
-        return parent != null ? Normalize(parent) : game;
+        return Directory.GetParent(game.ToString())?.FullName ?? game.ToString();
     }
-
-    /// <summary>True when <paramref name="root"/> equals or is an ancestor of <paramref name="path"/>.</summary>
-    private static bool Covers(string root, string path)
-    {
-        if (string.Equals(root, path, StringComparison.OrdinalIgnoreCase))
-            return true;
-        var rootWithSep = root + Path.DirectorySeparatorChar;
-        return path.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string Normalize(string path) =>
-        Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
 }

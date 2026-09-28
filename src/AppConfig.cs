@@ -272,8 +272,9 @@ public sealed class AppConfig
     }
 
     /// <summary>
-    /// Folder variables an absolute path is packed back into, tried by expansion length so a nested
-    /// one (%localappdata%) wins over the parent it sits under (%userprofile%).
+    /// Folder variables an absolute path is packed back into. The deepest one holding it wins — by
+    /// folder names for a path, by expansion length in text — so a nested one (%localappdata%) wins
+    /// over the parent it sits under (%userprofile%).
     /// </summary>
     private static readonly string[] CollapsibleVariables =
     {
@@ -287,30 +288,37 @@ public sealed class AppConfig
     /// would replace the portable default '%appdata%\GSE Saves' with one machine's user profile —
     /// and a config that travels between machines would stop resolving on the other one.
     /// </summary>
+    /// <remarks>
+    /// The part below the variable is written in <see cref="FolderPath"/>'s one spelling — backslashes,
+    /// no trailing separator — so <c>C:/Users/Sam/AppData/Roaming/GSE Saves/</c> collapses to the same
+    /// <c>%appdata%\GSE Saves</c> as the picker's own spelling does.
+    /// </remarks>
     public static string CollapseEnvironmentVariables(string path)
     {
-        if (string.IsNullOrEmpty(path))
+        // A relative path names a folder only against the working directory it is read from.
+        if (!Path.IsPathFullyQualified(path))
             return path;
 
+        var folder = FolderPath.Parse(path);
         string? bestVariable = null;
-        var bestLength = 0;
+        FolderPath? best = null;
 
         foreach (var variable in CollapsibleVariables)
         {
-            // An undefined variable expands to itself, which is never a path prefix worth using.
+            // An undefined variable expands to itself, which is not a folder at all.
             var expanded = ExpandEnvironmentVariables(variable);
-            if (expanded == variable || string.IsNullOrEmpty(expanded))
+            if (!Path.IsPathFullyQualified(expanded))
                 continue;
 
-            expanded = Path.TrimEndingDirectorySeparator(expanded);
-            if (expanded.Length > bestLength && StartsWithFolder(path, expanded))
+            var candidate = FolderPath.Parse(expanded);
+            if (candidate.Contains(folder) && (best == null || candidate.Names.Count > best.Names.Count))
             {
                 bestVariable = variable;
-                bestLength = expanded.Length;
+                best = candidate;
             }
         }
 
-        return bestVariable == null ? path : bestVariable + path[bestLength..];
+        return best == null ? path : Path.Join(bestVariable, string.Join(Path.DirectorySeparatorChar, folder.Names.Skip(best.Names.Count)));
     }
 
     /// <summary>
@@ -353,18 +361,6 @@ public sealed class AppConfig
     {
         var pattern = string.Join(@"[\\/]+", folder.Split('\\', '/').Select(Regex.Escape)) + @"(?![\w-])";
         return Regex.Replace(text, pattern, replacement, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    }
-
-    /// <summary>
-    /// True when <paramref name="path"/> is <paramref name="folder"/> or sits inside it. The
-    /// separator check is what stops 'C:\Users\Bobby' from matching the folder 'C:\Users\Bob'.
-    /// </summary>
-    private static bool StartsWithFolder(string path, string folder)
-    {
-        if (!path.StartsWith(folder, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        return path.Length == folder.Length || path[folder.Length] is '\\' or '/';
     }
 
     /// <summary>

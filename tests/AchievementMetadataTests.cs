@@ -511,6 +511,33 @@ public sealed class AchievementMetadataTests : IDisposable
     }
 
     [Fact]
+    public void ResolveIconPath_PathClimbingOutOfTheSettingsFolder_IsRefused()
+    {
+        // A schema is third-party input, so an icon path leading out of steam_settings/ is never read.
+        var settingsDir = Path.Combine(_tempDir, "steam_settings");
+        Directory.CreateDirectory(settingsDir);
+        File.WriteAllText(Path.Combine(_tempDir, "outside.jpg"), "not an icon");
+
+        var def = new AchievementDefinition { Name = "ACH01", Icon = "../outside.jpg" };
+
+        Assert.Null(AchievementMetadata.ResolveIconPath(def, settingsDir));
+    }
+
+    [Fact]
+    public void ResolveIconPath_ExtensionAppendedToTheFolderItself_IsRefused()
+    {
+        // An icon naming the folder itself is inside it, but with an extension appended it names the
+        // file beside the folder: steam_settings.jpg.
+        var settingsDir = Path.Combine(_tempDir, "steam_settings");
+        Directory.CreateDirectory(settingsDir);
+        File.WriteAllText(settingsDir + ".jpg", "not an icon");
+
+        var def = new AchievementDefinition { Name = "ACH01", Icon = "." };
+
+        Assert.Null(AchievementMetadata.ResolveIconPath(def, settingsDir));
+    }
+
+    [Fact]
     public void ResolveIconPath_NullIcon_ReturnsNull()
     {
         var def = new AchievementDefinition { Name = "ACH01", Icon = null };

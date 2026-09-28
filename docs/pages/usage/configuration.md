@@ -17,7 +17,7 @@ To leave a text setting at its default, write it empty (`""`), not `null`: an em
 
 | Setting | Description | Default |
 |---|---|---|
-| `gamesPaths` | Semicolon-separated list of directories to scan for games with `steam_appid.txt` (in the game root or inside `steam_settings/`). May be left empty if all your games are tracked via [Other emulators](other-emulators), but the key itself must be present. | `C:\Games` |
+| `gamesPaths` | Semicolon-separated list of directories to scan for games with `steam_appid.txt` (in the game root or inside `steam_settings/`). A folder listed twice, or inside another entry, is scanned once. May be left empty if all your games are tracked via [Other emulators](other-emulators), but the key itself must be present. | `C:\Games` |
 | `gseSavesPaths` | Semicolon-separated list of GSE Saves directories. Supports `%appdata%` and other env vars. | `%appdata%\GSE Saves` |
 | `language` | Preferred language for achievement display text (**Achievement text** in the settings window). Falls back to english. | `english` |
 | `font` | Font family for the popup's name, description and game line. Empty uses the built-in default; an unavailable family falls back to it too. | `Segoe UI` |

@@ -3,6 +3,7 @@ using Xunit;
 
 namespace AchievementOverlay.Tests;
 
+[Collection("App log")]
 public sealed class GameCacheTests : IDisposable
 {
     private readonly string _tempDir;
@@ -18,6 +19,12 @@ public sealed class GameCacheTests : IDisposable
         if (Directory.Exists(_tempDir))
             Directory.Delete(_tempDir, true);
     }
+
+    /// <summary>
+    /// The app log's lines that name this test's folder. It is named by a fresh GUID, so lines left by
+    /// earlier runs never match.
+    /// </summary>
+    private List<string> LogLines() => File.ReadLines(Logger.LogPath).Where(line => line.Contains(_tempDir, StringComparison.Ordinal)).ToList();
 
     /// <summary>
     /// Creates a fake game directory structure with steam_appid.txt and optionally
@@ -334,6 +341,83 @@ public sealed class GameCacheTests : IDisposable
         Assert.Equal("Aphelion", info!.GameName);
     }
 
+    // --- Overlapping game paths ---
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ScanAll_NestedRoots_NameTheGameAfterItsOwnFolder(bool innerFirst)
+    {
+        // The deepest configured root names the game, whichever order the two are listed in; the outer
+        // one, which is the one walked, would name it "games".
+        CreateSettingsDir("1966410", "Aphelion", "Engine", "Win64");
+        var outer = _tempDir;
+        var inner = Path.Combine(_tempDir, "games");
+
+        var cache = new GameCache(innerFirst ? new[] { inner, outer } : new[] { outer, inner });
+        cache.ScanAll();
+
+        Assert.Equal("Aphelion", cache.LookupCached("1966410")?.GameName);
+    }
+
+    [Fact]
+    public void ScanAll_OverlappingRoots_WalkEachFolderOnce()
+    {
+        var settings = CreateSettingsDir("1966410", "Aphelion");
+        var games = Path.Combine(_tempDir, "games");
+        var cache = new GameCache(new[] { games, _tempDir, games + @"\", games.ToUpperInvariant() });
+
+        AppLog.While(cache.ScanAll);
+
+        var lines = LogLines();
+        Assert.Single(lines, line => line.Contains("Cached: appid=1966410", StringComparison.Ordinal));
+        // One line per entry left unwalked, naming the entry that covers it, so a report shows why.
+        var covered = lines.Where(line => line.Contains("is covered by", StringComparison.Ordinal)).ToList();
+        Assert.Equal(3, covered.Count);
+        Assert.All(covered, line => Assert.Contains($"covered by '{_tempDir}'", line, StringComparison.Ordinal));
+        Assert.Equal(Path.Combine(settings, "achievements.json"), cache.LookupCached("1966410")?.MetadataPath);
+    }
+
+    [Fact]
+    public void ScanAll_GameAtAConfiguredRoot_IsNamedAfterThatFolder()
+    {
+        // The root itself leaves no folder below it to take a name from.
+        CreateSettingsDir("1966410", "Aphelion");
+        var game = Path.Combine(_tempDir, "games", "Aphelion");
+
+        var cache = new GameCache(new[] { game });
+        cache.ScanAll();
+
+        Assert.Equal("Aphelion", cache.LookupCached("1966410")?.GameName);
+    }
+
+    [Fact]
+    public void ScanAll_RootThatIsTheGamesOwnSettingsFolder_IsNamedAfterTheGameFolder()
+    {
+        // The game is the folder above that root, so no configured root holds it.
+        var settings = CreateSettingsDir("1966410", "Aphelion");
+
+        var cache = new GameCache(new[] { settings });
+        cache.ScanAll();
+
+        var info = cache.LookupCached("1966410");
+        Assert.Equal("Aphelion", info?.GameName);
+        Assert.Equal(new[] { settings }, info?.SettingsDirs);
+    }
+
+    [Fact]
+    public void ScanAll_CoveredEntryWithATrailingSeparator_IsKeptInAReport()
+    {
+        // A report reads 'D:\Games\' as a folder inside its configured root 'D:\Games' and would drop the line.
+        var gamesPaths = new[] { _tempDir, Path.Combine(_tempDir, "games") + @"\" };
+
+        AppLog.While(new GameCache(gamesPaths).ScanAll);
+
+        var covered = LogLines().Single(line => line.Contains("is covered by", StringComparison.Ordinal));
+        var inputs = DiagnosticReport.Collect("1966410", null, Array.Empty<string>(), gamesPaths);
+        Assert.Single(DiagnosticReport.KeepLinesForGame(new[] { covered }, "1966410", inputs.ConfiguredRoots, inputs.GameFolders));
+    }
+
     // --- Edge case: whitespace/newline in steam_appid.txt ---
 
     [Fact]
@@ -398,6 +482,22 @@ public sealed class GameCacheTests : IDisposable
         cache.ScanAll();
 
         Assert.Single(cache.LookupCached("480")!.SettingsDirs);
+    }
+
+    [Fact]
+    public void ScanAll_InstallsNamedAlikeUnderNestedRoots_DoNotPoolTheirFolders()
+    {
+        // Each install is named "X" below its own deepest root, so only the folder tells them apart.
+        CreateSettingsDir("444", "X");
+        CreateSettingsDir("444", "Games", "X");
+        var root = Path.Combine(_tempDir, "games");
+
+        var cache = new GameCache(new[] { root, Path.Combine(root, "Games") });
+        cache.ScanAll();
+
+        var info = cache.LookupCached("444")!;
+        Assert.Equal("X", info.GameName);
+        Assert.Single(info.SettingsDirs);
     }
 
     [Fact]

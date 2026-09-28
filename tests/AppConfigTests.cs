@@ -126,6 +126,18 @@ public sealed class AppConfigTests : IDisposable
     }
 
     [Fact]
+    public void CollapseEnvironmentVariables_ForwardSlashesAndTrailingSeparator_CollapseToOneSpelling()
+    {
+        // Windows reads either separator, so a hand-typed spelling names the same folder the picker's does.
+        var spelled = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData).Replace('\\', '/') + "/GSE Saves/";
+
+        Assert.Equal(@"%appdata%\GSE Saves", AppConfig.CollapseEnvironmentVariables(spelled));
+    }
+
+    [Fact]
+    public void CollapseEnvironmentVariables_Empty_IsUnchanged() => Assert.Equal("", AppConfig.CollapseEnvironmentVariables(""));
+
+    [Fact]
     public void CollapseEnvironmentVariables_UnrelatedPath_IsUnchanged() => Assert.Equal(@"D:\Games\Atomfall", AppConfig.CollapseEnvironmentVariables(@"D:\Games\Atomfall"));
 
     [Fact]
@@ -339,7 +351,7 @@ public sealed class AppConfigTests : IDisposable
         SaveNewVersion(MinimalConfigJson().Replace(find, replace, StringComparison.Ordinal));
 
         // Every property read retries the file, and none of those retries may add a second warning.
-        WhileLogging(() =>
+        AppLog.While(() =>
         {
             for (var read = 0; read < 5; read++)
             {
@@ -479,20 +491,6 @@ public sealed class AppConfigTests : IDisposable
         {
             security.RemoveAccessRule(deny);
             write(security);
-        }
-    }
-
-    /// <summary>Runs <paramref name="act"/> with the app's own log open, as it is for the whole of a session.</summary>
-    private static void WhileLogging(Action act)
-    {
-        Logger.Init();
-        try
-        {
-            act();
-        }
-        finally
-        {
-            Logger.Close();
         }
     }
 

@@ -448,29 +448,30 @@ public static class AchievementMetadata
             return null;
 
         // Resolve and validate path stays within metadata directory (prevent path traversal)
-        var metaDirFull = Path.GetFullPath(metadataDir) + Path.DirectorySeparatorChar;
+        var metaDir = FolderPath.Parse(metadataDir);
 
         // Icon paths in the schema are relative to steam_settings/ (e.g. "img/abc123.jpg")
-        return TryResolve(Path.Combine(metadataDir, iconName), metaDirFull)
+        return TryResolve(Path.Combine(metadataDir, iconName), metaDir)
                // Fall back to the achievement_images/ subfolder, as GBE does
-               ?? TryResolve(Path.Combine(metadataDir, DefaultImageDir, iconName), metaDirFull);
+               ?? TryResolve(Path.Combine(metadataDir, DefaultImageDir, iconName), metaDir);
     }
 
     /// <summary>
     /// Returns <paramref name="candidate"/> (or a variant with a common image extension)
-    /// if it exists and stays within <paramref name="metaDirFull"/>; otherwise null.
+    /// if it exists and stays within <paramref name="metaDir"/>; otherwise null.
     /// </summary>
-    private static string? TryResolve(string candidate, string metaDirFull)
+    private static string? TryResolve(string candidate, FolderPath metaDir)
     {
         var fullPath = Path.GetFullPath(candidate);
-        if (fullPath.StartsWith(metaDirFull, StringComparison.OrdinalIgnoreCase) && File.Exists(fullPath))
+        if (metaDir.Contains(FolderPath.Parse(fullPath)) && File.Exists(fullPath))
             return fullPath;
 
-        // Try with common extensions
+        // Try with common extensions. Each is checked on its own: appended to the folder itself, one
+        // names a file beside it (steam_settings.jpg), not inside it.
         foreach (var ext in new[] { ".jpg", ".png", ".bmp", ".ico" })
         {
             var withExt = fullPath + ext;
-            if (withExt.StartsWith(metaDirFull, StringComparison.OrdinalIgnoreCase) && File.Exists(withExt))
+            if (metaDir.Contains(FolderPath.Parse(withExt)) && File.Exists(withExt))
                 return withExt;
         }
 

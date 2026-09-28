@@ -7,7 +7,9 @@ metadata:
 
 On 2026-09-27 an audit removed the handling for these scenarios, and the owner approved each, under
 the standard in [[feedback_realism_before_hardening]]: a scenario that is rare and harmless or cheap
-to handle by hand gets no code. Where it matters, each entry says what happens instead.
+to handle by hand gets no code. Where it matters, each entry says what happens instead. The Games
+folders entries were never handled: a review of the `FolderPath` change found them the same day, and
+they were left under the same standard.
 
 The watcher:
 
@@ -62,6 +64,15 @@ Config, logging and startup:
 - An unobserved task exception: no handler, since the only fire-and-forget task has its own boundary
   catch.
 - A substitute icon or sound for a missing embedded resource: a broken build, which throws.
+
+Games folders:
+
+- A `gamesPaths` entry that `Path.GetFullPath` rejects: a hand-typed `\u0000` in `config.json`, or a
+  variable expanding to whitespace only. `GameCache.ScanAll` parses every entry before its per-root
+  boundary, so the exception ends startup.
+- A System-attributed folder inside another `gamesPaths` entry: the minimal set drops the inner entry
+  as covered, and the outer walk skips System folders, so its games are not found. Only OS folders
+  carry that attribute.
 
 The Add game wizard:
 
