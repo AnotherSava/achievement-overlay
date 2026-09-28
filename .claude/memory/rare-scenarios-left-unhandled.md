@@ -11,6 +11,8 @@ to handle by hand gets no code. Where it matters, each entry says what happens i
 folders entries were never handled: a review of the `FolderPath` change found them the same day, and
 they were left under the same standard. The diagnostic-report entry about the same-folder warning was
 added on 2026-09-28 with the change that skips such entries, and the owner accepted it the same way.
+So was the Games folders entry about a NUL, added the same day once a measurement showed environment
+expansion truncating at it.
 
 The watcher:
 
@@ -71,6 +73,9 @@ Games folders:
 - A System-attributed folder inside another `gamesPaths` entry: the minimal set drops the inner entry
   as covered, and the outer walk skips System folders, so its games are not found. Only OS folders
   carry that attribute.
+- A hand-typed `\u0000` inside a `gamesPaths` or `gseSavesPaths` entry: environment expansion reads
+  the entry only up to the NUL, so `C:\Games\u0000X` is validated, scanned and compared as
+  `C:\Games`, and nothing reports the dropped remainder.
 
 The Add game wizard:
 
