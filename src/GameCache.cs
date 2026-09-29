@@ -185,11 +185,12 @@ public sealed class GameCache
     /// </summary>
     public static (IReadOnlyList<GameInfo> Games, IReadOnlyList<string> Skipped) FindGames(string basePath, IReadOnlyList<FolderPath> roots)
     {
-        // Keyed by appid *and* first-level game folder, not appid alone: two installs claiming one appid
-        // are two games, and folding their folders together would answer an unlock with a mixture of
-        // both. By the folder rather than the name it gives the game, because each install is named
-        // below its own deepest root, so installs under two nested roots can share a name.
-        var byGame = new Dictionary<(string AppId, string GameFolder), (string GameName, List<string> Dirs)>(SameGame);
+        // The game folder of every readable steam_appid.txt, whether or not a schema sits beside it, and
+        // apart from them the finds that do have a schema. Grouping waits for the whole walk: a root
+        // among those folders claims the copies of its appid below it (NameGame), and the walk can meet
+        // a nested copy before the root's own file.
+        var appIdFolders = new List<(string AppId, FolderPath Folder)>();
+        var finds = new List<(string AppId, FolderPath GameDir, string SettingsDir)>();
         var skipped = new List<string>();
 
         foreach (var appIdFile in Directory.EnumerateFiles(basePath, "steam_appid.txt", AppUtilities.RecursiveScan))
@@ -210,6 +211,8 @@ public sealed class GameCache
                 // generate_emu_config places steam_appid.txt inside steam_settings/ — collapse to game root
                 if (string.Equals(Path.GetFileName(gameDir), "steam_settings", StringComparison.OrdinalIgnoreCase))
                     gameDir = Path.GetDirectoryName(gameDir)!;
+                var folder = FolderPath.Parse(gameDir);
+                appIdFolders.Add((appId, folder));
                 var settingsDir = Path.Combine(gameDir, "steam_settings");
 
                 if (!File.Exists(Path.Combine(settingsDir, "achievements.json")))
@@ -218,12 +221,7 @@ public sealed class GameCache
                     continue;
                 }
 
-                var (gameFolder, gameName) = NameGame(FolderPath.Parse(gameDir), roots);
-                if (!byGame.TryGetValue((appId, gameFolder), out var game))
-                    byGame[(appId, gameFolder)] = game = (gameName, new List<string>());
-                // A steam_appid.txt at the game root and one inside steam_settings/ name the same folder.
-                if (!game.Dirs.Contains(settingsDir, StringComparer.OrdinalIgnoreCase))
-                    game.Dirs.Add(settingsDir);
+                finds.Add((appId, folder, settingsDir));
             }
 #pragma warning disable CA1031 // Per-game boundary: returns the failure among the skipped finds, which the scan logs at Warn, and goes on to the other games
             catch (Exception ex)
@@ -231,6 +229,23 @@ public sealed class GameCache
             {
                 skipped.Add($"Error processing '{appIdFile}': {ex.Message}");
             }
+        }
+
+        // Keyed by appid *and* first-level game folder, not appid alone: two installs claiming one appid
+        // are two games, and folding their folders together would answer an unlock with a mixture of
+        // both. By the folder rather than the name it gives the game, because each install is named
+        // below its own deepest root, so installs under two nested roots can share a name.
+        var byGame = new Dictionary<(string AppId, string GameFolder), (string GameName, List<string> Dirs)>(SameGame);
+        var foldersByAppId = appIdFolders.ToLookup(entry => entry.AppId, entry => entry.Folder);
+
+        foreach (var (appId, gameDir, settingsDir) in finds)
+        {
+            var (gameFolder, gameName) = NameGame(gameDir, roots, foldersByAppId[appId]);
+            if (!byGame.TryGetValue((appId, gameFolder), out var game))
+                byGame[(appId, gameFolder)] = game = (gameName, new List<string>());
+            // A steam_appid.txt at the game root and one inside steam_settings/ name the same folder.
+            if (!game.Dirs.Contains(settingsDir, StringComparer.OrdinalIgnoreCase))
+                game.Dirs.Add(settingsDir);
         }
 
         var games = byGame.Select(entry =>
@@ -283,11 +298,21 @@ public sealed class GameCache
     /// is a game no root holds: one found under a root that is its own <c>steam_settings</c> folder,
     /// which leaves the game the folder above it.
     /// </summary>
-    private static (string Folder, string Name) NameGame(FolderPath game, IReadOnlyList<FolderPath> roots)
+    /// <remarks>
+    /// A root that is itself among <paramref name="sameAppIdFolders"/> — the game folders of every
+    /// <c>steam_appid.txt</c> carrying this game's appid — is the game's own folder rather than a games
+    /// root, so every copy below it that no deeper configured root holds is that folder too. With
+    /// <c>D:\Games\A</c> configured, a repack's <c>D:\Games\A\bin\coldclient</c> copy is
+    /// <c>D:\Games\A</c>, "A", and joins the copy at the top, rather than splitting off as a second game
+    /// called "bin". The folder is taken from the walk's record of it rather than from the root, so the
+    /// name is spelled as the scan found the folder, as every other game's is.
+    /// </remarks>
+    private static (string Folder, string Name) NameGame(FolderPath game, IReadOnlyList<FolderPath> roots, IEnumerable<FolderPath> sameAppIdFolders)
     {
         var anchor = roots.Where(root => root.Contains(game)).MaxBy(root => root.Names.Count) ?? game;
-        var name = game.FirstNameBelow(anchor);
-        return (anchor.Names.Count < game.Names.Count ? Path.Join(anchor.ToString(), name) : game.ToString(), name);
+        var named = sameAppIdFolders.FirstOrDefault(anchor.IsSameFolder) ?? game;
+        var name = named.FirstNameBelow(anchor);
+        return (anchor.Names.Count < named.Names.Count ? Path.Join(anchor.ToString(), name) : named.ToString(), name);
     }
 
     private static string ReadAppId(string appIdFilePath)

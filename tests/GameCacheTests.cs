@@ -513,6 +513,79 @@ public sealed class GameCacheTests : IDisposable
         Assert.Equal(new[] { settings }, cache.LookupCached("2668510")!.SettingsDirs);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ScanAll_RootThatIsTheGamesOwnFolder_KeepsEveryCopyAsOneGame(bool appIdInSettings)
+    {
+        // A repack at a root picked by hand: the appid file beside the exe or in the settings folder, a
+        // decorated copy at the top, and the copy the emulator reads beside its DLL. Named by its first
+        // folder below the root, that copy would be a second game called "bin" holding only its own folder.
+        var game = Path.Combine(_tempDir, "games", "A");
+        var top = Path.Combine(game, "steam_settings");
+        Directory.CreateDirectory(top);
+        File.WriteAllText(Path.Combine(top, "achievements.json"), Schema);
+        File.WriteAllText(Path.Combine(appIdInSettings ? top : game, "steam_appid.txt"), "480");
+        var nested = CreateSettingsDir("480", "A", "bin", "coldclient");
+
+        var cache = new GameCache(new[] { game });
+        cache.ScanAll();
+
+        var info = cache.LookupCached("480")!;
+        Assert.Equal("A", info.GameName);
+        Assert.Equal(new[] { nested, top }, info.SettingsDirs);
+        // The Settings window's folder card counts with the same grouping.
+        Assert.Single(GameCache.FindGames(game, new[] { FolderPath.Parse(game) }).Games);
+    }
+
+    [Fact]
+    public void ScanAll_RootHoldingOnlyTheAppIdFile_NamesTheGameAfterTheRoot()
+    {
+        // An appid file with no schema beside it still marks the root as the game.
+        var game = Path.Combine(_tempDir, "games", "A");
+        var nested = CreateSettingsDir("480", "A", "bin", "coldclient");
+        File.WriteAllText(Path.Combine(game, "steam_appid.txt"), "480");
+
+        var cache = new GameCache(new[] { game });
+        cache.ScanAll();
+
+        var info = cache.LookupCached("480")!;
+        Assert.Equal("A", info.GameName);
+        Assert.Equal(new[] { nested }, info.SettingsDirs);
+    }
+
+    [Fact]
+    public void ScanAll_GameFolderRootInsideAnotherRoot_ClaimsItsCopiesUnderTheFoldersOwnSpelling()
+    {
+        // The claiming root is reached by the outer walk and spelled differently in config: its copies
+        // still join, and the game keeps the folder's spelling on disk.
+        var games = Path.Combine(_tempDir, "games");
+        var top = CreateSettingsDir("480", "Aphelion");
+        var nested = CreateSettingsDir("480", "Aphelion", "bin", "coldclient");
+
+        var cache = new GameCache(new[] { games, Path.Combine(games, "APHELION") + @"\" });
+        cache.ScanAll();
+
+        var info = cache.LookupCached("480")!;
+        Assert.Equal("Aphelion", info.GameName);
+        Assert.Equal(new[] { nested, top }, info.SettingsDirs);
+    }
+
+    [Fact]
+    public void ScanAll_RootHoldingAnotherAppId_DoesNotClaimTheGamesBelowIt()
+    {
+        // Only the same appid makes a root the game's own folder.
+        CreateSettingsDir("480", "A");
+        CreateSettingsDir("999", "A", "Tools", "bin");
+        var game = Path.Combine(_tempDir, "games", "A");
+
+        var cache = new GameCache(new[] { game });
+        cache.ScanAll();
+
+        Assert.Equal("A", cache.LookupCached("480")?.GameName);
+        Assert.Equal("Tools", cache.LookupCached("999")?.GameName);
+    }
+
     [Fact]
     public void FindGames_CountsEachGameOnceAndReportsWhatItSkipped()
     {

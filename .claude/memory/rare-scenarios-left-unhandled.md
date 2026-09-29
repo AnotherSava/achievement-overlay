@@ -12,7 +12,8 @@ folders entries were never handled: a review of the `FolderPath` change found th
 they were left under the same standard. The diagnostic-report entry about the same-folder warning was
 added on 2026-09-28 with the change that skips such entries, and the owner accepted it the same way.
 So was the Games folders entry about a NUL, added the same day once a measurement showed environment
-expansion truncating at it.
+expansion truncating at it, and the three about a root that is a game's own folder, added the same
+day with the change that lets such a root claim the copies of its appid below it.
 
 The watcher:
 
@@ -76,6 +77,14 @@ Games folders:
 - A hand-typed `\u0000` inside a `gamesPaths` or `gseSavesPaths` entry: environment expansion reads
   the entry only up to the NUL, so `C:\Games\u0000X` is validated, scanned and compared as
   `C:\Games`, and nothing reports the dropped remainder.
+- A stray `steam_appid.txt` at a games root, at its top or in its `steam_settings`: the root claims
+  its appid as the game's own folder, so separate installs of that appid below it merge into one
+  game named after the root, with their settings folders pooled. Deleting the stray file undoes it.
+- A `gamesPaths` entry that is a game's own folder with no `steam_appid.txt` at its top or in its
+  `steam_settings`: the root claims nothing, so a repack's nested copy is named by its first folder
+  below the root ("bin").
+- Both a game's own folder and a folder inside it configured (`A` and `A\bin`): a copy under the
+  inner entry anchors there, so the game splits in two and the cache keeps whichever was scanned last.
 
 The Add game wizard:
 

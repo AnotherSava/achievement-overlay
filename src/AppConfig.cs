@@ -421,11 +421,7 @@ public sealed class AppConfig
     public static string? FindSameFolder(IEnumerable<string> entries, string entry)
     {
         var folder = FolderPath.Parse(ExpandEnvironmentVariables(entry));
-        return entries.FirstOrDefault(other =>
-        {
-            var candidate = FolderPath.Parse(ExpandEnvironmentVariables(other));
-            return candidate.Contains(folder) && folder.Contains(candidate);
-        });
+        return entries.FirstOrDefault(other => FolderPath.Parse(ExpandEnvironmentVariables(other)).IsSameFolder(folder));
     }
 
     /// <summary>

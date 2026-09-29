@@ -50,6 +50,9 @@ public sealed class FolderPath
         && other.Names.Count >= Names.Count
         && Names.SequenceEqual(other.Names.Take(Names.Count), StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>True when <paramref name="other"/> is this very folder, however each was spelled.</summary>
+    public bool IsSameFolder(FolderPath other) => Contains(other) && other.Contains(this);
+
     /// <summary>
     /// The name this path goes by under <paramref name="ancestor"/>: its first folder name below it, so
     /// <c>C:\Games\Aphelion\Engine\Win64</c> under <c>C:\Games</c> is <c>Aphelion</c>. A path that is
