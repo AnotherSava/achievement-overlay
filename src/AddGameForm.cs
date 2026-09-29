@@ -698,10 +698,9 @@ public sealed class AddGameForm : Form, IConfigProgress
 
             var localAppId = await Task.Run(() => AppIdResolver.FromAppIdTxt(gameDir) ?? AppIdResolver.FromIniFiles(gameDir));
             string? guessed = null;
-            if (localAppId == null)
+            if (localAppId == null && AppIdResolver.StoreSearchName(gameDir) is { } name)
             {
                 _folderStatus.Text = "Searching the Steam store…";
-                var name = Path.GetFileName(gameDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
                 guessed = await AppIdResolver.FromStoreSearchAsync(name, _http);
             }
 

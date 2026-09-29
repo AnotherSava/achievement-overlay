@@ -39,6 +39,19 @@ public sealed class AppIdResolverTests : IDisposable
     [Fact]
     public void ParseAppIdFromStoreHtml_NoMatch_ReturnsNull() => Assert.Null(AppIdResolver.ParseAppIdFromStoreHtml("<div>nothing</div>"));
 
+    [Theory]
+    [InlineData(@"D:\Games\Aphelion")]
+    [InlineData(@"D:\Games\Aphelion\")]
+    [InlineData("D:/Games/Aphelion/")]
+    [InlineData(@"\\server\share\Aphelion")]
+    public void StoreSearchName_IsTheFoldersOwnName(string gameDir) => Assert.Equal("Aphelion", AppIdResolver.StoreSearchName(gameDir));
+
+    [Theory]
+    [InlineData(@"D:\")]
+    [InlineData("D:/")]
+    [InlineData(@"\\server\share")]
+    public void StoreSearchName_Root_ReturnsNull(string gameDir) => Assert.Null(AppIdResolver.StoreSearchName(gameDir));
+
     [Fact]
     public void FromAppIdTxt_ReadsNestedFile()
     {

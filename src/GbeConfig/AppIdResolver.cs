@@ -5,9 +5,8 @@ using System.Text.RegularExpressions;
 namespace AchievementOverlay.GbeConfig;
 
 /// <summary>
-/// Resolves a Steam AppID for a game directory: explicit value, then any local
-/// <c>steam_appid.txt</c>, then a key in local <c>*.ini</c>/<c>*.cfg</c> files, then
-/// a Steam store search by name as a last resort.
+/// Finds a Steam AppID for a game directory: any local <c>steam_appid.txt</c>, then a key
+/// in local <c>*.ini</c>/<c>*.cfg</c> files, then a Steam store search by name as a last resort.
 /// </summary>
 public static partial class AppIdResolver
 {
@@ -85,6 +84,13 @@ public static partial class AppIdResolver
         var match = StoreAppIdRegex().Match(html);
         return match.Success ? match.Groups[1].Value : null;
     }
+
+    /// <summary>
+    /// The name to search the Steam store by: the game folder's own name, or null when the folder has
+    /// none (the root of a drive or share). An empty search term lists the whole catalogue, whose first
+    /// AppID belongs to an unrelated game.
+    /// </summary>
+    public static string? StoreSearchName(string gameDir) => FolderPath.Parse(gameDir).Names.LastOrDefault();
 
     /// <summary>
     /// Searches the Steam store by game name and returns the first matching AppID.
