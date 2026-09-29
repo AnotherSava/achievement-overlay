@@ -146,10 +146,11 @@ public sealed class GameCache
     /// </summary>
     private int ScanDirectory(string basePath, IReadOnlyList<FolderPath> roots)
     {
-        IEnumerable<string> appIdFiles;
+        IReadOnlyList<GameInfo> games;
+        IReadOnlyList<string> skipped;
         try
         {
-            appIdFiles = Directory.EnumerateFiles(basePath, "steam_appid.txt", AppUtilities.RecursiveScan);
+            (games, skipped) = FindGames(basePath, roots);
         }
 #pragma warning disable CA1031 // Per-root boundary: a hand-edited gamesPaths entry can fail in many ways; logs at Warn and scans the other roots
         catch (Exception ex)
@@ -159,13 +160,39 @@ public sealed class GameCache
             return 0;
         }
 
+        foreach (var line in skipped)
+            Logger.Warn($"  {line}");
+
+        foreach (var game in games)
+        {
+            _cache[game.AppId] = game;
+
+            var extra = game.SettingsDirs.Count > 1 ? $" (+{game.SettingsDirs.Count - 1} more settings folder(s): {string.Join(", ", game.SettingsDirs.Skip(1).Select(d => $"'{d}'"))})" : "";
+            Logger.Info($"  Cached: appid={game.AppId}, game={game.GameName}, path='{game.MetadataPath}'{extra}");
+            // Carries the appid so the line identifies its own game: a diagnostic report keeps the
+            // lines about one game and drops the rest, and it recognises them by the appid.
+            Logger.Info($"  Schema: appid={game.AppId}, {DescribeSchema(game)}");
+        }
+
+        return games.Count;
+    }
+
+    /// <summary>
+    /// The games under one root, one per appid and game folder, and a line for each find that was
+    /// skipped and why. <paramref name="roots"/> is every configured root, as for
+    /// <see cref="ScanDirectory"/>. The Settings window counts a games folder with this too, so its
+    /// card and the cache cannot disagree about what a game is. Throws when the root cannot be walked.
+    /// </summary>
+    public static (IReadOnlyList<GameInfo> Games, IReadOnlyList<string> Skipped) FindGames(string basePath, IReadOnlyList<FolderPath> roots)
+    {
         // Keyed by appid *and* first-level game folder, not appid alone: two installs claiming one appid
         // are two games, and folding their folders together would answer an unlock with a mixture of
         // both. By the folder rather than the name it gives the game, because each install is named
         // below its own deepest root, so installs under two nested roots can share a name.
         var byGame = new Dictionary<(string AppId, string GameFolder), (string GameName, List<string> Dirs)>(SameGame);
+        var skipped = new List<string>();
 
-        foreach (var appIdFile in appIdFiles)
+        foreach (var appIdFile in Directory.EnumerateFiles(basePath, "steam_appid.txt", AppUtilities.RecursiveScan))
         {
             try
             {
@@ -175,7 +202,7 @@ public sealed class GameCache
                     // Skipping is right; doing it silently is not. An empty, whitespace-only or
                     // UTF-16 steam_appid.txt reads as blank here, and the game then goes untracked
                     // with nothing anywhere to say why — the shape of report issue #2 was closed on.
-                    Logger.Warn($"  Skipped: '{appIdFile}' holds no readable appid (empty, or not UTF-8/ASCII text)");
+                    skipped.Add($"Skipped: '{appIdFile}' holds no readable appid (empty, or not UTF-8/ASCII text)");
                     continue;
                 }
 
@@ -187,7 +214,7 @@ public sealed class GameCache
 
                 if (!File.Exists(Path.Combine(settingsDir, "achievements.json")))
                 {
-                    Logger.Warn($"  Skipped: appid={appId} at '{gameDir}' (no 'achievements.json')");
+                    skipped.Add($"Skipped: appid={appId} at '{gameDir}' (no 'achievements.json')");
                     continue;
                 }
 
@@ -198,41 +225,35 @@ public sealed class GameCache
                 if (!game.Dirs.Contains(settingsDir, StringComparer.OrdinalIgnoreCase))
                     game.Dirs.Add(settingsDir);
             }
-#pragma warning disable CA1031 // Per-game boundary: logs the failure at Warn and scans the other games
+#pragma warning disable CA1031 // Per-game boundary: returns the failure among the skipped finds, which the scan logs at Warn, and goes on to the other games
             catch (Exception ex)
 #pragma warning restore CA1031
             {
-                Logger.Warn($"  Error processing '{appIdFile}': {ex.Message}");
+                skipped.Add($"Error processing '{appIdFile}': {ex.Message}");
             }
         }
 
-        foreach (var ((appId, _), (gameName, dirs)) in byGame)
+        var games = byGame.Select(entry =>
         {
             // Deepest first: the emulator loads from beside its DLL, which is the nested copy in every
             // layout seen so far (bin/coldclient, www/greenworks/lib, Binaries/Win64). Ordering by
             // path keeps ties stable, so which folder supplies the schema stops depending on the order
             // the filesystem happened to enumerate in.
-            var ordered = dirs
+            var ordered = entry.Value.Dirs
                 .OrderByDescending(d => d.Count(c => c is '\\' or '/'))
                 .ThenBy(d => d, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            _cache[appId] = new GameInfo
+            return new GameInfo
             {
-                AppId = appId,
+                AppId = entry.Key.AppId,
                 MetadataPath = Path.Combine(ordered[0], "achievements.json"),
-                GameName = gameName,
+                GameName = entry.Value.GameName,
                 SettingsDirs = ordered
             };
+        }).ToList();
 
-            var extra = ordered.Count > 1 ? $" (+{ordered.Count - 1} more settings folder(s): {string.Join(", ", ordered.Skip(1).Select(d => $"'{d}'"))})" : "";
-            Logger.Info($"  Cached: appid={appId}, game={gameName}, path='{ordered[0]}\\achievements.json'{extra}");
-            // Carries the appid so the line identifies its own game: a diagnostic report keeps the
-            // lines about one game and drops the rest, and it recognises them by the appid.
-            Logger.Info($"  Schema: appid={appId}, {DescribeSchema(_cache[appId])}");
-        }
-
-        return byGame.Count;
+        return (games, skipped);
     }
 
     /// <summary>

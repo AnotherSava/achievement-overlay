@@ -677,7 +677,7 @@ public partial class SettingsWindow : Window, IWin32Window
 
     private void OnAddSavesFolder(object sender, RoutedEventArgs e) => AddFolder(_savesFolders, SavesFoldersList, DescribeSavesFolder);
 
-    private void AddFolder(List<string> folders, ItemsControl list, Func<string, (string Text, string BrushKey)> describe)
+    private void AddFolder(List<string> folders, ItemsControl list, Func<string, IReadOnlyList<string>, (string Text, string BrushKey)> describe)
     {
         var last = folders.Count > 0 ? AppConfig.ExpandEnvironmentVariables(folders[^1]) : null;
         var picked = DialogControls.PickFolder(this, last);
@@ -696,20 +696,27 @@ public partial class SettingsWindow : Window, IWin32Window
     /// <summary>
     /// Draws one card per folder: the path as stored, what checking it right now says about it, and
     /// Change/Remove. The status is the check that used to run only when the dialog was closed.
+    /// <paramref name="describe"/> gets the whole list alongside the entry, and runs off the UI thread.
     /// </summary>
-    private void RebuildFolderList(ItemsControl list, List<string> folders, Func<string, (string Text, string BrushKey)> describe)
+    private void RebuildFolderList(ItemsControl list, List<string> folders, Func<string, IReadOnlyList<string>, (string Text, string BrushKey)> describe)
     {
         list.Items.Clear();
         var sameFolderAs = AppConfig.PairWithSameFolder(folders).Select(pair => pair.SameFolderAs).ToList();
+        // A copy, because the checks read it on another thread while the list can change under them.
+        var entries = folders.ToList();
         for (var i = 0; i < folders.Count; i++)
         {
             var index = i;
+            var status = new TextBlock { Text = "checking…", FontSize = 12, Margin = new Thickness(0, 2, 0, 0) };
             // A skip is otherwise said only in the log, and this list is where the entry gets removed.
-            var (statusText, brushKey) = sameFolderAs[i] == null ? describe(folders[i]) : ("same folder as an entry above — skipped", "StatusWarn");
+            if (sameFolderAs[i] == null)
+                ShowStatus(status, () => describe(entries[index], entries));
+            else
+                SetStatus(status, ("same folder as an entry above — skipped", "StatusWarn"));
 
             var text = new StackPanel();
             text.Children.Add(new TextBlock { Text = folders[i], FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis });
-            text.Children.Add(new TextBlock { Text = statusText, FontSize = 12, Margin = new Thickness(0, 2, 0, 0), Foreground = (Brush)Resources[brushKey] });
+            text.Children.Add(status);
 
             var change = new Button { Content = "Change", Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(8, 0, 0, 0) };
             change.Click += (_, _) => ChangeFolder(folders, index, list, describe);
@@ -734,7 +741,19 @@ public partial class SettingsWindow : Window, IWin32Window
         }
     }
 
-    private void ChangeFolder(List<string> folders, int index, ItemsControl list, Func<string, (string Text, string BrushKey)> describe)
+    /// <summary>
+    /// Fills a card's status line once its check returns. The check runs on the thread pool, because
+    /// counting a games folder walks everything below it, which on a whole drive takes seconds.
+    /// </summary>
+    private async void ShowStatus(TextBlock status, Func<(string Text, string BrushKey)> describe) => SetStatus(status, await Task.Run(describe));
+
+    private void SetStatus(TextBlock status, (string Text, string BrushKey) line)
+    {
+        status.Text = line.Text;
+        status.Foreground = (Brush)Resources[line.BrushKey];
+    }
+
+    private void ChangeFolder(List<string> folders, int index, ItemsControl list, Func<string, IReadOnlyList<string>, (string Text, string BrushKey)> describe)
     {
         var picked = DialogControls.PickFolder(this, AppConfig.ExpandEnvironmentVariables(folders[index]));
         if (picked == null)
@@ -765,7 +784,11 @@ public partial class SettingsWindow : Window, IWin32Window
         return true;
     }
 
-    private static (string Text, string BrushKey) DescribeGameFolder(string raw)
+    /// <summary>
+    /// Counts the games the scan finds in this folder, with every entry in the list as a root,
+    /// as the scan names and groups games against all of them.
+    /// </summary>
+    private static (string Text, string BrushKey) DescribeGameFolder(string raw, IReadOnlyList<string> entries)
     {
         var path = AppConfig.ExpandEnvironmentVariables(raw);
         if (!Directory.Exists(path))
@@ -773,7 +796,8 @@ public partial class SettingsWindow : Window, IWin32Window
 
         try
         {
-            var count = Directory.EnumerateFiles(path, "steam_appid.txt", AppUtilities.RecursiveScan).Count();
+            var roots = AppConfig.ParseGamesPaths(string.Join(";", entries)).Select(FolderPath.Parse).ToList();
+            var count = GameCache.FindGames(path, roots).Games.Count;
             return count == 0
                 ? ("no games with achievement metadata found", "StatusWarn")
                 : ($"{count} game{(count == 1 ? "" : "s")} with achievement metadata", "StatusGood");
@@ -786,7 +810,7 @@ public partial class SettingsWindow : Window, IWin32Window
         }
     }
 
-    private static (string Text, string BrushKey) DescribeSavesFolder(string raw)
+    private static (string Text, string BrushKey) DescribeSavesFolder(string raw, IReadOnlyList<string> _)
     {
         var path = AppConfig.ExpandEnvironmentVariables(raw);
         if (!Directory.Exists(path))
@@ -794,7 +818,8 @@ public partial class SettingsWindow : Window, IWin32Window
 
         try
         {
-            var count = Directory.GetDirectories(path).Length;
+            // GBE keeps its global configs in a "settings" folder beside the appid folders.
+            var count = Directory.GetDirectories(path).Count(dir => !string.Equals(Path.GetFileName(dir), "settings", StringComparison.OrdinalIgnoreCase));
             return ($"found · {count} game folder{(count == 1 ? "" : "s")} inside", "StatusGood");
         }
 #pragma warning disable CA1031 // Status-line boundary: shows the failure on the folder's card

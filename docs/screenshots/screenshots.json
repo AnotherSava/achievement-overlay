@@ -41,7 +41,7 @@
       ],
       "shows": "The Settings window on its Notifications page, with the nav rail and the footer visible",
       "policy": "auto",
-      "verifiedAt": "8a656c7",
+      "verifiedAt": "1203133",
       "capture": {
         "command": "bash docs/screenshots/capture/settings-window.sh",
         "steps": [

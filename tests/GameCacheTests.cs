@@ -514,6 +514,31 @@ public sealed class GameCacheTests : IDisposable
     }
 
     [Fact]
+    public void FindGames_CountsEachGameOnceAndReportsWhatItSkipped()
+    {
+        // Five steam_appid.txt files, two games: what a count of the files alone got wrong in Settings.
+        CreateSettingsDir("2378900", "Coffin");
+        CreateSettingsDir("2378900", "Coffin", "Coffin", "www", "greenworks", "lib");
+        CreateSettingsDir("2668510", "RDR");
+        File.WriteAllText(Path.Combine(_tempDir, "games", "RDR", "steam_appid.txt"), "2668510");
+        CreateGameDir("NoSchema", "11111");
+        var root = FolderPath.Parse(Path.Combine(_tempDir, "games"));
+
+        var (games, skipped) = GameCache.FindGames(root.ToString(), new[] { root });
+
+        Assert.Equal(new[] { "Coffin", "RDR" }, games.Select(game => game.GameName).Order(StringComparer.Ordinal));
+        Assert.Contains("appid=11111", Assert.Single(skipped), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FindGames_RootThatCannotBeWalked_Throws()
+    {
+        var missing = FolderPath.Parse(Path.Combine(_tempDir, "missing"));
+
+        Assert.Throws<DirectoryNotFoundException>(() => GameCache.FindGames(missing.ToString(), new[] { missing }));
+    }
+
+    [Fact]
     public void ScanAll_HiddenSettingsFolder_IsStillFound()
     {
         // Repacks hide steam_settings routinely; the default enumeration skips hidden entries, which

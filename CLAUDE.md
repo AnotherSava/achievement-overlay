@@ -182,7 +182,10 @@ Page-specific notes:
 - **Sound** is a radio pair (Built-in / Custom file) rather than a path box that means "built-in" when
   empty. Choosing Built-in writes `soundPath: ""`, so config still says plainly which is in use.
 - **Folder cards** show a live status line — how many games were found, or that a drive isn't
-  connected — which is the check that used to run only on OK. Entries round-trip **raw** (no
+  connected — which is the check that used to run only on OK. A games folder is counted by
+  `GameCache.FindGames`, the scan's own grouping, so the card and the log agree on what a game is.
+  Every card is drawn at once saying "checking…" and its check runs on the thread pool, since walking
+  a whole drive takes seconds. Entries round-trip **raw** (no
   expansion), and a freshly picked folder is packed back through
   `AppConfig.CollapseEnvironmentVariables`, the inverse of `ExpandEnvironmentVariables`. Without that,
   editing the default `%appdata%\GSE Saves` would pin it to one machine's user profile, which matters
