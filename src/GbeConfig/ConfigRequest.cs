@@ -8,8 +8,8 @@ public sealed class ConfigRequest
     /// <summary>The game's root folder (the Steam DLL may be nested below it).</summary>
     public required string GameDir { get; init; }
 
-    /// <summary>Explicit AppID, or null/empty to auto-detect.</summary>
-    public string? AppId { get; init; }
+    /// <summary>The game's Steam AppID (required — the dialog detects it or asks for it before the run).</summary>
+    public required string AppId { get; init; }
 
     /// <summary>Steam Web API key (required — used for the achievement schema).</summary>
     public required string ApiKey { get; init; }

@@ -44,6 +44,12 @@ public sealed class GbeConfigGenerator
             return ConfigStatus.UserError;
         }
 
+        if (string.IsNullOrWhiteSpace(_req.AppId))
+        {
+            Error("A Steam AppID is required.");
+            return ConfigStatus.UserError;
+        }
+
         // --- Locate the Steam DLL (defines the target directory) ---
         var dlls = DllLocator.FindAll(gameDir);
         var primary = DllLocator.SelectPrimary(dlls);
@@ -61,14 +67,7 @@ public sealed class GbeConfigGenerator
                 Warn($"  {d.Path}");
         }
 
-        // --- Resolve AppID ---
-        var gameName = Path.GetFileName(gameDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        var appId = await ResolveAppIdAsync(gameDir, gameName, ct);
-        if (appId == null)
-        {
-            Error("Could not resolve AppID. Enter it explicitly in the AppID field.");
-            return ConfigStatus.UserError;
-        }
+        var appId = _req.AppId.Trim();
         Info($"AppID: {appId}");
 
         // --- DRM detection ---
@@ -226,32 +225,6 @@ public sealed class GbeConfigGenerator
 
         Info($"Done. steam_settings/ written to '{steamSettingsDir}'.");
         return ConfigStatus.Success;
-    }
-
-    private async Task<string?> ResolveAppIdAsync(string gameDir, string gameName, CancellationToken ct)
-    {
-        if (!string.IsNullOrWhiteSpace(_req.AppId))
-            return _req.AppId.Trim();
-
-        var fromTxt = AppIdResolver.FromAppIdTxt(gameDir);
-        if (fromTxt != null)
-        {
-            Debug("AppID resolved from steam_appid.txt");
-            return fromTxt;
-        }
-
-        var fromIni = AppIdResolver.FromIniFiles(gameDir);
-        if (fromIni != null)
-        {
-            Debug("AppID resolved from a local .ini/.cfg file");
-            return fromIni;
-        }
-
-        Debug($"Searching the Steam store for '{gameName}'...");
-        var fromStore = await AppIdResolver.FromStoreSearchAsync(gameName, _http, ct);
-        if (fromStore != null)
-            Warn($"AppID {fromStore} guessed from store search for '{gameName}' — verify it's correct.");
-        return fromStore;
     }
 
     /// <summary>True if the exception is Windows Defender blocking a file (ERROR_VIRUS_INFECTED /
