@@ -154,4 +154,4 @@ Add the game's `steam_settings/stats.json` to the report (`DiagnosticReport.Coll
 
 ## Open with the requester
 
-A reply drafted in the session that wrote this plan asks which game this is and what writes their file: their example has `earned: true` with `earned_time: 0`, which GBE doesn't write. It asks for a **Report a problem…** file for that game, which carries the unlock file and `steam_settings/achievements.json`, plus `steam_settings/stats.json`, which the report does not include. The reply had not been posted when this plan was written.
+A reply drafted in the session that wrote this plan asks which game this is and what writes their file: their example has `earned: true` with `earned_time: 0`, which GBE doesn't write. It asks for a **Report a problem…** file for that game, which carries the unlock file and `steam_settings/achievements.json`, plus `steam_settings/stats.json`, which the report does not include. Posted 2026-09-29 as [this comment](https://github.com/AnotherSava/achievement-overlay/issues/10#issuecomment-5904769491), pointing at v1.11.0, the first release whose report carries `stats.json`. Check the issue for their report before starting.
