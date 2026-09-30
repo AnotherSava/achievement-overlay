@@ -6,7 +6,7 @@ created: 2026-09-29 23:06:12
 
 Plan for [issue #8](https://github.com/AnotherSava/achievement-overlay/issues/8). mohsinous asks for two things: a list per game showing which achievements are unlocked and which are locked, and a dashboard of games with their completion percentage. ant-sh replied against feature creep. His point is that a small download is the app's advantage over the alternatives, and he is fine with new features "as long as app stays let's say within 150 Mb". mohsinous then thanked him as if he were the maintainer, and ant-sh clarified "I am not Oleg, it's up to him". So the maintainer has not said anything on the issue yet, and the reply drafted with this plan (see **Open with the requester**) is the first word from him.
 
-Every fact either feature needs is already on disk, and the app already turns most of it into display text for the Recent panel. So the work is mostly a new window plus two schema fields the app does not read yet. This is written for whoever implements it. Once shipped, the settled parts move to `docs/`: a new `usage/` page for the window, a bullet in `usage/tray-menu`, and the data rules in `development/gbe-reference`.
+Every fact the list and the dashboard need is already on disk (global rarity, Part 3, is the one exception), and the app already turns most of it into display text for the Recent panel. So the work is mostly a new window plus two schema fields the app does not read yet. This is written for whoever implements it. Once shipped, the settled parts move to `docs/`: a new `usage/` page for the window, a bullet in `usage/tray-menu`, and the data rules in `development/gbe-reference`.
 
 ## Size, for ant-sh's concern
 
@@ -201,6 +201,17 @@ No local unlock file carries progress yet, so the bar can only be tested against
 - Both `docs/pages/usage.md` and `docs/pages/installation.md` say the app has no main window. This window is the first thing close to one, so both need rewording.
 - If the feature list gains a bullet, README and `docs/index.md` change word for word together.
 - A `screenshots.json` entry and a `capture/<id>.sh`/`.ps1` pair for the window, driving the rail through `Select-NavPage`. The `tray-menu` shot goes stale when the menu gains an item.
+
+## Recommendations for the open decisions
+
+Proposed by the research that wrote this plan; none is confirmed yet.
+
+- **Order against issue #10:** build Part 0 now (shared builder, `hidden`, gray icons) without progress fields, and ship whichever of #8 Part 1 and #10 Part 1 is ready first. The one shipping second adds progress to the row with the list's bar.
+- **Totals when the unlock file has names the schema lacks:** count schema definitions only. Extras are listed below the locked rows and not counted, so a stale name never pushes a game past 100%.
+- **Two GSE Saves paths holding one game:** the first-readable-copy rule everywhere (`ReadUnlockStates`), with `GetRecent` routed through it too, since the watcher already warns about that setup. The Recent panel change goes in the release notes.
+- **Gray icon fallback when a schema has none:** desaturate the colour icon at runtime once it is confirmed to keep alpha; otherwise the colour icon at reduced opacity.
+- **Never-run games:** listed at 0 of N, sorted after played games; the "exclude games with nothing unlocked" toggle hides them.
+- **Footprint in the docs:** one sentence in `docs/pages/installation.md` saying the self-contained build is 72.7 MB to download and 175.8 MB unpacked because it bundles the .NET runtime, and the framework-dependent one about 1.4 MB, so the size answer lives somewhere citable.
 
 ## Tests
 
