@@ -522,6 +522,11 @@ so a shot documents the code under review, not whatever release is installed. Sh
 `capture/lib/`: `ui-automation.ps1` (the tray icon, its menu, and switching a dialog's nav rail to a
 named page), `window-capture.ps1`, and `docborder.py`.
 
+Before `docborder.py` frames a shot it copies the untouched capture to `docs/screenshots/raw/` under
+the same name, and that copy is committed, so a frame can be redrawn on either machine without a
+re-shoot. `docs/_config.yml` excludes the directory from the site, or each raw would go live beside
+its frame.
+
 Anything two capture scripts both do belongs in `ui-automation.ps1`, not copied into each. The rule
 was bought: the settings and report scripts each selected a nav page their own way — one clicked, one
 called `SelectionItemPattern.Select()` — and `Select()` moves *keyboard* focus, so WPF drew its dotted

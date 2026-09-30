@@ -19,3 +19,5 @@ exclude:
   - plans/
   - screenshots/capture/
   - screenshots/screenshots.json
+  # Untouched captures kept as inputs to the frame step, not pages.
+  - screenshots/raw/

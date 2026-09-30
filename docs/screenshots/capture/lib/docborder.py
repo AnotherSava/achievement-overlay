@@ -16,8 +16,14 @@ Two choices worth keeping:
 Run through the capture scripts, never by hand: a border applied by hand is silently lost the next
 time the shot is captured.
 
+The untouched capture is copied to raw/<same name> beside the image just before it is framed, and
+committed, so the frame can be redrawn with other settings on either machine without a re-shoot. A
+shot this skips is not copied: it leaves unchanged, so the committed image is its own raw.
+
 Usage: python docborder.py <image.png> [more.png ...]
 """
+import os
+import shutil
 import sys
 from PIL import Image
 
@@ -59,6 +65,9 @@ def add_border(path):
         # background inside it. Such an image needs a border tracing its shape, not this.
         print(f"skipped (transparent corners): {path}")
         return
+    raw_dir = os.path.join(os.path.dirname(os.path.abspath(path)), "raw")
+    os.makedirs(raw_dir, exist_ok=True)
+    shutil.copy2(path, os.path.join(raw_dir, os.path.basename(path)))
     v = border_grey(edge_luminance(im))
     out = Image.new("RGBA", (w + 2, h + 2), (v, v, v, 255))
     out.paste(im, (1, 1))
