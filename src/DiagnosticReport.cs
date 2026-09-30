@@ -21,6 +21,12 @@ public sealed class DiagnosticReportInputs
     /// <summary>The schema the resolver actually reads, and whether it could be read.</summary>
     public DiagnosticFile Schema { get; init; } = DiagnosticFile.Absent;
 
+    /// <summary>
+    /// The <c>stats.json</c> beside <see cref="Schema"/>. GBE counts achievement progress only against
+    /// stats this file defines, so a missing one explains a progress bar that never moves.
+    /// </summary>
+    public DiagnosticFile Stats { get; init; } = DiagnosticFile.Absent;
+
     /// <summary>The GSE Saves unlock file for this appid.</summary>
     public DiagnosticFile Unlock { get; init; } = DiagnosticFile.Absent;
 
@@ -103,6 +109,7 @@ public sealed class DiagnosticSections
     public bool Config { get; init; } = true;
     public bool Log { get; init; } = true;
     public bool Schema { get; init; } = true;
+    public bool Stats { get; init; } = true;
     public bool Unlock { get; init; } = true;
 }
 
@@ -204,6 +211,7 @@ public static class DiagnosticReport
                 ["settingsDirs"] = new JsonArray(inputs.SettingsDirs.Select(d => (JsonNode?)JsonValue.Create(d)).ToArray())
             },
             ["unlockFile"] = sections.Unlock ? Describe(inputs.Unlock, redactConfig: false) : Excluded(),
+            ["stats"] = sections.Stats ? Describe(inputs.Stats, redactConfig: false) : Excluded(),
             ["schema"] = sections.Schema ? Describe(inputs.Schema, redactConfig: false) : Excluded()
         };
 
@@ -529,7 +537,7 @@ public static class DiagnosticReport
     // --- Reading (the only part that touches disk) ---
 
     /// <summary>
-    /// Gathers a report for one game: its schema, its unlock file, the app's config and the log. The
+    /// Gathers a report for one game: its schema and stats, its unlock file, the app's config and the log. The
     /// log is read whole; <see cref="Compose"/> keeps the recent runs and drops only the lines naming
     /// another game.
     /// </summary>
@@ -552,6 +560,7 @@ public static class DiagnosticReport
             GameName = game?.GameName,
             SettingsDirs = game?.SettingsDirs ?? Array.Empty<string>(),
             Schema = DiagnosticFile.Read(game?.MetadataPath),
+            Stats = DiagnosticFile.Read(game == null ? null : Path.Combine(Path.GetDirectoryName(game.MetadataPath)!, "stats.json")),
             Unlock = DiagnosticFile.Read(unlockPath),
             Config = DiagnosticFile.Read(AppConfig.ConfigFilePath),
             Log = DiagnosticFile.Read(Logger.LogPath),

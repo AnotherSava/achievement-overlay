@@ -83,7 +83,7 @@
       ],
       "shows": "The Report a problem window on its App config page: the notice, the nav rail of parts, one part's line and Include switch, and an API key shown redacted",
       "policy": "auto",
-      "verifiedAt": "07c6aa4",
+      "verifiedAt": "43502e9",
       "capture": {
         "command": "bash docs/screenshots/capture/report-window.sh",
         "steps": [

@@ -418,6 +418,40 @@ public sealed class GameCacheTests : IDisposable
         Assert.Single(DiagnosticReport.KeepLinesForGame(new[] { covered }, "1966410", inputs.ConfiguredRoots, inputs.GameFolders));
     }
 
+    [Fact]
+    public void Collect_ReadsTheStatsFileBesideTheSchema()
+    {
+        // GBE reads stats.json from the same steam_settings folder as the schema, and counts
+        // achievement progress only against the stats it defines.
+        var ss = Path.Combine(_tempDir, "games", "StatsGame", "steam_settings");
+        Directory.CreateDirectory(ss);
+        File.WriteAllText(Path.Combine(ss, "steam_appid.txt"), "44444");
+        File.WriteAllText(Path.Combine(ss, "achievements.json"), """[{"name": "ACH01"}]""");
+        File.WriteAllText(Path.Combine(ss, "stats.json"), """[{"name": "kills", "type": "int", "default": "0"}]""");
+        var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
+        cache.ScanAll();
+
+        var inputs = DiagnosticReport.Collect("44444", cache.LookupCached("44444"), Array.Empty<string>(), Array.Empty<string>());
+
+        Assert.Equal("ok", inputs.Stats.Status);
+        Assert.Contains("kills", inputs.Stats.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Collect_NoStatsFile_IsReportedMissing()
+    {
+        var ss = Path.Combine(_tempDir, "games", "NoStatsGame", "steam_settings");
+        Directory.CreateDirectory(ss);
+        File.WriteAllText(Path.Combine(ss, "steam_appid.txt"), "55555");
+        File.WriteAllText(Path.Combine(ss, "achievements.json"), """[{"name": "ACH01"}]""");
+        var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
+        cache.ScanAll();
+
+        var inputs = DiagnosticReport.Collect("55555", cache.LookupCached("55555"), Array.Empty<string>(), Array.Empty<string>());
+
+        Assert.Equal("missing", inputs.Stats.Status);
+    }
+
     // --- Edge case: whitespace/newline in steam_appid.txt ---
 
     [Fact]

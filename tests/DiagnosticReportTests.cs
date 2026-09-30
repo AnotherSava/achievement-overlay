@@ -8,7 +8,7 @@ namespace AchievementOverlay.Tests;
 public class DiagnosticReportTests
 {
     private static DiagnosticReportInputs Inputs(
-        DiagnosticFile? config = null, DiagnosticFile? schema = null, DiagnosticFile? unlock = null, string log = "") =>
+        DiagnosticFile? config = null, DiagnosticFile? schema = null, DiagnosticFile? unlock = null, string log = "", DiagnosticFile? stats = null) =>
         new()
         {
             Version = "1.9.1+abc1234",
@@ -17,6 +17,7 @@ public class DiagnosticReportTests
             GameName = "AC Odyssey",
             Config = config ?? DiagnosticFile.Absent,
             Schema = schema ?? DiagnosticFile.Absent,
+            Stats = stats ?? DiagnosticFile.Absent,
             Unlock = unlock ?? DiagnosticFile.Absent,
             Log = Present(log)
         };
@@ -248,13 +249,15 @@ public class DiagnosticReportTests
             config: Present("""{"language":"russian"}"""),
             schema: Present("""[{"name":"001"}]"""),
             unlock: Present("""{"1":{"earned":1}}"""),
-            log: "a line");
+            log: "a line",
+            stats: Present("""[{"name":"kills","type":"int","default":"0"}]"""));
 
-        var report = Compose2(inputs, new DiagnosticSections { Config = false, Log = false, Schema = false, Unlock = false });
+        var report = Compose2(inputs, new DiagnosticSections { Config = false, Log = false, Schema = false, Stats = false, Unlock = false });
 
         Assert.Equal(DiagnosticReport.NotIncluded, (string?)report["config"]!["status"]);
         Assert.Equal(DiagnosticReport.NotIncluded, (string?)report["log"]!["status"]);
         Assert.Equal(DiagnosticReport.NotIncluded, (string?)report["schema"]!["status"]);
+        Assert.Equal(DiagnosticReport.NotIncluded, (string?)report["stats"]!["status"]);
         Assert.Equal(DiagnosticReport.NotIncluded, (string?)report["unlockFile"]!["status"]);
     }
 
@@ -267,6 +270,15 @@ public class DiagnosticReportTests
 
         Assert.Equal("russian", (string?)report["config"]!["content"]!["language"]);
         Assert.Equal(DiagnosticReport.NotIncluded, (string?)report["schema"]!["status"]);
+    }
+
+    [Fact]
+    public void Compose_CarriesTheStatsFile()
+    {
+        var report = Compose(Inputs(stats: Present("""[{"name":"kills","type":"int","default":"0"}]""")));
+
+        Assert.Equal("ok", (string?)report["stats"]!["status"]);
+        Assert.Equal("kills", (string?)report["stats"]!["content"]![0]!["name"]);
     }
 
     [Fact]
@@ -595,6 +607,7 @@ public class DiagnosticReportTests
         Assert.True(top.IndexOf("config") < top.IndexOf("schema"));
         Assert.True(top.IndexOf("log") < top.IndexOf("schema"));
         Assert.True(top.IndexOf("game") < top.IndexOf("schema"));
+        Assert.True(top.IndexOf("stats") < top.IndexOf("schema"));
         // The schema is the bulk of the file, so it trails everything worth reading.
         Assert.Equal("schema", top[^1]);
     }

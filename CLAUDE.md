@@ -238,7 +238,7 @@ The two windows share `src/DialogStyles.xaml` (the styles) and `src/DialogChrome
 brushes, the icon, the work-area clamp). A second window carrying its own copy of those colours is a
 copy that drifts: a shade corrected in one dialog would leave the other wrong with nothing to say why.
 
-**One page, not five.** Unlike the settings pages, these five parts differ only in the data they show,
+**One page for every part.** Unlike the settings pages, the parts differ only in the data they show,
 so the rail picks a part and the single page is written from it.
 
 **One line of text per part, computed.** A part gets its name, its switch, and a single sentence
@@ -250,7 +250,7 @@ the removed card gave its height to the pane.
 
 **The panes are sliced out of the saved document.** `Compose` runs once, the result is parsed, and
 each pane renders its own top-level key — so what is reviewed is provably what is written. That is
-also why the report's five parts are five top-level keys: nesting the schema under the game identity
+also why each of the report's parts is a top-level key: nesting the schema under the game identity
 put the bulk of the file inside the pane meant to show a handful of lines.
 
 **The pane wraps rather than scrolling sideways.** Its longest lines are the paths and the log lines,

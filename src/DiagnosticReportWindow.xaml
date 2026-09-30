@@ -120,6 +120,13 @@
                         <TextBlock x:Name="Label4" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                     </DockPanel>
                 </ListBoxItem>
+                <ListBoxItem x:Name="Row5">
+                    <DockPanel>
+                        <TextBlock x:Name="Chip5" DockPanel.Dock="Right" Text="left out" FontSize="11"
+                                   Opacity="0.75" VerticalAlignment="Center" Margin="8,0,10,0" Visibility="Collapsed" />
+                        <TextBlock x:Name="Label5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                </ListBoxItem>
             </ListBox>
 
             <Border Grid.Column="1" Background="{DynamicResource PageBackground}"

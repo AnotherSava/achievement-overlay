@@ -85,7 +85,8 @@ public sealed partial class DiagnosticReportWindow : Window
             new() { Title = "App config", Optional = true, Keys = new[] { "config" }, Label = Label1, Chip = Chip1, Row = Row1 },
             new() { Title = "Log", Optional = true, Keys = new[] { "log" }, Label = Label2, Chip = Chip2, Row = Row2 },
             new() { Title = "Achievement schema", Optional = true, Keys = new[] { "schema" }, Label = Label3, Chip = Chip3, Row = Row3 },
-            new() { Title = "Save file", Optional = true, Keys = new[] { "unlockFile" }, Label = Label4, Chip = Chip4, Row = Row4 }
+            new() { Title = "Stats", Optional = true, Keys = new[] { "stats" }, Label = Label4, Chip = Chip4, Row = Row4 },
+            new() { Title = "Save file", Optional = true, Keys = new[] { "unlockFile" }, Label = Label5, Chip = Chip5, Row = Row5 }
         };
 
         foreach (var section in _sections)
@@ -153,7 +154,8 @@ public sealed partial class DiagnosticReportWindow : Window
         Config = _sections[1].Included,
         Log = _sections[2].Included,
         Schema = _sections[3].Included,
-        Unlock = _sections[4].Included
+        Stats = _sections[4].Included,
+        Unlock = _sections[5].Included
     };
 
     private void Rebuild()
@@ -260,6 +262,9 @@ public sealed partial class DiagnosticReportWindow : Window
             case "Achievement schema":
                 var achievements = node["content"]?.AsArray().Count ?? 0;
                 return $"The game's {achievements} achievement definitions, where its names, text and icons come from.";
+            case "Stats":
+                var stats = node["content"]?.AsArray().Count ?? 0;
+                return $"The game's {stats} stat definitions, which achievement progress is counted against.";
             case "Save file":
                 var entries = node["content"]?.AsObject().Count ?? 0;
                 return $"The emulator's record of what you have unlocked: {entries} entries.";

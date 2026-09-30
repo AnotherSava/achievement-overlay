@@ -92,7 +92,7 @@ The app sends nothing anywhere. It writes a file and you decide what happens to 
 - Your `config.json`, with any API key replaced by `xxxxxx`. Folder paths are included, because which folder a game was found in is often the answer, but they are written in the portable form (`%appdata%\GSE Saves`) so your Windows account name does not travel with them. A `config.json` that is not valid JSON is reported as the parser's error, which names the line, without any of the file's text.
 - The log for the last five runs of the app, narrowed to the game you picked. Lines about your other games are removed and counted, so reporting one game does not publish your library. A run that logged exactly what the run before it logged is listed by its start time alone, since restarts usually repeat the same startup lines. The file itself keeps more runs; five covers hitting a problem, restarting, and trying again. A log that is missing or could not be read is reported as such rather than as an empty one.
 - Every `steam_settings` folder found for that game, deepest first. The first is where achievement text and icons come from, and a game having more than one is worth knowing.
-- That game's `steam_settings/achievements.json` and its GSE Saves unlock file, or a note saying which was missing or unreadable.
+- That game's `steam_settings/achievements.json`, the `stats.json` beside it, and its GSE Saves unlock file, or a note saying which was missing or unreadable. The emulator counts achievement progress only against the stats `stats.json` defines.
 
 If a game is missing from the list, the app cannot see it at all. That is itself the diagnosis, and the sections above cover it.
 
