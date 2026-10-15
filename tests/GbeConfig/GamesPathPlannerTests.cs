@@ -9,7 +9,7 @@ public class GamesPathPlannerTests
     [Fact]
     public void PlanRootToAdd_GameUnderExistingRoot_ReturnsNull()
     {
-        var result = GamesPathPlanner.PlanRootToAdd(new[] { @"C:\Games" }, @"C:\Games\Frostpunk 2");
+        var result = GamesPathPlanner.PlanRootToAdd(new[] { @"C:\Games" }, @"C:\Games\Example Game");
         Assert.Null(result);
     }
 
@@ -67,7 +67,7 @@ public class GamesPathPlannerTests
     {
         // A drive root already ends in its separator ('D:\'). A prefix test that appends another one
         // matches no game on the drive, and each Add game there then writes 'D:\' into config again.
-        var result = GamesPathPlanner.PlanRootToAdd(new[] { @"D:\" }, @"D:\Persona 5 Royal");
+        var result = GamesPathPlanner.PlanRootToAdd(new[] { @"D:\" }, @"D:\Example Game");
         Assert.Null(result);
     }
 

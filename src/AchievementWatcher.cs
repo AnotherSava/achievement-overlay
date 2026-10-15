@@ -27,7 +27,7 @@ public sealed class NewAchievementEventArgs : EventArgs
 }
 
 /// <summary>
-/// Event data for a per-game folder observed under a GSE Saves path (e.g. GSE Saves/1601580/),
+/// Event data for a per-game folder observed under a GSE Saves path (e.g. GSE Saves/480/),
 /// signalling that an emulator ran for that appid.
 /// </summary>
 public sealed class GameFolderObservedEventArgs : EventArgs

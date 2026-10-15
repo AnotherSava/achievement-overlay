@@ -269,7 +269,7 @@ public sealed class AddGameForm : Form, IConfigProgress
         _appIdPage = MakePage(
             "Steam AppID",
             "This game's AppID couldn't be detected automatically. Every Steam game has a unique numeric ID — for example, "
-            + "1601580 is Frostpunk 2. You can read it from the game's Steam store URL (the number in "
+            + "620 is Portal 2. You can read it from the game's Steam store URL (the number in "
             + "store.steampowered.com/app/<id>/) or from SteamDB.",
             ("Look up a game on SteamDB", "https://steamdb.info/"),
             g =>

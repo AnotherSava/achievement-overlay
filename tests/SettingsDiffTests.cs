@@ -117,7 +117,7 @@ public class SettingsDiffTests
     {
         // App-managed state: a save must not be able to drop or resurrect a setup confirmation.
         var current = Sample();
-        current.TrackingConfigured = new Dictionary<string, long> { ["1601580"] = 1 };
+        current.TrackingConfigured = new Dictionary<string, long> { ["1000004"] = 1 };
         var edited = Sample();
         edited.TrackingConfigured = null;
 

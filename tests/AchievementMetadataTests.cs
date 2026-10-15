@@ -123,9 +123,9 @@ public sealed class AchievementMetadataTests : IDisposable
     }
 
     [Fact]
-    public void ParseDefinitions_AphelionStyleStringQuotedHidden_DoesNotThrow()
+    public void ParseDefinitions_StringQuotedHidden_DoesNotThrow()
     {
-        // Aphelion ships achievements.json with `"hidden": "1"` (string) instead of integer.
+        // Some games ship achievements.json with `"hidden": "1"` (string) instead of integer.
         // We don't consume the field, but earlier versions declared it as int and threw on parse.
         var json = """
         [
@@ -204,7 +204,7 @@ public sealed class AchievementMetadataTests : IDisposable
     [Fact]
     public void CollectLanguages_ExcludesSteamLocalizationToken()
     {
-        // Real schemas (e.g. Red Dead Redemption) carry Steam's token beside the languages. Offering
+        // Real schemas carry Steam's token beside the languages. Offering
         // it as a choice would put "NEW_ACHIEVEMENT_1_0_NAME" on screen as the achievement's name.
         var json = """[{"name": "A", "displayName": {"token": "NEW_ACHIEVEMENT_1_0_NAME", "english": "One"}}]""";
 
@@ -458,7 +458,7 @@ public sealed class AchievementMetadataTests : IDisposable
     [Fact]
     public void ResolveIconPath_BareFilename_FallsBackToAchievementImagesDir()
     {
-        // Configs from other tools (generate_emu_config, Aphelion) store a bare filename
+        // Configs from other tools (generate_emu_config and others) store a bare filename
         // with no subfolder. GBE resolves these against achievement_images/ — so must we.
         var imgDir = Path.Combine(_tempDir, "achievement_images");
         Directory.CreateDirectory(imgDir);

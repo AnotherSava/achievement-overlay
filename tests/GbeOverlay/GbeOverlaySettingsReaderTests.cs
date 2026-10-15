@@ -195,7 +195,7 @@ public sealed class GbeOverlaySettingsReaderTests : IDisposable
     [Fact]
     public void Read_KeyOnlyInTheSecondFolder_IsAdopted()
     {
-        // The Coffin of Andy and Leyley shape: the folder the emulator reads carries only the stub,
+        // A repack's shape: the folder the emulator reads carries only the stub,
         // and the decorated copy beside it is the sole record of what the user wanted.
         WriteIni("configs.overlay.ini", "[overlay::general]\nenable_experimental_overlay=0\n");
         var second = CreateSecondSettingsDir();

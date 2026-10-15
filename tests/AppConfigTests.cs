@@ -138,7 +138,7 @@ public sealed class AppConfigTests : IDisposable
     public void CollapseEnvironmentVariables_Empty_IsUnchanged() => Assert.Equal("", AppConfig.CollapseEnvironmentVariables(""));
 
     [Fact]
-    public void CollapseEnvironmentVariables_UnrelatedPath_IsUnchanged() => Assert.Equal(@"D:\Games\Atomfall", AppConfig.CollapseEnvironmentVariables(@"D:\Games\Atomfall"));
+    public void CollapseEnvironmentVariables_UnrelatedPath_IsUnchanged() => Assert.Equal(@"D:\Games\Example Game", AppConfig.CollapseEnvironmentVariables(@"D:\Games\Example Game"));
 
     [Fact]
     public void CollapseEnvironmentVariables_SiblingWithSharedPrefix_IsUnchanged()
@@ -745,14 +745,14 @@ public sealed class AppConfigTests : IDisposable
     public void UpdateConfigValues_PreservesAppManagedState()
     {
         // trackingConfigured isn't editable in the settings dialog, so a save must leave it alone.
-        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5, trackingConfigured = new Dictionary<string, long> { ["1601580"] = 1755000000 } }));
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(new { gseSavesPaths = _gseSavesDir, gamesPaths = @"C:\Games", language = "english", soundEnabled = true, soundPath = "", displayDuration = 7, recentAchievementsShortcut = "Ctrl+Shift+H", recentAchievementsCount = 5, trackingConfigured = new Dictionary<string, long> { ["1000004"] = 1755000000 } }));
 
         var config = new AppConfig(_settingsPath);
         config.UpdateConfigValues(new Dictionary<string, object?> { ["Language"] = "french" }, _settingsPath);
 
         var tracking = config.GetCurrent().TrackingConfigured;
         Assert.NotNull(tracking);
-        Assert.Equal(1755000000, tracking!["1601580"]);
+        Assert.Equal(1755000000, tracking!["1000004"]);
     }
 
     [Fact]

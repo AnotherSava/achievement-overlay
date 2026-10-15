@@ -16,7 +16,7 @@
 
 ### What works
 
-- `Gobot1234/steam.py` (PyPI name **`steamio`**, async/`asyncio`) successfully authenticates and reaches the CM (verified 2026-06-18 against AppID 1601580 Frostpunk 2 — login + `fetch_app` + `app.achievements()` all working). Caveat: requires `aiohttp<3.14` (PR #621 in that repo) and has a small bug in `FetchedAppMovie.__init__` that monkey-patches around (`movie["mp4"]["max"]` assumes mp4 exists).
+- `Gobot1234/steam.py` (PyPI name **`steamio`**, async/`asyncio`) successfully authenticates and reaches the CM (verified 2026-06-18 against an installed game's AppID — login + `fetch_app` + `app.achievements()` all working). Caveat: requires `aiohttp<3.14` (PR #621 in that repo) and has a small bug in `FetchedAppMovie.__init__` that monkey-patches around (`movie["mp4"]["max"]` assumes mp4 exists).
 - For the **achievement-tracking use case** specifically, none of the CM machinery is actually needed. Everything required is reachable over plain HTTPS. That's the whole reason the manual fallback in `~/.claude/skills/track-achievements/SKILL.md` Appendix works.
 
 ## Scope
@@ -188,7 +188,7 @@ The skill's `fetch_achievements.py` can stay as a Python reference implementatio
 ## Validation
 
 For each implemented step, sanity-check against a real game:
-- **Frostpunk 2** (AppID 1601580, RUNE crack, ~80 achievements) — primary test case, all the edge cases hit it.
+- **A local game with about 80 achievements** (details in the encrypted test-bed memory) — primary test case, all the edge cases hit it.
 - **A simple AAA without Denuvo** for the no-crack happy path.
 - **A UE5 game with deeply nested `steam_api64.dll`** (e.g. anything under `Engine/Binaries/ThirdParty/Steamworks/Steamv157/Win64/`) to exercise the DLL locator.
 - **A game with hidden achievements** (most modern releases) to exercise the SteamDB scrape + patch.

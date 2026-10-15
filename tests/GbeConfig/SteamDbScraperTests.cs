@@ -151,7 +151,7 @@ public class SteamDbScraperTests
         var payload = JsonSerializer.Serialize(new
         {
             success = true,
-            data = new { markdown = "# ELDEN RING\n\n## Achievements\n\nLoading…\n\n## Builds\n\nLoading…" }
+            data = new { markdown = "# EXAMPLE GAME\n\n## Achievements\n\nLoading…\n\n## Builds\n\nLoading…" }
         });
         var result = SteamDbScraper.Interpret(200, payload, Url);
 

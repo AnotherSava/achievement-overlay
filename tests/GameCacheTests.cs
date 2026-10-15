@@ -323,22 +323,22 @@ public sealed class GameCacheTests : IDisposable
     [Fact]
     public void ScanAll_DeeplyNestedAppId_GameNameIsFirstLevelSubfolder()
     {
-        // Mirrors the Aphelion case: steam_appid.txt is buried deep under the game root,
+        // Mirrors a UE5 game's layout: steam_appid.txt is buried deep under the game root,
         // but GameName should be the first-level folder under the configured games path.
         var achievementsJson = """[{"name": "ACH01", "displayName": "Test"}]""";
         var gamesPath = Path.Combine(_tempDir, "games");
-        var deepDir = Path.Combine(gamesPath, "Aphelion", "Aphelion", "Engine", "Binaries", "ThirdParty", "Steamworks", "Steamv157", "Win64");
+        var deepDir = Path.Combine(gamesPath, "SampleQuest", "SampleQuest", "Engine", "Binaries", "ThirdParty", "Steamworks", "Steamv157", "Win64");
         var settingsDir = Path.Combine(deepDir, "steam_settings");
         Directory.CreateDirectory(settingsDir);
-        File.WriteAllText(Path.Combine(settingsDir, "steam_appid.txt"), "1966410");
+        File.WriteAllText(Path.Combine(settingsDir, "steam_appid.txt"), "1000001");
         File.WriteAllText(Path.Combine(settingsDir, "achievements.json"), achievementsJson);
 
         var cache = new GameCache(new[] { gamesPath });
         cache.ScanAll();
 
-        var info = cache.Lookup("1966410");
+        var info = cache.Lookup("1000001");
         Assert.NotNull(info);
-        Assert.Equal("Aphelion", info!.GameName);
+        Assert.Equal("SampleQuest", info!.GameName);
     }
 
     // --- Overlapping game paths ---
@@ -350,58 +350,58 @@ public sealed class GameCacheTests : IDisposable
     {
         // The deepest configured root names the game, whichever order the two are listed in; the outer
         // one, which is the one walked, would name it "games".
-        CreateSettingsDir("1966410", "Aphelion", "Engine", "Win64");
+        CreateSettingsDir("1000001", "SampleQuest", "Engine", "Win64");
         var outer = _tempDir;
         var inner = Path.Combine(_tempDir, "games");
 
         var cache = new GameCache(innerFirst ? new[] { inner, outer } : new[] { outer, inner });
         cache.ScanAll();
 
-        Assert.Equal("Aphelion", cache.LookupCached("1966410")?.GameName);
+        Assert.Equal("SampleQuest", cache.LookupCached("1000001")?.GameName);
     }
 
     [Fact]
     public void ScanAll_OverlappingRoots_WalkEachFolderOnce()
     {
-        var settings = CreateSettingsDir("1966410", "Aphelion");
+        var settings = CreateSettingsDir("1000001", "SampleQuest");
         var games = Path.Combine(_tempDir, "games");
         var cache = new GameCache(new[] { games, _tempDir, games + @"\", games.ToUpperInvariant() });
 
         AppLog.While(cache.ScanAll);
 
         var lines = LogLines();
-        Assert.Single(lines, line => line.Contains("Cached: appid=1966410", StringComparison.Ordinal));
+        Assert.Single(lines, line => line.Contains("Cached: appid=1000001", StringComparison.Ordinal));
         // One line per entry left unwalked, naming the entry that covers it, so a report shows why.
         var covered = lines.Where(line => line.Contains("is covered by", StringComparison.Ordinal)).ToList();
         Assert.Equal(3, covered.Count);
         Assert.All(covered, line => Assert.Contains($"covered by '{_tempDir}'", line, StringComparison.Ordinal));
-        Assert.Equal(Path.Combine(settings, "achievements.json"), cache.LookupCached("1966410")?.MetadataPath);
+        Assert.Equal(Path.Combine(settings, "achievements.json"), cache.LookupCached("1000001")?.MetadataPath);
     }
 
     [Fact]
     public void ScanAll_GameAtAConfiguredRoot_IsNamedAfterThatFolder()
     {
         // The root itself leaves no folder below it to take a name from.
-        CreateSettingsDir("1966410", "Aphelion");
-        var game = Path.Combine(_tempDir, "games", "Aphelion");
+        CreateSettingsDir("1000001", "SampleQuest");
+        var game = Path.Combine(_tempDir, "games", "SampleQuest");
 
         var cache = new GameCache(new[] { game });
         cache.ScanAll();
 
-        Assert.Equal("Aphelion", cache.LookupCached("1966410")?.GameName);
+        Assert.Equal("SampleQuest", cache.LookupCached("1000001")?.GameName);
     }
 
     [Fact]
     public void ScanAll_RootThatIsTheGamesOwnSettingsFolder_IsNamedAfterTheGameFolder()
     {
         // The game is the folder above that root, so no configured root holds it.
-        var settings = CreateSettingsDir("1966410", "Aphelion");
+        var settings = CreateSettingsDir("1000001", "SampleQuest");
 
         var cache = new GameCache(new[] { settings });
         cache.ScanAll();
 
-        var info = cache.LookupCached("1966410");
-        Assert.Equal("Aphelion", info?.GameName);
+        var info = cache.LookupCached("1000001");
+        Assert.Equal("SampleQuest", info?.GameName);
         Assert.Equal(new[] { settings }, info?.SettingsDirs);
     }
 
@@ -414,8 +414,8 @@ public sealed class GameCacheTests : IDisposable
         AppLog.While(new GameCache(gamesPaths).ScanAll);
 
         var covered = LogLines().Single(line => line.Contains("is covered by", StringComparison.Ordinal));
-        var inputs = DiagnosticReport.Collect("1966410", null, null, Array.Empty<string>(), gamesPaths);
-        Assert.Single(DiagnosticReport.KeepLinesForGame(new[] { covered }, "1966410", inputs.ConfiguredRoots, inputs.GameFolders));
+        var inputs = DiagnosticReport.Collect("1000001", null, null, Array.Empty<string>(), gamesPaths);
+        Assert.Single(DiagnosticReport.KeepLinesForGame(new[] { covered }, "1000001", inputs.ConfiguredRoots, inputs.GameFolders));
     }
 
     [Fact]
@@ -491,13 +491,13 @@ public sealed class GameCacheTests : IDisposable
     public void ScanAll_GameWithTwoSettingsFolders_KeepsBothDeepestFirst()
     {
         // A repack's decorated copy at the game root, plus the one the emulator actually reads.
-        var root = CreateSettingsDir("2378900", "Coffin");
-        var nested = CreateSettingsDir("2378900", "Coffin", "Coffin", "www", "greenworks", "lib");
+        var root = CreateSettingsDir("1000002", "GameB");
+        var nested = CreateSettingsDir("1000002", "GameB", "GameB", "www", "greenworks", "lib");
 
         var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
         cache.ScanAll();
 
-        var info = cache.LookupCached("2378900")!;
+        var info = cache.LookupCached("1000002")!;
         Assert.Equal(new[] { nested, root }, info.SettingsDirs);
         // The deepest is the schema source, so icons and achievement text are unaffected.
         Assert.Equal(Path.Combine(nested, "achievements.json"), info.MetadataPath);
@@ -537,14 +537,14 @@ public sealed class GameCacheTests : IDisposable
     [Fact]
     public void ScanAll_AppIdFileAtTheGameRootAndInSettings_IsOneFolder()
     {
-        // The Red Dead shape: both files name the same steam_settings folder.
-        var settings = CreateSettingsDir("2668510", "RDR");
-        File.WriteAllText(Path.Combine(_tempDir, "games", "RDR", "steam_appid.txt"), "2668510");
+        // A shape seen in a real install: both files name the same steam_settings folder.
+        var settings = CreateSettingsDir("1000003", "GameC");
+        File.WriteAllText(Path.Combine(_tempDir, "games", "GameC", "steam_appid.txt"), "1000003");
 
         var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
         cache.ScanAll();
 
-        Assert.Equal(new[] { settings }, cache.LookupCached("2668510")!.SettingsDirs);
+        Assert.Equal(new[] { settings }, cache.LookupCached("1000003")!.SettingsDirs);
     }
 
     [Theory]
@@ -594,14 +594,14 @@ public sealed class GameCacheTests : IDisposable
         // The claiming root is reached by the outer walk and spelled differently in config: its copies
         // still join, and the game keeps the folder's spelling on disk.
         var games = Path.Combine(_tempDir, "games");
-        var top = CreateSettingsDir("480", "Aphelion");
-        var nested = CreateSettingsDir("480", "Aphelion", "bin", "coldclient");
+        var top = CreateSettingsDir("480", "SampleQuest");
+        var nested = CreateSettingsDir("480", "SampleQuest", "bin", "coldclient");
 
-        var cache = new GameCache(new[] { games, Path.Combine(games, "APHELION") + @"\" });
+        var cache = new GameCache(new[] { games, Path.Combine(games, "SAMPLEQUEST") + @"\" });
         cache.ScanAll();
 
         var info = cache.LookupCached("480")!;
-        Assert.Equal("Aphelion", info.GameName);
+        Assert.Equal("SampleQuest", info.GameName);
         Assert.Equal(new[] { nested, top }, info.SettingsDirs);
     }
 
@@ -624,16 +624,16 @@ public sealed class GameCacheTests : IDisposable
     public void FindGames_CountsEachGameOnceAndReportsWhatItSkipped()
     {
         // Five steam_appid.txt files, two games: what a count of the files alone got wrong in Settings.
-        CreateSettingsDir("2378900", "Coffin");
-        CreateSettingsDir("2378900", "Coffin", "Coffin", "www", "greenworks", "lib");
-        CreateSettingsDir("2668510", "RDR");
-        File.WriteAllText(Path.Combine(_tempDir, "games", "RDR", "steam_appid.txt"), "2668510");
+        CreateSettingsDir("1000002", "GameB");
+        CreateSettingsDir("1000002", "GameB", "GameB", "www", "greenworks", "lib");
+        CreateSettingsDir("1000003", "GameC");
+        File.WriteAllText(Path.Combine(_tempDir, "games", "GameC", "steam_appid.txt"), "1000003");
         CreateGameDir("NoSchema", "11111");
         var root = FolderPath.Parse(Path.Combine(_tempDir, "games"));
 
         var (games, skipped) = GameCache.FindGames(root.ToString(), new[] { root });
 
-        Assert.Equal(new[] { "Coffin", "RDR" }, games.Select(game => game.GameName).Order(StringComparer.Ordinal));
+        Assert.Equal(new[] { "GameB", "GameC" }, games.Select(game => game.GameName).Order(StringComparer.Ordinal));
         Assert.Contains("appid=11111", Assert.Single(skipped), StringComparison.Ordinal);
     }
 

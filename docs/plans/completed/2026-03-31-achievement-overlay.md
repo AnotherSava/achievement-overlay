@@ -181,7 +181,7 @@ This mirrors url-cleaner's flat `src/` layout (no nested folders for a small app
 
 ### Task 7: Verify acceptance criteria
 
-- [x] Manual test with RDR (AppID 2668510): launch game with `-useSteam`, unlock an achievement, verify overlay appears (skipped - not automatable, requires Windows GUI + GBE game)
+- [x] Manual test with a GBE-configured game: launch the game, unlock an achievement, verify overlay appears (skipped - not automatable, requires Windows GUI + GBE game)
 - [x] Manual test: unlock two achievements quickly, verify they queue and show sequentially (skipped - not automatable, requires Windows GUI + GBE game)
 - [x] Manual test: tray menu — Sound Enabled toggles and persists, Pause suppresses notifications, Start with Windows adds/removes registry entry, Open Config Location opens Explorer (skipped - not automatable, requires Windows GUI)
 - [x] Manual test: edit `settings.json` while running, verify hot-reload picks up changes (skipped - not automatable, requires Windows GUI)

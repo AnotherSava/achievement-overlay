@@ -386,9 +386,9 @@ own, since every 2026-08-18 objection had been about a per-game key with no app-
 was decided against on evidence, surveyed 2026-08-30 across the ten installs on the development
 machine.
 
-**The survey.** Eleven `configs.overlay.ini` files (Atomfall and Coffin each have two `steam_settings`
-folders). A `PosAchievement` appears in three — NieR: Automata, Persona 5 Royal, Red Dead Redemption —
-and **all three say `bot_right`**. Colour keys appear in exactly one, the Coffin repack's game-root
+**The survey.** Eleven `configs.overlay.ini` files (two of the games each have two `steam_settings`
+folders). A `PosAchievement` appears in three of them
+and **all three say `bot_right`**. Colour keys appear in exactly one, one repack's game-root
 copy, which carries 24 of them and no position, so on this machine the two sets never co-occur.
 The overlay is enabled in only two of the eleven, and not in the colour-bearing one. Four files are
 the two-line stub this app's own wizard writes. Neither `PosInvitation` nor `PosChatMsg` appears, and

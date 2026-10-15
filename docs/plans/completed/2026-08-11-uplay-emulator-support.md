@@ -322,8 +322,8 @@ an `out bool`; the discriminator is consumed immediately and never reaches `Reso
 
 **The guard this amends.** Step 4 above and the 2026-08-13 follow-up both say the name match is the
 appid-collision guard. For digits-only names that was already false, and the machine this was written
-on proves it: an installed game with appid 2624870 names its achievements `1`..`29` with icons, so a
-colliding save folder already answers a bare `1` today under exact matching. A second, appid 801800,
+on proves it: one installed game names its achievements `1`..`29` with icons, so a
+colliding save folder already answers a bare `1` today under exact matching. A second installed game
 names its `01`..`54` — 0 matchable ids before this change, 54 after. So the change widens an existing
 hole rather than opening one, and the non-leading precedence above is what keeps it costing an icon
 instead of the text. The guard is untouched for every other name shape, which is why the rule stops at

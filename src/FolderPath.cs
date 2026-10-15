@@ -55,7 +55,7 @@ public sealed class FolderPath
 
     /// <summary>
     /// The name this path goes by under <paramref name="ancestor"/>: its first folder name below it, so
-    /// <c>C:\Games\Aphelion\Engine\Win64</c> under <c>C:\Games</c> is <c>Aphelion</c>. A path that is
+    /// <c>C:\Games\SampleQuest\Engine\Win64</c> under <c>C:\Games</c> is <c>SampleQuest</c>. A path that is
     /// <paramref name="ancestor"/> itself goes by that folder's own name, or by its root when it has none.
     /// </summary>
     /// <exception cref="ArgumentException">This path is not inside <paramref name="ancestor"/>.</exception>

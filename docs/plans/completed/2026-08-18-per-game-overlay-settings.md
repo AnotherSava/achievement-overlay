@@ -39,13 +39,13 @@ A survey of the four configured games on the development machine:
 
 | Game | `configs.overlay.ini` |
 |---|---|
-| The Coffin of Andy and Leyley | Repack theme: 20 colour keys, rounding, margins, `Font_Override=poppins.ttf`, `Font_Size=22.0`, plus `fonts/poppins.ttf` and a 153 KB `sounds/overlay_achievement_notification.wav` |
-| Red Dead Redemption | `PosAchievement=bot_right` |
-| Persona 5 Royal | `PosAchievement=bot_right`, overlay enabled |
-| Elden Ring | `enable_experimental_overlay=0` only |
+| Game A | Repack theme: 20 colour keys, rounding, margins, `Font_Override=poppins.ttf`, `Font_Size=22.0`, plus `fonts/poppins.ttf` and a 153 KB `sounds/overlay_achievement_notification.wav` |
+| Game B | `PosAchievement=bot_right` |
+| Game C | `PosAchievement=bot_right`, overlay enabled |
+| Game D | `enable_experimental_overlay=0` only |
 
 Two conclusions follow, and they set the priorities below. A **sound file and a font file are what
-actually exist on disk**; duration and position are theoretical. And the Coffin theme sits behind
+actually exist on disk**; duration and position are theoretical. And Game A's theme sits behind
 `enable_experimental_overlay=0`, so it has never rendered once — which is the clearest possible
 statement of what these files are.
 
@@ -99,7 +99,7 @@ its own design size**. At the default 15% on a 1920 px display that is 288 px ag
 width — a scale of 0.894, giving a 12.5 px title and a 10.7 px description. The floor rises to 1.0, so
 the popup is never drawn smaller than it was designed.
 
-Two independent voices support this: the reporter, and the Coffin repack author, who raised
+Two independent voices support this: the reporter, and the Game A repack author, who raised
 `Font_Size` from GBE's 16 to 22.
 
 The consequences are accepted deliberately:
@@ -248,11 +248,11 @@ stale it.
 
 ## Follow-up: a game's folders are plural, and some are hidden (2026-08-19)
 
-Testing the finished feature against the one real install that ships a font and a sound — The Coffin
-of Andy and Leyley — showed it having no effect, from two separate defects rather than from the
+Testing the finished feature against the one real install that ships a font and a sound — Game A —
+showed it having no effect, from two separate defects rather than from the
 design.
 
-**Hidden folders were invisible.** `C:\Games\The Coffin of Andy and Leyley\steam_settings` carries the
+**Hidden folders were invisible.** `C:\Games\Game A\steam_settings` carries the
 `Hidden` attribute, and `EnumerationOptions.AttributesToSkip` defaults to `Hidden | System`, so the
 scan never descended into it. The tell was in the log: one `Cached` line for the appid and no
 `Skipped` or `Error processing` line — never enumerated, rather than enumerated and rejected. Repacks
@@ -262,8 +262,8 @@ shares `AppUtilities.RecursiveScan`, which skips System alone — enough to stay
 and `System Volume Information`, which are hidden *and* system.
 
 **One game, several `steam_settings` folders.** Of the nine games on the development machine, three
-have more than one: Coffin (root + `www/greenworks/lib/`), Atomfall (root + `bin/coldclient/`), and
-Red Dead (two `steam_appid.txt` files naming one folder). The old code did `_cache[appId] = info` and
+have more than one: Game A (root + `www/greenworks/lib/`), Game E (root + `bin/coldclient/`), and
+Game B (two `steam_appid.txt` files naming one folder). The old code did `_cache[appId] = info` and
 let the last enumerated win, silently and in filesystem order. `GameInfo.SettingsDirs` now holds all
 of them, deepest first, grouped by appid **and** first-level game folder so an appid collision between
 two installs cannot pool their settings. The reader folds them into a single key space, extending

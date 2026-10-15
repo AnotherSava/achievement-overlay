@@ -9,10 +9,10 @@ public class FolderPathTests
     [Fact]
     public void Parse_ForwardSlashes_SeparateNames()
     {
-        var folder = FolderPath.Parse("D:/Games/Aphelion");
+        var folder = FolderPath.Parse("D:/Games/SampleQuest");
 
-        Assert.Equal(new[] { "Games", "Aphelion" }, folder.Names);
-        Assert.Equal(@"D:\Games\Aphelion", folder.ToString());
+        Assert.Equal(new[] { "Games", "SampleQuest" }, folder.Names);
+        Assert.Equal(@"D:\Games\SampleQuest", folder.ToString());
     }
 
     [Theory]
@@ -31,7 +31,7 @@ public class FolderPathTests
     }
 
     [Fact]
-    public void Parse_KeepsCaseAsWritten() => Assert.Equal(@"d:\GAMES\Aphelion", FolderPath.Parse(@"d:\GAMES\Aphelion").ToString());
+    public void Parse_KeepsCaseAsWritten() => Assert.Equal(@"d:\GAMES\SampleQuest", FolderPath.Parse(@"d:\GAMES\SampleQuest").ToString());
 
     [Fact]
     public void Parse_DotDot_IsResolved() => Assert.Equal(new[] { "Other" }, FolderPath.Parse(@"D:\Games\..\Other").Names);
@@ -58,7 +58,7 @@ public class FolderPathTests
     public void Contains_TheFolderItself_InAnySpelling(string spelling) => Assert.True(FolderPath.Parse(@"C:\Games").Contains(FolderPath.Parse(spelling)));
 
     [Fact]
-    public void Contains_DeepFolder_IgnoringCase() => Assert.True(FolderPath.Parse(@"C:\GAMES").Contains(FolderPath.Parse(@"c:\games\Aphelion\Engine\Win64")));
+    public void Contains_DeepFolder_IgnoringCase() => Assert.True(FolderPath.Parse(@"C:\GAMES").Contains(FolderPath.Parse(@"c:\games\SampleQuest\Engine\Win64")));
 
     [Fact]
     public void Contains_SiblingSharingTheName_IsNotInside() => Assert.False(FolderPath.Parse(@"C:\Games").Contains(FolderPath.Parse(@"C:\GamesOther")));
@@ -72,10 +72,10 @@ public class FolderPathTests
     // --- FirstNameBelow ---
 
     [Fact]
-    public void FirstNameBelow_DeepFolder_IsItsFirstFolderBelow() => Assert.Equal("Aphelion", FolderPath.Parse(@"C:\Games\Aphelion\Engine\Win64").FirstNameBelow(FolderPath.Parse(@"C:\Games")));
+    public void FirstNameBelow_DeepFolder_IsItsFirstFolderBelow() => Assert.Equal("SampleQuest", FolderPath.Parse(@"C:\Games\SampleQuest\Engine\Win64").FirstNameBelow(FolderPath.Parse(@"C:\Games")));
 
     [Fact]
-    public void FirstNameBelow_TheFolderItself_IsItsOwnName() => Assert.Equal("Aphelion", FolderPath.Parse(@"C:\Games\Aphelion").FirstNameBelow(FolderPath.Parse(@"c:\games\aphelion\")));
+    public void FirstNameBelow_TheFolderItself_IsItsOwnName() => Assert.Equal("SampleQuest", FolderPath.Parse(@"C:\Games\SampleQuest").FirstNameBelow(FolderPath.Parse(@"c:\games\samplequest\")));
 
     [Fact]
     public void FirstNameBelow_DriveRootItself_IsTheRoot() => Assert.Equal(@"D:\", FolderPath.Parse(@"D:\").FirstNameBelow(FolderPath.Parse(@"D:\")));

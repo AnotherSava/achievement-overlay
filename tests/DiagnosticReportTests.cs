@@ -180,13 +180,13 @@ public class DiagnosticReportTests
             Version = "1.0.0",
             GeneratedAt = "2026-09-02T22:35:00+03:00",
             AppId = "1349230",
-            GameName = "Atomfall",
-            SettingsDirs = new[] { @"C:\Games\Atomfall\bin\coldclient\steam_settings", @"C:\Games\Atomfall\steam_settings" }
+            GameName = "ExampleGame",
+            SettingsDirs = new[] { @"C:\Games\ExampleGame\bin\coldclient\steam_settings", @"C:\Games\ExampleGame\steam_settings" }
         };
 
         var dirs = Compose(inputs)["game"]!["settingsDirs"]!.AsArray();
         Assert.Equal(2, dirs.Count);
-        Assert.Equal(@"C:\Games\Atomfall\bin\coldclient\steam_settings", (string?)dirs[0]);
+        Assert.Equal(@"C:\Games\ExampleGame\bin\coldclient\steam_settings", (string?)dirs[0]);
     }
 
     [Fact]
@@ -395,16 +395,16 @@ public class DiagnosticReportTests
 
     [Fact]
     public void KeepLinesForGame_DropsAnotherGamesLine() =>
-        Assert.Empty(Keep(@"  Cached: appid=1687950, game=Persona 5 Royal, path='C:\Games\Persona 5 Royal\steam_settings\achievements.json'"));
+        Assert.Empty(Keep(@"  Cached: appid=2000001, game=Example Game, path='C:\Games\Example Game\steam_settings\achievements.json'"));
 
     [Fact]
     public void KeepLinesForGame_DropsAPathOnlyLineWithNoAppIdAtAll()
     {
         // The scanner's 'Error processing' and the watcher's file errors name a folder and no appid.
-        // An appid-only rule would publish 'C:\Games\Persona 5 Royal\_crack' from a report about
+        // An appid-only rule would publish 'C:\Games\Example Game\_extra' from a report about
         // a different game entirely.
-        Assert.Empty(Keep(@"  Error processing 'C:\Games\Persona 5 Royal\_crack\steam_appid.txt': Access denied"));
-        Assert.Empty(Keep(@"  Skipped: appid=1687950 at 'C:\Games\Persona 5 Royal\_crack' (no 'achievements.json')"));
+        Assert.Empty(Keep(@"  Error processing 'C:\Games\Example Game\_extra\steam_appid.txt': Access denied"));
+        Assert.Empty(Keep(@"  Skipped: appid=2000001 at 'C:\Games\Example Game\_extra' (no 'achievements.json')"));
     }
 
     [Fact]
@@ -426,8 +426,8 @@ public class DiagnosticReportTests
     public void KeepLinesForGame_DriveRoot_MatchesOnlyAsItself()
     {
         // Trimming keeps a drive root's separator, so what follows 'D:\' is a folder name, not prose.
-        Assert.Empty(DiagnosticReport.KeepLinesForGame(new[] { @"  Error processing 'D:\Persona 5 Royal\steam_appid.txt': Access denied" }, "812140", new[] { @"D:\" }, OursOnly));
-        Assert.Empty(DiagnosticReport.KeepLinesForGame(new[] { @"  Error processing 'D:/Persona 5 Royal\steam_appid.txt': Access denied" }, "812140", new[] { "D:/" }, OursOnly));
+        Assert.Empty(DiagnosticReport.KeepLinesForGame(new[] { @"  Error processing 'D:\Example Game\steam_appid.txt': Access denied" }, "812140", new[] { @"D:\" }, OursOnly));
+        Assert.Empty(DiagnosticReport.KeepLinesForGame(new[] { @"  Error processing 'D:/Example Game\steam_appid.txt': Access denied" }, "812140", new[] { "D:/" }, OursOnly));
         Assert.Single(DiagnosticReport.KeepLinesForGame(new[] { @"Config: gamesPaths='D:\', language=russian" }, "812140", new[] { @"D:\" }, OursOnly));
     }
 
@@ -443,7 +443,7 @@ public class DiagnosticReportTests
     public void KeepLinesForGame_RecognisesTheWizardsColonForm()
     {
         // The Add game wizard logs "AppID: <id>" through its progress log.
-        Assert.Empty(Keep("[add-game] Info: AppID: 1687950"));
+        Assert.Empty(Keep("[add-game] Info: AppID: 2000001"));
         Assert.Single(Keep("[add-game] Info: AppID: 812140"));
     }
 
@@ -481,9 +481,9 @@ public class DiagnosticReportTests
     public void KeepLinesForGame_ForwardSlashPath_DropsAnotherGamesPathOnlyLine()
     {
         // Windows reads '/' as a separator, so a hand-edited config can carry one, and what the app builds
-        // on it appends backslashes: the scan of a 'C:/Games' root reports 'C:/Games\Persona 5 Royal'.
-        Assert.Empty(Keep(@"  Error processing 'C:/Games/Persona 5 Royal/_crack/steam_appid.txt': Access denied"));
-        Assert.Empty(Keep(@"  Error processing 'C:/Games\Persona 5 Royal\_crack\steam_appid.txt': Access denied"));
+        // on it appends backslashes: the scan of a 'C:/Games' root reports 'C:/Games\Example Game'.
+        Assert.Empty(Keep(@"  Error processing 'C:/Games/Example Game/_extra/steam_appid.txt': Access denied"));
+        Assert.Empty(Keep(@"  Error processing 'C:/Games\Example Game\_extra\steam_appid.txt': Access denied"));
     }
 
     [Fact]
@@ -518,7 +518,7 @@ public class DiagnosticReportTests
     public void KeepLinesForGame_ForwardSlashConfig_DropsAnotherGamesLineInEitherSpelling()
     {
         Assert.Empty(KeepWithSlashConfig(@"  Watching for achievements in 'C:/Games\Some Other Game'"));
-        Assert.Empty(KeepWithSlashConfig(@"File locked, retry 1/3: 'C:/Users/Sam/AppData/Roaming/GSE Saves\1687950\achievements.json'"));
+        Assert.Empty(KeepWithSlashConfig(@"File locked, retry 1/3: 'C:/Users/Sam/AppData/Roaming/GSE Saves\2000001\achievements.json'"));
         Assert.Empty(KeepWithSlashConfig(@"  Watching for achievements in 'C:\Games\Some Other Game'"));
     }
 
@@ -537,14 +537,14 @@ public class DiagnosticReportTests
 
     [Fact]
     public void KeepLinesForGame_DropsALineNamingTwoGamesRatherThanKeepingItForTheHalfThatMatches() =>
-        Assert.Empty(Keep("Compared appid=812140 against appid=1687950"));
+        Assert.Empty(Keep("Compared appid=812140 against appid=2000001"));
 
     [Fact]
     public void KeepLinesForGame_DropsAnotherGamesSkippedNotificationButKeepsOurs()
     {
         // The line comes from the queue rather than being written out here, so what is filtered is
         // the spelling the app actually logs — another game's achievement name is the leak.
-        Assert.Empty(Keep(LoggedSkippedNotification("1687950")));
+        Assert.Empty(Keep(LoggedSkippedNotification("2000001")));
         Assert.Single(Keep(LoggedSkippedNotification("812140")));
     }
 
@@ -583,8 +583,8 @@ public class DiagnosticReportTests
     public void KeepLinesForGame_DropsAnotherGamesQueuedAndShowingLinesButKeepsOurs()
     {
         // Both lines name the achievement, so another game's are a leak even with no path in them.
-        Assert.Empty(Keep("[INFO] Queued notification for appid 1687950: ACH_ROYAL (queue size: 1)"));
-        Assert.Empty(Keep("[INFO] Showing notification for appid 1687950: ACH_ROYAL at (0,0 1920x1080)"));
+        Assert.Empty(Keep("[INFO] Queued notification for appid 2000001: ACH_OTHER (queue size: 1)"));
+        Assert.Empty(Keep("[INFO] Showing notification for appid 2000001: ACH_OTHER at (0,0 1920x1080)"));
         Assert.Single(Keep("[INFO] Queued notification for appid 812140: 001 (queue size: 1)"));
         Assert.Single(Keep("[INFO] Showing notification for appid 812140: 001 at (0,0 1920x1080)"));
     }
@@ -594,7 +594,7 @@ public class DiagnosticReportTests
     {
         var log = $"{Logger.SessionBannerPrefix} 1 =====\n"
                 + "[INFO] Starting game cache scan...\n"
-                + @"  Cached: appid=1687950, game=Other, path='C:\Games\Other\steam_settings\achievements.json'" + "\n"
+                + @"  Cached: appid=2000001, game=Other, path='C:\Games\Other\steam_settings\achievements.json'" + "\n"
                 + @"  Cached: appid=812140, game=Odyssey, path='C:\Games\Odyssey\steam_settings\achievements.json'" + "\n";
 
         var inputs = new DiagnosticReportInputs

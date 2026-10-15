@@ -22,7 +22,7 @@ public sealed class AppIdResolverTests : IDisposable
 
     [Theory]
     [InlineData("AppId=480", "480")]
-    [InlineData("steam_appid = 1601580", "1601580")]
+    [InlineData("steam_appid = 1000004", "1000004")]
     [InlineData("SteamAppId: 12345", "12345")]
     [InlineData("steamappid=99", "99")]
     [InlineData("steamappid=9", null)] // single digit not matched
@@ -32,19 +32,19 @@ public sealed class AppIdResolverTests : IDisposable
     [Fact]
     public void ParseAppIdFromStoreHtml_ExtractsFirstAppId()
     {
-        var html = """<a class="search_result_row" data-ds-appid="1601580" href="...">Frostpunk 2</a>""";
-        Assert.Equal("1601580", AppIdResolver.ParseAppIdFromStoreHtml(html));
+        var html = """<a class="search_result_row" data-ds-appid="1000004" href="...">Example Game</a>""";
+        Assert.Equal("1000004", AppIdResolver.ParseAppIdFromStoreHtml(html));
     }
 
     [Fact]
     public void ParseAppIdFromStoreHtml_NoMatch_ReturnsNull() => Assert.Null(AppIdResolver.ParseAppIdFromStoreHtml("<div>nothing</div>"));
 
     [Theory]
-    [InlineData(@"D:\Games\Aphelion")]
-    [InlineData(@"D:\Games\Aphelion\")]
-    [InlineData("D:/Games/Aphelion/")]
-    [InlineData(@"\\server\share\Aphelion")]
-    public void StoreSearchName_IsTheFoldersOwnName(string gameDir) => Assert.Equal("Aphelion", AppIdResolver.StoreSearchName(gameDir));
+    [InlineData(@"D:\Games\SampleQuest")]
+    [InlineData(@"D:\Games\SampleQuest\")]
+    [InlineData("D:/Games/SampleQuest/")]
+    [InlineData(@"\\server\share\SampleQuest")]
+    public void StoreSearchName_IsTheFoldersOwnName(string gameDir) => Assert.Equal("SampleQuest", AppIdResolver.StoreSearchName(gameDir));
 
     [Theory]
     [InlineData(@"D:\")]
@@ -57,9 +57,9 @@ public sealed class AppIdResolverTests : IDisposable
     {
         var nested = Path.Combine(_tempDir, "Engine", "Win64");
         Directory.CreateDirectory(nested);
-        File.WriteAllText(Path.Combine(nested, "steam_appid.txt"), "  1601580 \n");
+        File.WriteAllText(Path.Combine(nested, "steam_appid.txt"), "  1000004 \n");
 
-        Assert.Equal("1601580", AppIdResolver.FromAppIdTxt(_tempDir));
+        Assert.Equal("1000004", AppIdResolver.FromAppIdTxt(_tempDir));
     }
 
     [Fact]

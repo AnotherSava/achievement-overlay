@@ -293,8 +293,8 @@ public sealed class GameCache
     /// <summary>
     /// A game's first-level folder, which it is grouped by, and its name, which is that folder's: the
     /// first folder below the deepest configured root holding it. So with both <c>D:\</c> and
-    /// <c>D:\Games</c> configured, <c>D:\Games\Aphelion\...\Win64</c> is <c>D:\Games\Aphelion</c>,
-    /// "Aphelion", rather than <c>D:\Games</c>, "Games". A game sitting at a root is that folder, and so
+    /// <c>D:\Games</c> configured, <c>D:\Games\SampleQuest\...\Win64</c> is <c>D:\Games\SampleQuest</c>,
+    /// "SampleQuest", rather than <c>D:\Games</c>, "Games". A game sitting at a root is that folder, and so
     /// is a game no root holds: one found under a root that is its own <c>steam_settings</c> folder,
     /// which leaves the game the folder above it.
     /// </summary>

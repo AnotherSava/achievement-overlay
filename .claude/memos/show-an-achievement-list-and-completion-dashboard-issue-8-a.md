@@ -31,7 +31,7 @@ Checked against gbe_fork `dev` (`dll/steam_user_stats.cpp`, `dll/steam_user_stat
 - The `Steam_User_Stats` constructor loads the schema (`load_achievements_db`), then the GSE Saves file (`load_achievements`), then for every defined achievement runs `emplace("earned", false)` and `emplace("earned_time", 0)`. Achievements with a progress block also get `progress` and `max_progress` (issue #10's fields).
 - GBE's `save_achievements` writes the whole object. Its callers are unlock, clear, `IndicateAchievementProgress`, and a stats store that needs a disk write.
 - Consequences:
-  - The unlock file does not exist until the first save. A game folder can exist with no unlock file: appid 1687950 on this machine has one.
+  - The unlock file does not exist until the first save. A game folder can exist with no unlock file: one game on this machine has one.
   - Once written, the file lists **every** schema achievement, locked ones as `earned: false, earned_time: 0`.
   - GBE's `emplace` never removes, so a name dropped from the schema stays in the file. A schema change reaches the file only at the next save.
   - GBE running with no schema writes only the achievements the game touched. That is inferred from the code, not observed.
@@ -41,13 +41,13 @@ Measured on the maintainer's machine (one games root, GSE Saves at the default `
 
 | appid | Game | Unlock entries | Earned | Schema entries | Names | Hidden |
 |---|---|---|---|---|---|---|
-| 1245620 | Elden Ring | 42 | 10 | 42 | identical | 36 |
-| 1601580 | Frostpunk 2 | 79 | 13 | 79 | identical | 23 |
-| 1966410 | Aphelion | 30 | 27 | 30 | identical | 15 |
-| 2668510 | Red Dead Redemption | 51 | 17 | 51 | identical | 20 |
-| 524220 | Nier Automata | 47 | 27 | 47 | identical | 30 |
+| A | game A | 42 | 10 | 42 | identical | 36 |
+| B | game B | 79 | 13 | 79 | identical | 23 |
+| C | game C | 30 | 27 | 30 | identical | 15 |
+| D | game D | 51 | 17 | 51 | identical | 20 |
+| E | game E | 47 | 27 | 47 | identical | 30 |
 
-Three more games (2378900, 2624870, 801800) have a schema and no GSE Saves folder: configured, never run. All 11 local schemas matched Steam's own achievement count exactly (`IPlayerService/GetGameAchievements`, 0 missing and 0 extra). Whether third-party schemas are complete in general is UNMEASURED.
+Three more games have a schema and no GSE Saves folder: configured, never run. All 11 local schemas matched Steam's own achievement count exactly (`IPlayerService/GetGameAchievements`, 0 missing and 0 extra). Whether third-party schemas are complete in general is UNMEASURED.
 
 ### What self-describing writers write
 
@@ -55,8 +55,8 @@ The Goldberg Uplay R2 emulator (issue #5) writes the unlock file pre-populated: 
 
 ### What the schema carries that the app ignores
 
-- **Gray icons.** Every local schema carries a locked icon, under two spellings: `icongray` in 10 files, and `icon_gray` in Red Dead Redemption (hash-named files under `img/`). GBE reads both, `icon_gray` first with `icongray` as the "old format" fallback (`load_ach_icon`, `get_achievement_icon_name`). Every referenced gray file exists on disk (42/42, 51/51, 47/47, 30/30, 79/79). The wizard writes `icongray` (`AchievementSchemaWriter.SchemaEntry.IconGray`) and downloads `<name>_gray.jpg` (`IconDownloader`). The app's `AchievementDefinition` parses only `name`, `displayName`, `description` and `icon`, and `ResolveIconPath` resolves only `icon`.
-- **Hidden.** Every local schema carries `hidden`, as a string in 8 files and an int in 3 (Atomfall `bin/coldclient`, LiS Reunion `coldclient`, Red Dead Redemption). GBE normalises it to a string. The app's `AchievementDefinition` does not parse it. Self-describing unlock files carry no hidden flag.
+- **Gray icons.** Every local schema carries a locked icon, under two spellings: `icongray` in 10 files, and `icon_gray` in Game C (hash-named files under `img/`). GBE reads both, `icon_gray` first with `icongray` as the "old format" fallback (`load_ach_icon`, `get_achievement_icon_name`). Every referenced gray file exists on disk (42/42, 51/51, 47/47, 30/30, 79/79). The wizard writes `icongray` (`AchievementSchemaWriter.SchemaEntry.IconGray`) and downloads `<name>_gray.jpg` (`IconDownloader`). The app's `AchievementDefinition` parses only `name`, `displayName`, `description` and `icon`, and `ResolveIconPath` resolves only `icon`.
+- **Hidden.** Every local schema carries `hidden`, as a string in 8 files and an int in 3 (Game A `bin/coldclient`, Game B `coldclient`, Game C). GBE normalises it to a string. The app's `AchievementDefinition` does not parse it. Self-describing unlock files carry no hidden flag.
 - **No rarity and no progress.** No local schema has a percent, rarity or progress key.
 
 ### What the code already does
@@ -110,7 +110,7 @@ Row fields: API name, resolved display name and description, colour icon path, g
 
 ### Which steam_settings copy supplies the schema
 
-The cache's `GameInfo.MetadataPath` is the `achievements.json` in the deepest `steam_settings` folder only. Atomfall's deepest copy has 25 blank descriptions where the root copy has all 54 filled, so a list, which shows every description at once, puts that defect in front of the user for the whole game. The memo "Fold the achievement schema across all of a game's steam_settings folders" is the fix, folding across `GameInfo.SettingsDirs` with first-definition-wins as `GbeOverlaySettingsReader` does. It should ship before or with Part 1. It also decides where the total comes from when two copies disagree on the achievement set; the local copies measured so far agree.
+The cache's `GameInfo.MetadataPath` is the `achievements.json` in the deepest `steam_settings` folder only. Game A's deepest copy has 25 blank descriptions where the root copy has all 54 filled, so a list, which shows every description at once, puts that defect in front of the user for the whole game. The memo "Fold the achievement schema across all of a game's steam_settings folders" is the fix, folding across `GameInfo.SettingsDirs` with first-definition-wins as `GbeOverlaySettingsReader` does. It should ship before or with Part 1. It also decides where the total comes from when two copies disagree on the achievement set; the local copies measured so far agree.
 
 ## Part 1: the per-game achievement list
 
@@ -172,7 +172,7 @@ The dashboard is the window's left panel (see **Window**): every game with its s
 
 Each achievement's global unlock percentage needs Steam data; no local schema carries it. Checked 2026-09-29, with no key:
 
-- `ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid=<id>` returns `{name, percent}` pairs, with `percent` a string, and answered HTTP 200 without a key for appid 1245620. An unknown appid returns HTTP 403.
+- `ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid=<id>` returns `{name, percent}` pairs, with `percent` a string, and answered HTTP 200 without a key for an installed game's appid. An unknown appid returns HTTP 403.
 - `IPlayerService/GetGameAchievements/v1/?appid=<id>&language=<lang>` returns the same `player_percent_unlocked` together with text, icon hashes, `hidden` as a bool, and `progress_type` with `min_progress_int`/`max_progress_int`. Without `language`, or for an unknown appid, it returns `{"response":{}}`. It is undocumented by Valve.
 
 Part 3 is planned whatever the requester answers: a rarity figure beside each achievement is worth having for everyone, and the data is one keyless call per game. Which of two routes fetches it hasn't been chosen:
@@ -216,7 +216,7 @@ Proposed by the research that wrote this plan; none is confirmed yet.
 ## Tests
 
 - **Builder** (pure, no window):
-  - Schema plus a GBE file listing every achievement gives N rows, earned and locked, with totals matching the table's counts for a fixture shaped like Elden Ring.
+  - Schema plus a GBE file listing every achievement gives N rows, earned and locked, with totals matching the table's counts for a fixture shaped like one of the local schemas.
   - Schema plus no unlock file gives 0 of N.
   - An unreadable unlock file gives an unknown earned count, never 0.
   - An unreadable schema gives an unknown total, never the unlock file's count, and is not treated as self-describing or skipped.

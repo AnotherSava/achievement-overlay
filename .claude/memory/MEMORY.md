@@ -5,4 +5,4 @@
 - [Rare scenarios left unhandled](rare-scenarios-left-unhandled.md) — removed on 2026-09-27 under the realism standard; re-add only with a real writer or user report
 - [Windows-only, no Mac clone](windows-only-no-mac-clone.md) — never raise macOS-clone sync concerns here; a force-push affects only origin and this checkout
 - [CODEX/RUNE local test bed](codex-rune-local-test-bed.secret.md) — encrypted; this machine's CODEX/RUNE games and how the issue #11 plan tests on them; keep its specifics out of public files
-- [No cracked-game details in public files](no-cracked-game-details-in-public-files.md) — names, appids, paths, hashes, crack folders stay in the encrypted test-bed memory; check removed lines too
+- [No library-game details in public files](no-library-game-details-in-public-files.md) — every owned game's names, appids, paths, crack folders stay out; use Example Game / Portal 2; check removed lines too
