@@ -19,9 +19,11 @@ public sealed class AchievementHistory
 {
     private readonly AppConfig _config;
     private readonly GameCache _gameCache;
+    private readonly SteamAppNames _appNames;
 
-    public AchievementHistory(AppConfig config, GameCache gameCache)
+    public AchievementHistory(AppConfig config, GameCache gameCache, SteamAppNames appNames)
     {
+        _appNames = appNames;
         _config = config;
         _gameCache = gameCache;
     }
@@ -69,7 +71,7 @@ public sealed class AchievementHistory
                 if (gameInfo == null && !selfDescribing)
                     continue;
 
-                var gameName = gameInfo?.GameName ?? appId;
+                var gameName = _appNames.Label(appId, gameInfo);
 
                 // Synthetic "tracking configured" milestone, timestamped by when the notification
                 // first fired. Added even before any real unlock exists, and once per game: an appid

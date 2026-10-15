@@ -6,13 +6,13 @@ nav_order: 6
 
 # Privacy
 
-Short version: watching for achievements is entirely local, and the only feature that reaches the network is the one that has to.
+Short version: watching for achievements is entirely local. The app reaches the network for two things: looking up your games' names on the Steam store, and adding a game.
 
 ## What is not collected
 
-There is no telemetry, no analytics, no crash reporting and no update check. Nothing about you, your games, your unlocks or your machine is sent anywhere as part of normal operation. Watching for unlocks and showing notifications transfers no information to other networked systems at all.
+There is no telemetry, no analytics, no crash reporting and no update check. Nothing about you, your unlocks or your machine is sent anywhere as part of normal operation. Watching for unlocks and showing notifications transfers nothing beyond the name lookup below, which sends a game's AppID and only until its name is known.
 
-Everything the app knows lives in two files next to the executable — `config.json` and `overlay.log` — both readable and both yours to delete. The tray menu's **Open config/logs location** opens the folder. The log keeps every run rather than only the current one, so that a problem is still described after a restart; it rolls over to `overlay.log.1` past 1 MB, and deleting either file is safe.
+Everything the app knows lives in three files next to the executable — `config.json`, `overlay.log` and `names.json`, the game names it has looked up — all readable and all yours to delete; a deleted `names.json` is simply looked up again. The tray menu's **Open config/logs location** opens the folder. The log keeps every run rather than only the current one, so that a problem is still described after a restart; it rolls over to `overlay.log.1` past 1 MB, and deleting either file is safe.
 
 The tray menu's **Report a problem…** collects some of that into one file for you to attach to an issue. It uploads nothing: the report is shown to you in full, saved only where you choose, and API keys are replaced with `xxxxxx` before you see it. It covers the one game you pick, and log lines about your other games are removed, so reporting a problem does not publish what else you have installed. [What it contains](troubleshooting#reporting-a-problem).
 
@@ -26,7 +26,9 @@ The tray menu's **Report a problem…** collects some of that into one file for 
 
 ## What goes out, and when
 
-Only the [Add game](usage/adding-a-game) wizard makes outbound requests, and only while it is running. Nothing in that list is contacted unless you open the wizard and complete it.
+**Game names.** To show a game by its real name rather than its folder's, the app asks `store.steampowered.com` for the name of each game it knows about: every configured game, and every save folder whose game was never set up here. The request carries the game's AppID and nothing else, no key and no account. It happens in the background at startup, after a game is added or the games folders change, and when a game's unlock file first changes while the app runs, and only for games whose name is not in `names.json` yet. A game whose emulator names its achievements itself (the Uplay one) is looked up only once it is set up with a `steam_settings/` folder under its Steam AppID, since the emulator's own ids are not Steam's.
+
+**Adding a game.** The [Add game](usage/adding-a-game) wizard makes the rest of the outbound requests, and only while you use it: the AppID search and the schema fetch as you move through its pages, the rest when you click **Add game**. None of them is made unless you open the wizard; `store.steampowered.com` also answers the name lookup above.
 
 | Host | What is sent | Why |
 |---|---|---|

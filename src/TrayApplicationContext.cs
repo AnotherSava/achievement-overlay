@@ -48,6 +48,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     // Appids already evaluated for the synthetic "tracking configured" notification this session,
     // guarding against a double-fire from the startup scan and a live folder-creation event.
     private readonly HashSet<string> _trackingNotified = new();
+    private readonly SteamAppNames _appNames = new(SteamAppNames.DefaultCachePath);
 
     public TrayApplicationContext()
     {
@@ -97,9 +98,9 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         _watcher = CreateWatcher(validSavesPaths);
 
-        NotifyTrackingConfiguredForExistingFolders();
+        _ = NameGamesThenSweepAsync();
 
-        _achievementHistory = new AchievementHistory(_config, _gameCache);
+        _achievementHistory = new AchievementHistory(_config, _gameCache, _appNames);
         _recentDisplay = new RecentAchievementsDisplay(_achievementHistory, _config, _soundPlayer);
         _startWithWindowsEnabled = GetStartWithWindows();
 
@@ -211,7 +212,15 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void OnNewAchievement(object? sender, NewAchievementEventArgs e) => _notificationQueue.Enqueue(e);
 
-    private void OnGameFolderObserved(object? sender, GameFolderObservedEventArgs e) => TryNotifyTrackingConfigured(e.AppId, e.States);
+    private void OnGameFolderObserved(object? sender, GameFolderObservedEventArgs e)
+    {
+        TryNotifyTrackingConfigured(e.AppId, e.States);
+
+        // Only once its unlock file has been read: a bare new folder cannot say whether a self-describing (Uplay)
+        // writer owns it, whose id would fetch another game's Steam name.
+        if (e.States != null && HasSteamAppId(e.AppId, e.States))
+            _ = _appNames.FetchAsync([e.AppId]);
+    }
 
     /// <summary>
     /// Evaluates every already-existing GSE Saves folder for the synthetic "tracking configured"
@@ -262,7 +271,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             if (!TrackingConfirmation.ShouldNotify(gameKnown: true, alreadyShown: false, CountEarnedAchievements(appId, states)))
                 return;
 
-            var gameName = game?.GameName ?? appId;
+            var gameName = _appNames.Label(appId, game);
             _trackingNotified.Add(appId);
             _notificationQueue.EnqueueSynthetic(
                 appId,
@@ -337,7 +346,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        _addGameForm = new AddGameForm(_config, RegisterNewGame);
+        _addGameForm = new AddGameForm(_config, _appNames, RegisterNewGame);
         try
         {
             _addGameForm.ShowDialog();
@@ -371,6 +380,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         _gameCache.ScanAll();
         Logger.Info($"Game cache now has {_gameCache.GetAll().Count} game(s) after Add game.");
+        NameNewGames();
 
         // This is the re-evaluation that TryNotifyTrackingConfigured leaves unguarded games for.
         NotifyTrackingConfiguredForExistingFolders();
@@ -422,17 +432,21 @@ public sealed class TrayApplicationContext : ApplicationContext
         foreach (var game in _gameCache.GetAll())
         {
             if (seen.Add(game.AppId))
-                choices.Add(new DiagnosticGameChoice { AppId = game.AppId, Game = game });
+                choices.Add(new DiagnosticGameChoice { AppId = game.AppId, Game = game, Name = _appNames.Name(game.AppId, game) });
         }
 
-        foreach (var appId in _watcher.GetExistingAppIdFolders())
+        foreach (var appId in AppIdFolders())
         {
-            // GBE keeps its own 'settings' folder alongside the per-appid ones; an appid is digits.
-            if (appId.Length > 0 && appId.All(char.IsAsciiDigit) && seen.Add(appId))
-                choices.Add(new DiagnosticGameChoice { AppId = appId, Game = _gameCache.LookupCached(appId) });
+            if (!seen.Add(appId))
+                continue;
+            // A self-describing unlock file is a tracked game even with no cache entry; any other folder is a
+            // game that was never set up, listed by its store name when the startup lookup found one.
+            choices.Add(new DiagnosticGameChoice { AppId = appId, Unconfigured = !HasSelfDescribingUnlockFile(appId), Name = _appNames.Name(appId, null) });
         }
 
-        choices.Sort((a, b) => string.Compare(a.ToString(), b.ToString(), StringComparison.CurrentCultureIgnoreCase));
+        // Configured games first, then the ones never set up, each group by name.
+        choices.Sort((a, b) => a.Unconfigured != b.Unconfigured ? a.Unconfigured.CompareTo(b.Unconfigured)
+            : string.Compare(a.ToString(), b.ToString(), StringComparison.CurrentCultureIgnoreCase));
 
         // Constructed fresh every time: ShowDialog on a closed WPF Window throws, so the instance
         // cannot be cached across opens. A Window is not IDisposable either, so the finally only says
@@ -449,6 +463,54 @@ public sealed class TrayApplicationContext : ApplicationContext
                 CompletePendingExit();
         }
     }
+
+    /// <summary>
+    /// Looks up the games' store names, then runs the startup "tracking configured" sweep, so a popup it raises
+    /// names the game rather than its folder. The sweep waits at most a few seconds: offline, every lookup
+    /// times out, and a confirmation that late would read as unrelated to the start.
+    /// </summary>
+    private async Task NameGamesThenSweepAsync()
+    {
+        try
+        {
+            await Task.WhenAny(_appNames.FetchAsync(AppIdsToName()), Task.Delay(TimeSpan.FromSeconds(5)));
+            NotifyTrackingConfiguredForExistingFolders();
+        }
+#pragma warning disable CA1031 // Boundary of a fire-and-forget task started at startup: logs the failure at Error
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            Logger.Error($"Startup game naming and tracking sweep failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>Starts a background lookup of the store names still missing, after the set of games may have grown.</summary>
+    private void NameNewGames() => _ = _appNames.FetchAsync(AppIdsToName());
+
+    /// <summary>Every appid folder under the save paths. GBE keeps its own 'settings' folder beside them; an appid is digits.</summary>
+    private IEnumerable<string> AppIdFolders() =>
+        _watcher.GetExistingAppIdFolders().Where(appId => appId.Length > 0 && appId.All(char.IsAsciiDigit)).Distinct();
+
+    /// <summary>Every appid the app may show a name for, configured or not, that <see cref="HasSteamAppId"/> lets through.</summary>
+    private List<string> AppIdsToName() =>
+        _gameCache.GetAll().Select(game => game.AppId)
+            .Concat(AppIdFolders().Where(appId => HasSteamAppId(appId, null)))
+            .Distinct().ToList();
+
+    /// <summary>
+    /// Whether an appid names a Steam game, so a store lookup returns its own name: always for a configured game,
+    /// whose <c>steam_settings</c> names it by its Steam AppID, and otherwise only when its unlock file does not
+    /// describe itself, since such a writer is typically a Uplay emulator whose ids overlap Steam's. The startup
+    /// and rescan lookups and the unlock-file trigger all ask this, so they cannot decide differently; the Add
+    /// game wizard looks its game up directly, since a game it has just set up is configured. Pass
+    /// <paramref name="states"/> when they have already been read.
+    /// </summary>
+    private bool HasSteamAppId(string appId, Dictionary<string, AchievementUnlockState>? states) =>
+        _gameCache.LookupCached(appId) != null
+        || !(states != null ? AchievementMetadata.IsSelfDescribing(states) : HasSelfDescribingUnlockFile(appId));
+
+    private bool HasSelfDescribingUnlockFile(string appId) =>
+        ReadUnlockStates(appId, out _) is { } states && AchievementMetadata.IsSelfDescribing(states);
 
     private void OpenSettingsDialog()
     {
@@ -552,6 +614,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             _gameCache.ScanAll();
             Logger.Info($"Game cache now has {_gameCache.GetAll().Count} game(s) after the games paths changed.");
+            NameNewGames();
         }
 
         if (savesPathsChanged)
@@ -679,6 +742,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             _hotkey?.Dispose();
             _recentDisplay.Dispose();
             _watcher.Dispose();
+            _appNames.Dispose();
             _notificationQueue.Dispose();
             _soundPlayer.Dispose();
             _activeIcon.Dispose();

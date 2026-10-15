@@ -414,7 +414,7 @@ public sealed class GameCacheTests : IDisposable
         AppLog.While(new GameCache(gamesPaths).ScanAll);
 
         var covered = LogLines().Single(line => line.Contains("is covered by", StringComparison.Ordinal));
-        var inputs = DiagnosticReport.Collect("1966410", null, Array.Empty<string>(), gamesPaths);
+        var inputs = DiagnosticReport.Collect("1966410", null, null, Array.Empty<string>(), gamesPaths);
         Assert.Single(DiagnosticReport.KeepLinesForGame(new[] { covered }, "1966410", inputs.ConfiguredRoots, inputs.GameFolders));
     }
 
@@ -431,7 +431,7 @@ public sealed class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
         cache.ScanAll();
 
-        var inputs = DiagnosticReport.Collect("44444", cache.LookupCached("44444"), Array.Empty<string>(), Array.Empty<string>());
+        var inputs = DiagnosticReport.Collect("44444", cache.LookupCached("44444"), null, Array.Empty<string>(), Array.Empty<string>());
 
         Assert.Equal("ok", inputs.Stats.Status);
         Assert.Contains("kills", inputs.Stats.Content, StringComparison.Ordinal);
@@ -447,7 +447,7 @@ public sealed class GameCacheTests : IDisposable
         var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
         cache.ScanAll();
 
-        var inputs = DiagnosticReport.Collect("55555", cache.LookupCached("55555"), Array.Empty<string>(), Array.Empty<string>());
+        var inputs = DiagnosticReport.Collect("55555", cache.LookupCached("55555"), null, Array.Empty<string>(), Array.Empty<string>());
 
         Assert.Equal("missing", inputs.Stats.Status);
     }

@@ -17,8 +17,18 @@ public sealed class DiagnosticGameChoice
     public required string AppId { get; init; }
     public GameInfo? Game { get; init; }
 
-    public override string ToString() =>
-        string.IsNullOrWhiteSpace(Game?.GameName) ? AppId : $"{Game!.GameName} ({AppId})";
+    /// <summary>A save folder for a game that was never set up here: listed only on request, and marked.</summary>
+    public bool Unconfigured { get; init; }
+
+    /// <summary>The game's name from <see cref="SteamAppNames.Name"/>, or null when it has none.</summary>
+    public string? Name { get; init; }
+
+    public override string ToString()
+    {
+        var name = Name;
+        var label = string.IsNullOrWhiteSpace(name) ? AppId : $"{name} ({AppId})";
+        return Unconfigured ? "* " + label : label;
+    }
 }
 
 /// <summary>
@@ -69,9 +79,11 @@ public sealed partial class DiagnosticReportWindow : Window
     private readonly bool _loaded;
 
     private string _reportText = "";
+    private readonly IReadOnlyList<DiagnosticGameChoice> _choices;
 
     public DiagnosticReportWindow(IReadOnlyList<DiagnosticGameChoice> choices, IReadOnlyList<string> gseSavesPaths, IReadOnlyList<string> gamesPaths)
     {
+        _choices = choices;
         _gseSavesPaths = gseSavesPaths;
         _gamesPaths = gamesPaths;
 
@@ -98,20 +110,55 @@ public sealed partial class DiagnosticReportWindow : Window
             System.Windows.Automation.AutomationProperties.SetName(section.Row, section.Title);
         }
 
-        foreach (var choice in choices)
-            GameBox.Items.Add(choice);
+        // Only offered when there is something it would add.
+        IncludeUnconfiguredBox.Visibility = choices.Any(c => c.Unconfigured) ? Visibility.Visible : Visibility.Collapsed;
 
         _loaded = true;
+        FillGameBox();
+    }
+
+    /// <summary>Lists the configured games, and the unconfigured ones after them when the box asks for them, keeping the selection where it survives.</summary>
+    private void FillGameBox()
+    {
+        var selected = GameBox.SelectedItem;
+        GameBox.Items.Clear();
+        foreach (var choice in _choices.Where(c => !c.Unconfigured || IncludeUnconfiguredBox.IsChecked == true))
+        {
+            // A rule between the configured games and the unconfigured ones after them. Disabled, so neither the
+            // mouse nor the arrow keys can select it.
+            if (choice.Unconfigured && GameBox.Items.Count > 0 && GameBox.Items[^1] is DiagnosticGameChoice { Unconfigured: false })
+                GameBox.Items.Add(new ComboBoxItem { Content = new Separator(), IsEnabled = false, Focusable = false });
+            GameBox.Items.Add(choice);
+        }
 
         if (GameBox.Items.Count > 0)
         {
-            GameBox.SelectedIndex = 0;
+            GameBox.SelectedItem = selected != null && GameBox.Items.Contains(selected) ? selected : GameBox.Items[0];
         }
         else
         {
-            Pane.Text = "No games found. Add a game, or run one once so its GSE Saves folder appears, then try again.";
-            ShowSection(_sections[0]);
+            // Nothing is selected, so Rebuild leaves the last report standing; clear it, or Copy would still copy a
+            // game no longer listed. Every part's pane carries the hint, so it stays whichever part the rail is on,
+            // and the page shown is the rail's own part: showing another would set the include switch to that
+            // part's value and so rewrite whether the current part is included.
+            var hidden = _choices.Count(c => c.Unconfigured);
+            var hint = hidden > 0
+                ? $"No configured games. Tick Include unconfigured games (*) to list the {hidden} game(s) not set up here."
+                : "No games found. Add a game, or run one once so its save folder appears, then try again.";
+            _reportText = "";
+            foreach (var section in _sections)
+                (section.Pane, section.Description) = (hint, "");
+            CopyButton.IsEnabled = false;
+            SaveButton.IsEnabled = false;
+            FooterStatus.Text = "";
+            ShowSection(Current);
         }
+    }
+
+    private void OnIncludeUnconfiguredChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loaded)
+            FillGameBox();
     }
 
     private ReportSection Current => _sections[Math.Max(Nav.SelectedIndex, 0)];
@@ -143,7 +190,10 @@ public sealed partial class DiagnosticReportWindow : Window
     {
         PageTitleText.Text = section.Title;
         PageIntroText.Text = section.Description;
-        IncludeToggle.Visibility = section.Optional ? Visibility.Visible : Visibility.Collapsed;
+        // With no game listed there is no report for the switch to change, and Rebuild could not redraw the
+        // rail's marks to match it.
+        IncludeToggle.Visibility = section.Optional && GameBox.SelectedItem is DiagnosticGameChoice ? Visibility.Visible : Visibility.Collapsed;
+        IncludeLabel.Visibility = GameBox.SelectedItem is DiagnosticGameChoice ? Visibility.Visible : Visibility.Collapsed;
         IncludeToggle.IsChecked = section.Included;
         IncludeLabel.Text = section.Optional ? "Include" : "Always included";
         Pane.Text = section.Pane;
@@ -167,7 +217,7 @@ public sealed partial class DiagnosticReportWindow : Window
         try
         {
             _reportText = DiagnosticReport.Compose(
-                DiagnosticReport.Collect(choice.AppId, choice.Game, _gseSavesPaths, _gamesPaths), Chosen());
+                DiagnosticReport.Collect(choice.AppId, choice.Game, choice.Name, _gseSavesPaths, _gamesPaths), Chosen());
         }
 #pragma warning disable CA1031 // UI boundary: logs the failure at Error and shows "could not be built" in the pane and footer
         catch (Exception ex)
@@ -309,7 +359,7 @@ public sealed partial class DiagnosticReportWindow : Window
         // Not IDisposable, unlike the WinForms one: 'using' here would not compile.
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
-            FileName = DiagnosticReport.SuggestedFileName(choice.AppId, choice.Game?.GameName),
+            FileName = DiagnosticReport.SuggestedFileName(choice.AppId, choice.Name),
             Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
             InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
         };

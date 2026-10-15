@@ -9,6 +9,7 @@ public sealed class AchievementHistoryTests : IDisposable
     private readonly string _tempDir;
     private readonly string _gseSavesDir;
     private readonly string _gamesDir;
+    private readonly SteamAppNames _names;
 
     public AchievementHistoryTests()
     {
@@ -17,10 +18,12 @@ public sealed class AchievementHistoryTests : IDisposable
         _gamesDir = Path.Combine(_tempDir, "Games");
         Directory.CreateDirectory(_gseSavesDir);
         Directory.CreateDirectory(_gamesDir);
+        _names = new SteamAppNames(Path.Combine(_tempDir, "names.json"));
     }
 
     public void Dispose()
     {
+        _names.Dispose();
         if (Directory.Exists(_tempDir))
             Directory.Delete(_tempDir, true);
     }
@@ -67,7 +70,7 @@ public sealed class AchievementHistoryTests : IDisposable
         var config = CreateConfig();
         var cache = new GameCache(new[] { _gamesDir });
         cache.ScanAll();
-        var history = new AchievementHistory(config, cache);
+        var history = new AchievementHistory(config, cache, _names);
 
         var recent = history.GetRecent(5);
 
@@ -85,7 +88,7 @@ public sealed class AchievementHistoryTests : IDisposable
         var config = CreateConfig();
         var cache = new GameCache(new[] { _gamesDir });
         cache.ScanAll();
-        var history = new AchievementHistory(config, cache);
+        var history = new AchievementHistory(config, cache, _names);
 
         var recent = history.GetRecent(5);
 
@@ -108,7 +111,7 @@ public sealed class AchievementHistoryTests : IDisposable
         var config = CreateConfig();
         var cache = new GameCache(new[] { _gamesDir });
         cache.ScanAll();
-        var history = new AchievementHistory(config, cache);
+        var history = new AchievementHistory(config, cache, _names);
 
         var recent = history.GetRecent(5);
 
@@ -124,7 +127,7 @@ public sealed class AchievementHistoryTests : IDisposable
         var config = CreateConfig();
         var cache = new GameCache(new[] { _gamesDir });
         cache.ScanAll();
-        var history = new AchievementHistory(config, cache);
+        var history = new AchievementHistory(config, cache, _names);
 
         var recent = history.GetRecent(5);
 
@@ -142,7 +145,7 @@ public sealed class AchievementHistoryTests : IDisposable
         var config = CreateConfig();
         var cache = new GameCache(new[] { _gamesDir });
         cache.ScanAll();
-        var history = new AchievementHistory(config, cache);
+        var history = new AchievementHistory(config, cache, _names);
 
         var recent = history.GetRecent(1);
 
@@ -158,7 +161,7 @@ public sealed class AchievementHistoryTests : IDisposable
         var config = CreateConfig();
         var cache = new GameCache(new[] { _gamesDir });
         cache.ScanAll();
-        var history = new AchievementHistory(config, cache);
+        var history = new AchievementHistory(config, cache, _names);
 
         var recent = history.GetRecent(5);
 
@@ -175,7 +178,7 @@ public sealed class AchievementHistoryTests : IDisposable
         var config = CreateConfig();
         var cache = new GameCache(new[] { _gamesDir });
         cache.ScanAll();
-        var history = new AchievementHistory(config, cache);
+        var history = new AchievementHistory(config, cache, _names);
 
         var recent = history.GetRecent(5);
         var gameAch = recent.FirstOrDefault(e => e.AppId == "12345");
@@ -191,7 +194,7 @@ public sealed class AchievementHistoryTests : IDisposable
         var config = CreateConfig();
         var cache = new GameCache(new[] { _gamesDir });
         cache.ScanAll();
-        var history = new AchievementHistory(config, cache);
+        var history = new AchievementHistory(config, cache, _names);
 
         var recent = history.GetRecent(5);
         var synthetic = recent.First(e => e.AchievementName == "Achievement Connoisseur");
@@ -211,7 +214,7 @@ public sealed class AchievementHistoryTests : IDisposable
         var gameCache = new GameCache(new[] { _gamesDir });
         gameCache.ScanAll();
 
-        var recent = new AchievementHistory(config, gameCache).GetRecent(10);
+        var recent = new AchievementHistory(config, gameCache, _names).GetRecent(10);
 
         var entry = Assert.Single(recent, e => e.AppId == "2840770");
         Assert.Equal("Homecoming", entry.AchievementName);
@@ -232,7 +235,7 @@ public sealed class AchievementHistoryTests : IDisposable
         var gameCache = new GameCache(new[] { _gamesDir });
         gameCache.ScanAll();
 
-        var recent = new AchievementHistory(config, gameCache).GetRecent(10);
+        var recent = new AchievementHistory(config, gameCache, _names).GetRecent(10);
 
         var entry = Assert.Single(recent, e => e.AppId == "12345");
         Assert.Equal("Test Achievement", entry.AchievementName);

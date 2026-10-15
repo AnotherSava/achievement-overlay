@@ -547,10 +547,11 @@ public static class DiagnosticReport
     /// <summary>
     /// Gathers a report for one game: its schema and stats, its unlock file, the app's config and the log. The
     /// log is read whole; <see cref="Compose"/> keeps the recent runs and drops only the lines naming
-    /// another game.
+    /// another game. The game's name is passed in rather than read off <paramref name="game"/>, so the
+    /// report names it exactly as the window's game list does.
     /// </summary>
     public static DiagnosticReportInputs Collect(
-        string appId, GameInfo? game, IReadOnlyCollection<string> gseSavesPaths, IReadOnlyCollection<string> gamesPaths)
+        string appId, GameInfo? game, string? gameName, IReadOnlyCollection<string> gseSavesPaths, IReadOnlyCollection<string> gamesPaths)
     {
         var unlockPath = FindUnlockFile(appId, gseSavesPaths);
         var gameFolders = new List<string>(game?.SettingsDirs ?? Array.Empty<string>());
@@ -565,7 +566,7 @@ public static class DiagnosticReport
             Version = AppUtilities.InformationalVersion,
             GeneratedAt = DateTimeOffset.Now.ToString("yyyy-MM-dd'T'HH:mm:ssK", CultureInfo.InvariantCulture),
             AppId = appId,
-            GameName = game?.GameName,
+            GameName = gameName,
             SettingsDirs = game?.SettingsDirs ?? Array.Empty<string>(),
             Schema = DiagnosticFile.Read(game?.MetadataPath),
             Stats = DiagnosticFile.Read(game == null ? null : Path.Combine(Path.GetDirectoryName(game.MetadataPath)!, "stats.json")),

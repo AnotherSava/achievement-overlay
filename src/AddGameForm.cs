@@ -25,6 +25,7 @@ public sealed class AddGameForm : Form, IConfigProgress
     private readonly AppConfig _config;
     /// <summary>Told the game folder and the emulator save folders the game's unlocks will appear in.</summary>
     private readonly Action<string, IReadOnlyList<string>> _onGameConfigured;
+    private readonly SteamAppNames _appNames;
     private readonly ToolTip _toolTip = new();
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMinutes(5) };
     private readonly System.Windows.Forms.Timer _spinner = new() { Interval = 90 };
@@ -56,6 +57,7 @@ public sealed class AddGameForm : Form, IConfigProgress
     private readonly Label _advancedToggle = new() { AutoSize = true, Cursor = Cursors.Hand, Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold), Margin = new Padding(0, 10, 0, 2) };
     private readonly List<Control> _advancedControls = new();
     private bool _advancedExpanded;
+    private bool _placed;
     private readonly Label _folderStatus = new() { AutoSize = true, ForeColor = Color.Firebrick, MaximumSize = new Size(HelpWidth, 0), Margin = new Padding(0, 6, 0, 0) };
     private readonly Label _appIdNote = new() { AutoSize = true, MaximumSize = new Size(HelpWidth, 0), ForeColor = Color.DarkGoldenrod, Margin = new Padding(0, 0, 0, 6) };
     private readonly Label _summaryGameKey = new() { Text = "Game folder:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 12, 2) };
@@ -117,14 +119,15 @@ public sealed class AddGameForm : Form, IConfigProgress
     /// <summary>Whether the last close request was refused, which a run in progress does.</summary>
     private bool _closeRefused;
 
-    public AddGameForm(AppConfig config, Action<string, IReadOnlyList<string>> onGameConfigured)
+    public AddGameForm(AppConfig config, SteamAppNames appNames, Action<string, IReadOnlyList<string>> onGameConfigured)
     {
+        _appNames = appNames;
         _config = config;
         _onGameConfigured = onGameConfigured;
 
         Text = "Add game";
         Icon = AppUtilities.LoadAppIcon(false);
-        StartPosition = FormStartPosition.CenterScreen;
+        StartPosition = FormStartPosition.Manual; // placed by FitToActivePage once it knows the first page's size
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -190,9 +193,14 @@ public sealed class AddGameForm : Form, IConfigProgress
     {
         foreach (var c in _emulatorControls)
             c.Visible = _emulator != null;
-        _keepEmulatorHelp.Visible = _emulator != null && !InstallsGbe;
         foreach (var c in _gbeControls)
             c.Visible = InstallsGbe;
+
+        // One text for both choices: it sits above the checkbox, so a wording that changed with the tick would
+        // change its height and move the checkbox out from under the pointer.
+        _keepEmulatorHelp.Text = $"This game runs the {_emulator?.Name} Steam emulator, which records each unlock in a "
+            + "file of its own. By default the overlay reads that file, adds only the achievement list and icons, and "
+            + "leaves the game's Steam library as it is. Ticking the box below replaces the emulator with GBE instead.";
 
         if (_emulator == null)
         {
@@ -333,7 +341,7 @@ public sealed class AddGameForm : Form, IConfigProgress
                 g.Controls.Add(_keepEmulatorHelp);
                 g.Controls.Add(_replaceEmulatorCheck);
                 g.Controls.Add(replaceHelp);
-                _emulatorControls.AddRange(new Control[] { _replaceEmulatorCheck, replaceHelp });
+                _emulatorControls.AddRange(new Control[] { _keepEmulatorHelp, _replaceEmulatorCheck, replaceHelp });
 
                 _backupHelp = MakeHelp(""); // text set in UpdateEmulatorControls, which knows what is being replaced
                 g.Controls.Add(_backupCheck);
@@ -513,13 +521,12 @@ public sealed class AddGameForm : Form, IConfigProgress
     protected override void OnDpiChanged(DpiChangedEventArgs e)
     {
         base.OnDpiChanged(e);
-        // Per-monitor DPI changed (moved to another monitor or scale changed) — re-fit the page,
-        // but keep the window where the user put it (don't recenter, or it jumps back).
-        BeginInvoke(() => FitToActivePage(recenter: false));
+        // Per-monitor DPI changed (moved to another monitor or scale changed) — re-fit the page.
+        BeginInvoke(FitToActivePage);
     }
 
     /// <summary>Wraps help text to the current width and resizes the dialog to the active page's height.</summary>
-    private void FitToActivePage(bool recenter = true)
+    private void FitToActivePage()
     {
         if (!IsHandleCreated || _activePanel?.Tag is not Control grid)
             return;
@@ -549,8 +556,23 @@ public sealed class AddGameForm : Form, IConfigProgress
         var clamped = desired > maxClient;
         _activePanel.AutoScroll = clamped;
         ClientSize = new Size(ClientSize.Width, clamped ? maxClient : desired);
-        if (recenter)
-            CenterToScreen();
+
+        // The top-left corner stays where it first lands, so a page or an option that changes the height
+        // grows the dialog downward instead of moving everything on screen. It first lands a little above
+        // the middle to leave room for the taller pages that follow, and moves up only when the bottom
+        // would leave the screen.
+        // First placement goes on the monitor under the pointer, as a centred dialog would; after that, the one
+        // the dialog is on.
+        var area = (_placed ? Screen.FromControl(this) : Screen.FromPoint(Cursor.Position)).WorkingArea;
+        if (!_placed)
+        {
+            Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + Math.Max(0, (area.Height - Height) / 3));
+            _placed = true;
+        }
+        else if (Bottom > area.Bottom)
+        {
+            Top = Math.Max(area.Top, area.Bottom - Height);
+        }
     }
 
     private void OnEnterPage(Page page)
@@ -584,9 +606,6 @@ public sealed class AddGameForm : Form, IConfigProgress
                 _summaryGameValue.Text = _gameDir;
                 _summaryAppIdValue.Text = _appId;
                 _summaryEmulatorValue.Text = _emulator?.Name ?? "";
-                _keepEmulatorHelp.Text = $"This game runs the {_emulator?.Name} Steam emulator, which records each unlock in "
-                    + "a file of its own. The overlay reads that file, so it adds only the achievement list and icons and "
-                    + "leaves the game's Steam library as it is.";
                 UpdateEmulatorControls();
                 UpdateGbeDownloadState();
                 break;
@@ -876,6 +895,9 @@ public sealed class AddGameForm : Form, IConfigProgress
 
         if (status is ConfigStatus.Success or ConfigStatus.PartialSuccess)
         {
+            // Before registering, so the "tracking configured" popup the registration can raise already
+            // names the game rather than its folder.
+            await _appNames.FetchAsync([_appId]);
             try
             {
                 _onGameConfigured(_gameDir, request.KeepEmulator ? _emulator!.SavesFolders : []);

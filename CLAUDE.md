@@ -258,6 +258,33 @@ The two windows share `src/DialogStyles.xaml` (the styles) and `src/DialogChrome
 brushes, the icon, the work-area clamp). A second window carrying its own copy of those colours is a
 copy that drifts: a shade corrected in one dialog would leave the other wrong with nothing to say why.
 
+**Unconfigured games are listed on request.** A save folder with no cache entry and no self-describing
+unlock file — typically a CODEX/RUNE game never put through Add game — is a `DiagnosticGameChoice`
+with `Unconfigured` set, hidden until **Include unconfigured games (\*)** is ticked, then listed after
+every configured game with a `*`. Its store name, when looked up, names it in the list, in the saved
+report's `game.name` and in the suggested file name; the report still has no settings folders, schema
+or stats for it. With no game listed, every part's pane holds a hint instead (games hidden behind the box, or
+none found), and Copy and Save are off.
+
+**Game names come from the Steam store.** `SteamAppNames.Name` is the one rule for a game's name, which
+every place showing one goes through — the tracking-configured popup and the Recent panel by way of
+`SteamAppNames.Label`, Report a problem directly, since it puts the appid beside the name itself: the
+store name, else the folder name `GameCache` gave the game, else (in `Label`) the appid. Names are looked up in the background for
+every configured game and every unconfigured save folder still lacking one: at startup, where the
+"tracking configured" sweep waits for them (at most five seconds, so an offline start is not held up);
+after Add game and after a games-path change rescan `GameCache` (the rescan a cache miss runs during an
+unlock starts none); when the watcher first processes a change to a game's unlock file, which raises
+`GameFolderObserved` with the parsed states, so a name the startup lookup missed is retried at the
+game's first unlock write; and by the Add game
+wizard right after a run, before `RegisterNewGame`, so the popup that registration can raise already
+names the game. They are kept in `names.json` beside `config.json`: derived data, never edited,
+deliberately outside the config. Every lookup but the wizard's asks `TrayApplicationContext.HasSteamAppId`;
+the wizard skips it because it has just set its game up, though `GameCache` is rescanned only after: a configured
+game is always looked up, since its `steam_settings` names it by its Steam AppID, and an unconfigured save
+folder only when its unlock file does not describe itself, because such a writer is usually a Uplay
+emulator whose ids overlap Steam's. A local deploy deletes the
+install folder's top-level files, `names.json` among them, so after one the names are fetched again.
+
 **One page for every part.** Unlike the settings pages, the parts differ only in the data they show,
 so the rail picks a part and the single page is written from it.
 

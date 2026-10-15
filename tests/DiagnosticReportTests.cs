@@ -769,7 +769,7 @@ public class DiagnosticReportTests
             });
 
             var warning = File.ReadLines(Logger.LogPath).Single(line => line.Contains("[WARN]", StringComparison.Ordinal) && line.Contains(tempDir, StringComparison.Ordinal));
-            var inputs = DiagnosticReport.Collect("4242", null, new[] { first, second }, Array.Empty<string>());
+            var inputs = DiagnosticReport.Collect("4242", null, null, new[] { first, second }, Array.Empty<string>());
 
             Assert.Single(DiagnosticReport.KeepLinesForGame(new[] { warning }, "4242", inputs.ConfiguredRoots, inputs.GameFolders));
             Assert.Empty(DiagnosticReport.KeepLinesForGame(new[] { warning }, "4243", inputs.ConfiguredRoots, inputs.GameFolders));
