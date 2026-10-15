@@ -440,7 +440,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             if (!seen.Add(appId))
                 continue;
             // A self-describing unlock file is a tracked game even with no cache entry; any other folder is a
-            // game that was never set up, listed by its store name when the startup lookup found one.
+            // game that was never set up, listed by its store name once a lookup has found one.
             choices.Add(new DiagnosticGameChoice { AppId = appId, Unconfigured = !HasSelfDescribingUnlockFile(appId), Name = _appNames.Name(appId, null) });
         }
 
