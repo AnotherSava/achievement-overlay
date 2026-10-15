@@ -492,4 +492,76 @@ public sealed class AchievementWatcherTests : IDisposable
         Assert.NotNull(observed[0].States);
         Assert.True(AchievementMetadata.IsSelfDescribing(observed[0].States!));
     }
+
+    // --- CODEX/RUNE achievements.ini (issue #11) ---
+
+    private static string IniEntry(string name, long unlockTime) =>
+        $"[{name}]\r\nAchieved=1\r\nCurProgress=0\r\nMaxProgress=0\r\nUnlockTime={unlockTime}\r\n\r\n";
+
+    /// <summary>The whole file as the emulator rewrites it: sections sorted by name, then its index.</summary>
+    private static string IniFileWith(params (string Name, long Time)[] entries) =>
+        string.Concat(entries.OrderBy(e => e.Name, StringComparer.Ordinal).Select(e => IniEntry(e.Name, e.Time)))
+        + "[SteamAchievements]\r\n" + string.Concat(entries.Select((e, i) => $"{i:D5}={e.Name}\r\n")) + $"Count={entries.Length}\r\n";
+
+    public enum IniWrite { InPlace, TempFileAndRename, DeleteAndCreate }
+
+    private static void WriteIni(string path, string contents, IniWrite how)
+    {
+        switch (how)
+        {
+            case IniWrite.InPlace:
+                WriteFile(path, contents);
+                break;
+            case IniWrite.TempFileAndRename:
+                WriteFile(path + ".tmp", contents);
+                File.Move(path + ".tmp", path, overwrite: true);
+                break;
+            case IniWrite.DeleteAndCreate:
+                File.Delete(path);
+                WriteFile(path, contents);
+                break;
+        }
+    }
+
+    [Theory]
+    [InlineData(IniWrite.InPlace)]
+    [InlineData(IniWrite.TempFileAndRename)]
+    [InlineData(IniWrite.DeleteAndCreate)]
+    public async Task IniFile_NewUnlock_RaisesOneEventAndLeavesTheBacklogSeeded(IniWrite how)
+    {
+        var path = Path.Combine(CreateAppDir("480"), UnlockFile.IniName);
+        WriteFile(path, IniFileWith(("CarStorage", 1710018873)));
+
+        using var watcher = CreateWatcher();
+        watcher.Start();
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        WriteIni(path, IniFileWith(("CarStorage", 1710018873), ("Achievement02", now)), how);
+        await Task.Delay(500);
+
+        Assert.Single(_events);
+        Assert.Equal("480", _events[0].AppId);
+        Assert.Equal("Achievement02", _events[0].AchievementName);
+        Assert.Equal(now, _events[0].EarnedTime);
+    }
+
+    [Fact]
+    public async Task IniFile_FolderAppearingAfterStart_SeedsBacklogInsteadOfReplaying()
+    {
+        using var watcher = CreateWatcher();
+        watcher.Start();
+
+        var path = Path.Combine(CreateAppDir("440"), UnlockFile.IniName);
+        WriteFile(path, IniFileWith(("Achievement01", 1700000100), ("Achievement02", 1700000200)));
+        await watcher.ProcessFileAsync(path);
+        Assert.Empty(_events);
+
+        // The backlog was read and recorded rather than missed: the next unlock is the only one raised.
+        await Task.Delay(50);
+        WriteFile(path, IniFileWith(("Achievement01", 1700000100), ("Achievement02", 1700000200), ("Achievement03", DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 5)));
+        await watcher.ProcessFileAsync(path);
+
+        Assert.Single(_events);
+        Assert.Equal("Achievement03", _events[0].AchievementName);
+    }
 }

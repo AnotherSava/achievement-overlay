@@ -59,7 +59,8 @@ src/
   Program.cs                  entry point
   TrayApplicationContext.cs   tray icon and menu; wires everything below together
   AppConfig.cs                config.json load, update and env-var expansion
-  AchievementWatcher.cs       FileSystemWatcher over the GSE Saves folders
+  AchievementWatcher.cs       FileSystemWatcher over the save folders (GSE Saves, CODEX/RUNE)
+  UnlockFile.cs               finding and parsing an appid folder's unlock file, JSON or INI
   GameCache.cs                the scan of gamesPaths: appid -> game folder and schema
   AchievementMetadata.cs      schema parsing, and choosing an achievement's display text
   NotificationQueue.cs        which popup shows next, and how they stack

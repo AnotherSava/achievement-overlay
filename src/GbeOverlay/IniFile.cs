@@ -7,12 +7,20 @@ namespace AchievementOverlay.GbeOverlay;
 /// value runs to the end of its line, and a repeated key overwrites rather than accumulating.
 /// </summary>
 /// <remarks>
-/// One deliberate divergence. GBE compares <c>[overlay::appearance]</c> keys against their stored
-/// spelling, which makes them case-sensitive — <c>font_size=22</c> is silently discarded. Keys here
-/// are case-insensitive everywhere. For a game this app configured, nothing reads the file at all
-/// (the wizard installs the regular GBE build, which has no overlay code), so the file is a statement
-/// of what the user wants rather than a live mirror of anything, and accepting more of it is the
-/// friendlier failure.
+/// <para>
+/// Shared beyond GBE's overlay files: <c>AchievementMetadata.ParseIniUnlockStates</c> reads a CODEX/RUNE
+/// <c>achievements.ini</c> through it, and <c>SceneEmulatorDetector</c> reads the emulator's <c>steam_emu.ini</c>. Both rely on
+/// section names and keys being case-insensitive, so a change made for GBE fidelity — matching
+/// SimpleIni's case-sensitive section names, say — changes how those files are read too.
+/// </para>
+/// <para>
+/// One deliberate divergence from GBE. It compares <c>[overlay::appearance]</c> keys against their
+/// stored spelling, which makes them case-sensitive — <c>font_size=22</c> is silently discarded. Keys
+/// here are case-insensitive everywhere. For a game this app configured, nothing reads the overlay
+/// file at all (the wizard installs the regular GBE build, which has no overlay code, or keeps a
+/// CODEX/RUNE emulator, which never reads it), so the file is a statement of what the user wants
+/// rather than a live mirror of anything, and accepting more of it is the friendlier failure.
+/// </para>
 /// </remarks>
 public sealed class IniFile
 {
@@ -66,6 +74,13 @@ public sealed class IniFile
 
     public string? Get(string section, string key) =>
         _sections.TryGetValue(section, out var entries) && entries.TryGetValue(key, out var value) ? value : null;
+
+    /// <summary>The file's section names in the order they first appear, the unnamed one before any header included.</summary>
+    public IEnumerable<string> SectionNames => _sections.Keys;
+
+    /// <summary>Every key and value of <paramref name="section"/>, empty when the file has no such section.</summary>
+    public IReadOnlyDictionary<string, string> Entries(string section) =>
+        _sections.TryGetValue(section, out var entries) ? entries : new Dictionary<string, string>();
 
     /// <summary>
     /// Folds a weaker file underneath this one, keeping every key this file already defines. GBE

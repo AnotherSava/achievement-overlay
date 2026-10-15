@@ -18,6 +18,12 @@ public sealed class NewAchievementEventArgs : EventArgs
     /// there instead of looking it up in a steam_settings/ schema.
     /// </summary>
     public AchievementUnlockState? UnlockState { get; init; }
+
+    /// <summary>
+    /// True when the unlock came from a CODEX/RUNE <c>achievements.ini</c>, whose save folder is shared
+    /// by every game from that group — including games never added here, which have no schema at all.
+    /// </summary>
+    public bool FromIniFile { get; init; }
 }
 
 /// <summary>
@@ -112,11 +118,12 @@ public sealed class AchievementWatcher : IDisposable
 
             var watcher = new FileSystemWatcher(path)
             {
-                Filter = "achievements.json",
                 IncludeSubdirectories = true,
                 InternalBufferSize = 32768,
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.CreationTime | NotifyFilters.FileName
             };
+            foreach (var name in UnlockFile.Names)
+                watcher.Filters.Add(name);
 
             watcher.Changed += OnFileChanged;
             watcher.Created += OnFileChanged;
@@ -127,7 +134,7 @@ public sealed class AchievementWatcher : IDisposable
             watcher.EnableRaisingEvents = true;
             _watchers.Add(watcher);
 
-            // The achievements.json filter above does not fire on bare folder creation, so a second
+            // The unlock-file filters above do not fire on bare folder creation, so a second
             // watcher tracks new top-level appid folders (the emulator's first-run signal).
             var dirWatcher = new FileSystemWatcher(path)
             {
@@ -145,14 +152,35 @@ public sealed class AchievementWatcher : IDisposable
         WarnAboutGamesInSeveralPaths();
     }
 
-    /// <summary>Warns about every game with an unlock file under more than one watched GSE Saves path, where an unlock recorded in one can be announced again.</summary>
+    /// <summary>
+    /// Warns about every game with earned achievements under more than one watched save path, where an
+    /// unlock recorded in one can be announced again. A file with nothing earned cannot repeat anything,
+    /// and one is common: a game switched from CODEX/RUNE to GBE leaves an empty emulator file behind.
+    /// </summary>
     private void WarnAboutGamesInSeveralPaths()
     {
-        var folders = _gseSavesPaths.SelectMany(Directory.GetDirectories).Where(dir => File.Exists(Path.Combine(dir, "achievements.json")));
+        var folders = _gseSavesPaths.SelectMany(Directory.GetDirectories).Where(HoldsEarnedAchievement);
         foreach (var game in folders.GroupBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).Where(game => game.Skip(1).Any()))
         {
             var quoted = game.Select(folder => $"'{folder}'").ToList();
             Logger.Warn($"appid {game.Key}: move the folder the game no longer writes to out of the GSE Saves paths, or remove its path from 'gseSavesPaths', then restart the app — it has an unlock file in each of {string.Join(", ", quoted[..^1])} and {quoted[^1]}, so an achievement recorded in one can be announced again when another is written.");
+        }
+    }
+
+    private static bool HoldsEarnedAchievement(string appIdFolder)
+    {
+        if (UnlockFile.Find(appIdFolder) is not { } file)
+            return false;
+
+        try
+        {
+            return UnlockFile.Read(file).Values.Any(state => state.Earned);
+        }
+#pragma warning disable CA1031 // Warning-only boundary: a file unreadable here is reported by the pass that processes it
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return false;
         }
     }
 
@@ -235,11 +263,11 @@ public sealed class AchievementWatcher : IDisposable
     }
 
     /// <summary>
-    /// Processes an achievements.json file, detecting new unlocks.
+    /// Processes an unlock file, detecting new unlocks.
     /// </summary>
     internal async Task ProcessFileAsync(string filePath)
     {
-        // Extract appid from path: <gseSavesPath>/<appid>/achievements.json
+        // Extract appid from path: <save path>/<appid>/<unlock file>
         var appId = ExtractAppId(filePath);
         if (appId == null)
         {
@@ -263,7 +291,7 @@ public sealed class AchievementWatcher : IDisposable
         Dictionary<string, AchievementUnlockState> states;
         try
         {
-            states = AchievementMetadata.ParseUnlockStates(json);
+            states = UnlockFile.Parse(filePath, json);
         }
         catch (JsonException ex)
         {
@@ -317,13 +345,14 @@ public sealed class AchievementWatcher : IDisposable
                 AppId = appId,
                 AchievementName = achName,
                 EarnedTime = state.EarnedTime,
-                UnlockState = state
+                UnlockState = state,
+                FromIniFile = UnlockFile.IsIni(filePath)
             });
         }
     }
 
     /// <summary>
-    /// Extracts the appid from a file path like .../GSE Saves/12345/achievements.json.
+    /// Extracts the appid from a file path like .../GSE Saves/12345/achievements.json — the parent folder, in every layout.
     /// </summary>
     internal static string? ExtractAppId(string filePath)
     {
@@ -400,14 +429,12 @@ public sealed class AchievementWatcher : IDisposable
             var appId = Path.GetFileName(dir);
             _seededAppIds.TryAdd(appId, 0);
 
-            var achievementsFile = Path.Combine(dir, "achievements.json");
-            if (!File.Exists(achievementsFile))
+            if (UnlockFile.Find(dir) is not { } achievementsFile)
                 continue;
 
             try
             {
-                var json = File.ReadAllText(achievementsFile);
-                var states = AchievementMetadata.ParseUnlockStates(json);
+                var states = UnlockFile.Read(achievementsFile);
                 SeedExistingAchievements(appId, states);
                 Logger.Info($"Seeded {states.Count(s => s.Value.Earned)} existing achievement(s) for appid {appId}");
             }

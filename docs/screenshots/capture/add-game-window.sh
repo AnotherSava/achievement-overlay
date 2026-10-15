@@ -8,9 +8,14 @@
 # The driver stops at Ready and never presses the button that would modify a game. See the header of
 # add-game-window.ps1 for how that is enforced.
 #
-# Usage: bash docs/screenshots/capture/add-game-window.sh
+# Usage: CAPTURE_GAME_DIR=<game folder> bash docs/screenshots/capture/add-game-window.sh
+#
+# CAPTURE_GAME_DIR is required; the driver's header says what kind of game it must name.
 
 set -euo pipefail
+
+# Checked here rather than left to the driver, which runs only after the deploy has relaunched the app.
+: "${CAPTURE_GAME_DIR:?Set CAPTURE_GAME_DIR to a game folder with a Steam DLL and no steam_settings of its own.}"
 
 REPO="$(git rev-parse --show-toplevel)"
 OUT="$REPO/docs/screenshots/add-game.png"

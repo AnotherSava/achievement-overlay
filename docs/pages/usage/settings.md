@@ -9,7 +9,7 @@ nav_order: 2
 
 **Settings…** in the tray menu opens a window covering every value in [`config.json`](configuration), plus the Windows startup entry (which lives in the registry rather than the config). It follows your Windows light/dark setting and accent colour.
 
-Clicking **Save** writes only the settings that changed and applies them straight away: a new shortcut is re-registered, new **Game folders** trigger a rescan, and new **GSE Saves folders** restart the watcher. Nothing in here needs a restart.
+Clicking **Save** writes only the settings that changed and applies them straight away: a new shortcut is re-registered, new **Game folders** trigger a rescan, and new **Save folders** restart the watcher. Nothing in here needs a restart.
 
 <a href="../../screenshots/settings.png"><img src="../../screenshots/settings.png" alt="Settings window"></a>
 
@@ -17,7 +17,7 @@ Clicking **Save** writes only the settings that changed and applies them straigh
 
 - **General** — start with Windows, and the shortcut and count for the recent achievements panel. When the app cannot read the Windows startup entry, that switch is unavailable and its card says so; the log has the reason.
 - **Notifications** — everything about the popup: language, font, size, background colour, position, duration, sound, and whether a game's own settings may override them. **Show me** fires a real notification with the settings as they stand, and the footer states the popup's computed width and duration.
-- **Folders** — game folders and GSE Saves folders, one card each, with a live status line saying what is actually there (how many games were found, or that a drive is not connected).
+- **Folders** — game folders and save folders, one card each, with a live status line saying what is actually there (how many games were found, or that a drive is not connected).
 - **Advanced** — the Steam Web API and Firecrawl keys.
 
 ## Fields worth a note
@@ -32,7 +32,7 @@ Clicking **Save** writes only the settings that changed and applies them straigh
 
 **Popup background** sets the panel behind the text, with **Opacity** beside it. The text colours are worked out from whatever you pick rather than left fixed, so a light background flips the text to dark and the secondary lines are lifted until they stay legible; the first swatch restores the shipped colour. Backgrounds close to mid-grey are the hard case — nothing gets far past 4.6:1 contrast there — so the smaller lines read lower whatever the app does.
 
-**Game folders** and **GSE Saves folders** are edited a folder at a time with **Add folder**, **Change** and **Remove**. A folder you pick is stored with an environment variable where one fits — choosing your AppData GSE Saves folder is saved as `%appdata%\GSE Saves`, not as your user profile's full path — so the config stays portable between machines even after editing it here. A folder another card already holds is refused, and the message names that card's entry — which can be spelled differently, as `%appdata%\GSE Saves` is for your AppData GSE Saves folder. An entry repeating a folder above it says so on its card: the app skips it until you remove it.
+**Game folders** and **Save folders** are edited a folder at a time with **Add folder**, **Change** and **Remove**. A folder you pick is stored with an environment variable where one fits — choosing your AppData GSE Saves folder is saved as `%appdata%\GSE Saves`, not as your user profile's full path — so the config stays portable between machines even after editing it here. A folder another card already holds is refused, and the message names that card's entry — which can be spelled differently, as `%appdata%\GSE Saves` is for your AppData GSE Saves folder. An entry repeating a folder above it says so on its card: the app skips it until you remove it.
 
 **Use each game's own overlay settings** lets a game that arrived with a `steam_settings/` folder of its own supply its unlock sound, its display duration and its font, for that game only. See [Per-game settings](per-game-settings).
 
@@ -42,4 +42,4 @@ Clicking **Save** writes only the settings that changed and applies them straigh
 
 **Pause notifications** is a momentary toggle rather than a setting, so it stays in the [tray menu](tray-menu) and a restart clears it.
 
-Two entries are refused because they would fail silently: a **GSE Saves folders** list where none of the folders exist (the app will not start without one), and a **Custom file** sound that is not there. Everything else is saved as entered.
+Two entries are refused because they would fail silently: a **Save folders** list where none of the folders exist (the app will not start without one), and a **Custom file** sound that is not there. Everything else is saved as entered.

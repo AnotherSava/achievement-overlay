@@ -518,6 +518,14 @@ public static class DiagnosticReport
         if (file.Content == null)
             return node;
 
+        // An INI unlock file has no JSON to parse, so it is carried as its text, which names
+        // achievements and times and nothing else.
+        if (file.Path != null && UnlockFile.IsIni(file.Path))
+        {
+            node["content"] = file.Content;
+            return node;
+        }
+
         try
         {
             var parsed = JsonNode.Parse(file.Content);
@@ -569,17 +577,17 @@ public static class DiagnosticReport
         };
     }
 
-    /// <summary>The first configured GSE Saves path that has this game's unlock file, or its expected location when none does.</summary>
+    /// <summary>The first configured GSE Saves path that has this game's unlock file, or GBE's expected location when none does.</summary>
     private static string? FindUnlockFile(string appId, IEnumerable<string> gseSavesPaths)
     {
         string? firstCandidate = null;
 
         foreach (var savesPath in gseSavesPaths)
         {
-            var candidate = Path.Combine(savesPath, appId, "achievements.json");
-            firstCandidate ??= candidate;
-            if (File.Exists(candidate))
-                return candidate;
+            var folder = Path.Combine(savesPath, appId);
+            firstCandidate ??= Path.Combine(folder, UnlockFile.JsonName);
+            if (UnlockFile.Find(folder) is { } found)
+                return found;
         }
 
         return firstCandidate;

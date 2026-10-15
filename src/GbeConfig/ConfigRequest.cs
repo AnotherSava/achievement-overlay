@@ -26,6 +26,12 @@ public sealed class ConfigRequest
     /// <summary>Back up the original Steam DLL to <c>*.original</c> before replacing it.</summary>
     public bool Backup { get; init; } = true;
 
+    /// <summary>
+    /// Leave the game's own emulator in place (CODEX/RUNE, which writes its own unlock file) and write
+    /// only the achievement list and icons; nothing of GBE is downloaded or installed.
+    /// </summary>
+    public bool KeepEmulator { get; init; }
+
     /// <summary>Overwrite an existing <c>steam_settings/</c> folder.</summary>
     public bool Force { get; init; }
 }

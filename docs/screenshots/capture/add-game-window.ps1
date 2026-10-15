@@ -11,12 +11,12 @@ $ErrorActionPreference = 'Stop'
 
 # The subject of the shot: a game with a Steam DLL and no steam_settings of its own, so the Ready
 # page shows the ordinary run rather than the "a configuration already exists" warning. Keep this
-# anchor when re-shooting - the prose beside the image describes the normal run - but it is one
-# machine's install path, so another machine points CAPTURE_GAME_DIR at its own equivalent rather
-# than editing this line. The entry is policy=auto, so a re-capture can run with nobody watching:
-# failing loudly on a missing folder is the point.
+# kind of anchor when re-shooting - the prose beside the image describes the normal run. It is one
+# machine's install, so CAPTURE_GAME_DIR names it and the script carries no default. The entry is
+# policy=auto, so a re-capture can run with nobody watching: failing loudly on a missing folder is
+# the point.
 $GameDir = $env:CAPTURE_GAME_DIR
-if (-not $GameDir) { $GameDir = 'C:\Games\Horizon Zero Dawn Remastered' }
+if (-not $GameDir) { throw "Set CAPTURE_GAME_DIR to a game folder with a Steam DLL and no steam_settings of its own." }
 
 Add-Type @"
 using System;using System.Runtime.InteropServices;

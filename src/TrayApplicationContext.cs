@@ -310,13 +310,12 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         foreach (var gseSavesPath in _config.GseSavesPaths)
         {
-            var file = Path.Combine(gseSavesPath, appId, "achievements.json");
-            if (!File.Exists(file))
+            if (UnlockFile.Find(Path.Combine(gseSavesPath, appId)) is not { } file)
                 continue;
 
             try
             {
-                return AchievementMetadata.ParseUnlockStates(File.ReadAllText(file));
+                return UnlockFile.Read(file);
             }
 #pragma warning disable CA1031 // Per-path boundary: logs the failure at Warn and reports the file as unreadable
             catch (Exception ex)
@@ -351,11 +350,14 @@ public sealed class TrayApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// Called after a game is configured: ensures its folder is covered by gamesPaths,
-    /// then rescans so the overlay tracks it without a restart.
+    /// Called after a game is configured: ensures its folder is covered by gamesPaths and the folders
+    /// its emulator saves unlocks in are on 'gseSavesPaths', then rescans so the overlay tracks it
+    /// without a restart.
     /// </summary>
-    private void RegisterNewGame(string gameDir)
+    private void RegisterNewGame(string gameDir, IReadOnlyList<string> savesFolders)
     {
+        AddSavesFolders(savesFolders);
+
         var rootToAdd = GamesPathPlanner.PlanRootToAdd(_config.GamesPaths, gameDir);
         if (rootToAdd != null)
         {
@@ -372,6 +374,33 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         // This is the re-evaluation that TryNotifyTrackingConfigured leaves unguarded games for.
         NotifyTrackingConfiguredForExistingFolders();
+    }
+
+    /// <summary>
+    /// Appends each of <paramref name="savesFolders"/> not already listed to 'gseSavesPaths', creating
+    /// any that does not exist yet — a game never launched under its emulator has no save folder, and
+    /// the watcher can only watch one that exists. Rebuilds the watcher when anything was added or created.
+    /// </summary>
+    private void AddSavesFolders(IReadOnlyList<string> savesFolders)
+    {
+        var entries = AppConfig.SplitRawPaths(_config.GetCurrent().GseSavesPaths).ToList();
+        var added = savesFolders.Where(folder => AppConfig.FindSameFolder(entries, folder) == null).ToList();
+
+        // A folder already listed but missing at startup was left out of the watcher, so creating it
+        // needs a rebuild as much as adding one does.
+        var created = savesFolders.Select(AppConfig.ExpandEnvironmentVariables).Where(folder => !Directory.Exists(folder)).ToList();
+        foreach (var folder in created)
+            Directory.CreateDirectory(folder);
+
+        if (added.Count > 0)
+        {
+            // A ConfigSaveException leaves here for the wizard, which shows it where the game was added.
+            _config.UpdateConfigValue(nameof(SettingsData.GseSavesPaths), string.Join(";", entries.Concat(added)));
+            Logger.Info($"Added GSE Saves path(s) {string.Join(", ", added.Select(f => $"'{f}'"))} to config.");
+        }
+
+        if (added.Count > 0 || created.Count > 0)
+            RebuildWatcher();
     }
 
     /// <summary>

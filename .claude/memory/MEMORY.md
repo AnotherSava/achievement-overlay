@@ -4,3 +4,5 @@
 - [Lint edit hook declined](lint-edit-hook-declined.md) — no PostToolUse format hook for .cs edits; the build and gate already enforce every lint rule
 - [Rare scenarios left unhandled](rare-scenarios-left-unhandled.md) — removed on 2026-09-27 under the realism standard; re-add only with a real writer or user report
 - [Windows-only, no Mac clone](windows-only-no-mac-clone.md) — never raise macOS-clone sync concerns here; a force-push affects only origin and this checkout
+- [CODEX/RUNE local test bed](codex-rune-local-test-bed.secret.md) — encrypted; this machine's CODEX/RUNE games and how the issue #11 plan tests on them; keep its specifics out of public files
+- [No cracked-game details in public files](no-cracked-game-details-in-public-files.md) — names, appids, paths, hashes, crack folders stay in the encrypted test-bed memory; check removed lines too

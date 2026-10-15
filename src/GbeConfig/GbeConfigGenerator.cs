@@ -71,8 +71,9 @@ public sealed class GbeConfigGenerator
         Info($"AppID: {appId}");
 
         // --- DRM detection ---
-        var drm = DrmDetector.Analyze(gameDir);
-        if (!ReportDrm(drm))
+        // It asks whether the game will load the GBE DLL about to be installed, so it has nothing to say
+        // about a game that keeps its emulator.
+        if (!_req.KeepEmulator && !ReportDrm(DrmDetector.Analyze(gameDir)))
             return ConfigStatus.UserError;
 
         var steamSettingsDir = Path.Combine(targetDir, "steam_settings");
@@ -83,10 +84,11 @@ public sealed class GbeConfigGenerator
         }
 
         // --- GBE binaries ---
-        GbeRelease gbe;
+        GbeRelease? gbe = null;
         try
         {
-            gbe = await GbeBinaryManager.EnsureAsync(_req.GbeFolder, _req.DownloadLatest, _http, _progress, ct);
+            if (!_req.KeepEmulator)
+                gbe = await GbeBinaryManager.EnsureAsync(_req.GbeFolder, _req.DownloadLatest, _http, _progress, ct);
         }
         catch (Exception ex) when (IsAntivirusBlock(ex))
         {
@@ -177,10 +179,19 @@ public sealed class GbeConfigGenerator
         await File.WriteAllTextAsync(Path.Combine(steamSettingsDir, "achievements.json"),
             AchievementSchemaWriter.Serialize(achievements), ct);
         await File.WriteAllTextAsync(Path.Combine(steamSettingsDir, "steam_appid.txt"), appId, ct);
+        if (gbe == null)
+        {
+            Info("Wrote achievements.json, steam_appid.txt");
+            Info("Kept the game's own Steam emulator; it records unlocks in a file the overlay reads.");
+            return Finish(partial, steamSettingsDir);
+        }
+
         await File.WriteAllTextAsync(Path.Combine(steamSettingsDir, "configs.overlay.ini"), OverlayConfig, ct);
         Info("Wrote achievements.json, steam_appid.txt, configs.overlay.ini");
 
         // --- Back up original DLL and generate interfaces against it ---
+        // Read before the backup and the copy below, while the DLL is still the emulator's.
+        var emulator = SceneEmulatorDetector.Detect(primary.Path);
         var interfaceSourceDll = primary.Path;
         if (_req.Backup)
         {
@@ -197,26 +208,40 @@ public sealed class GbeConfigGenerator
             interfaceSourceDll = backupPath;
         }
 
-        try
+        if (emulator is { Interfaces.Count: > 0 })
         {
-            Step("Generating steam_interfaces.txt...");
-            var ok = await InterfaceGenerator.GenerateAsync(gbe.GenerateInterfacesExe64, interfaceSourceDll, steamSettingsDir, ct);
-            if (!ok)
+            // GBE's tool finds no interface strings in the emulator's loader, and steam_emu.ini lists them.
+            await File.WriteAllLinesAsync(Path.Combine(steamSettingsDir, "steam_interfaces.txt"), emulator.Interfaces, ct);
+            Info($"Wrote steam_interfaces.txt from the {emulator.Interfaces.Count} interface(s) {SceneEmulatorDetector.EmuIni} lists.");
+        }
+        else
+        {
+            try
             {
-                Warn("generate_interfaces produced no output; steam_interfaces.txt was not written.");
+                Step("Generating steam_interfaces.txt...");
+                var ok = await InterfaceGenerator.GenerateAsync(gbe.GenerateInterfacesExe64, interfaceSourceDll, steamSettingsDir, ct);
+                if (!ok)
+                {
+                    Warn("generate_interfaces produced no output; steam_interfaces.txt was not written.");
+                    partial = true;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or FileNotFoundException)
+            {
+                Warn($"Interface generation failed: {ex.Message}");
                 partial = true;
             }
-        }
-        catch (Exception ex) when (ex is IOException or FileNotFoundException)
-        {
-            Warn($"Interface generation failed: {ex.Message}");
-            partial = true;
         }
 
         // --- Replace the DLL with GBE's regular build ---
         Step("Installing GBE steam_api64.dll...");
         File.Copy(gbe.RegularDll64, primary.Path, overwrite: true);
 
+        return Finish(partial, steamSettingsDir);
+    }
+
+    private ConfigStatus Finish(bool partial, string steamSettingsDir)
+    {
         if (partial)
         {
             Info("Done with warnings — see messages above.");

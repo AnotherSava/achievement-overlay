@@ -59,7 +59,7 @@
       "files": [
         "add-game.png"
       ],
-      "shows": "The Add game wizard on its Ready page: the detected game folder and Steam AppID, the back-up-the-original-library option with its explanation, the collapsed Advanced options section, and the Back / Cancel / Add game buttons",
+      "shows": "The Add game wizard on its Ready page: the game folder and its Steam AppID, the back-up-the-original-library option with its explanation, the collapsed Advanced options section, and the Back / Cancel / Add game buttons",
       "policy": "auto",
       "verifiedAt": "f0ecda9",
       "capture": {
@@ -67,7 +67,7 @@
         "steps": [
           "Deploy the current build so the shot matches the working tree, not the installed release",
           "Open the tray menu and click Add game...",
-          "Keep the anchor: the driver points the wizard at a game with a Steam DLL and no steam_settings of its own, so the Ready page shows the ordinary run rather than the 'a configuration already exists' warning. A different game changes what the prose beside the image describes. The default is this machine's Horizon Zero Dawn Remastered install; set CAPTURE_GAME_DIR to the equivalent elsewhere rather than editing the script",
+          "Keep the anchor: the driver points the wizard at a game with a Steam DLL and no steam_settings of its own, so the Ready page shows the ordinary run rather than the 'a configuration already exists' warning. A different game changes what the prose beside the image describes. CAPTURE_GAME_DIR names that game folder and is required: the folder is one machine's install, so the script carries no default",
           "Type the folder into the box rather than using Browse: FolderBrowserDialog is a native modal that blocks the driver thread and cannot be filled by name",
           "Click Next until the button relabels itself 'Add game', then stop. That label IS the stop condition, not a step: pressing it backs up and replaces the game's steam_api64.dll. The driver reads the label before every click and closes the window afterwards, which is the wizard's cancel",
           "Leave Advanced options collapsed: that is the state a user first sees",

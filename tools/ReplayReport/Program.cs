@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AchievementOverlay.GbeOverlay;
 
 namespace AchievementOverlay.ReplayReport;
 
@@ -156,7 +157,10 @@ internal static class Program
         var schema = Section(report, "schema");
         var config = Section(report, "config");
 
-        var (parsedStates, unlockError) = TryParse(unlock, AchievementMetadata.ParseUnlockStates);
+        // A report carries an INI unlock file as its text, so the file's own name says how to read it,
+        // as it does in the app.
+        var iniText = unlock.Path != null && UnlockFile.IsIni(unlock.Path) ? Text(unlock.Content) : null;
+        var (parsedStates, unlockError) = iniText != null ? (UnlockFile.Parse(unlock.Path!, iniText), null) : TryParse(unlock, AchievementMetadata.ParseUnlockStates);
         var states = parsedStates ?? new Dictionary<string, AchievementUnlockState>();
         var (definitions, schemaError) = TryParse(schema, AchievementMetadata.ParseDefinitions);
 
@@ -164,7 +168,8 @@ internal static class Program
         // the app resolves, and reading them off the document rather than off the parsed dictionary
         // keeps the order the reporter's file has — and keeps an entry that failed to parse visible
         // instead of silently absent.
-        var names = unlock.Content is JsonObject entries ? entries.Select(e => e.Key).ToList() : [];
+        var names = iniText != null ? AchievementMetadata.IniEntryNames(IniFile.Parse(iniText)).ToList()
+            : unlock.Content is JsonObject entries ? entries.Select(e => e.Key).ToList() : [];
 
         var (language, languageNote) = ChooseLanguage(languageOverride, config);
         var unlockReason = Reason(unlock.Status, unlockError);
@@ -208,12 +213,12 @@ internal static class Program
     // --- Reading the report ---
 
     /// <summary>One part of a report as this tool needs it: whether it is there, and its contents.</summary>
-    private readonly record struct ReportSection(string Status, JsonNode? Content);
+    private readonly record struct ReportSection(string Status, string? Path, JsonNode? Content);
 
     private static ReportSection Section(JsonObject report, string key) =>
         report[key] is JsonObject section
-            ? new ReportSection(Text(section["status"]) ?? "unknown", section["content"])
-            : new ReportSection("absent from this report", null);
+            ? new ReportSection(Text(section["status"]) ?? "unknown", Text(section["path"]), section["content"])
+            : new ReportSection("absent from this report", null, null);
 
     /// <summary>A node's string value, or null when it is absent or is not a string.</summary>
     private static string? Text(JsonNode? node) =>

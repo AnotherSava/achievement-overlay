@@ -35,6 +35,7 @@ If the game does not appear in the log at all, make sure its directory sits unde
 Check that `%appdata%\GSE Saves\<app_id>\achievements.json` exists and lists the unlock. If it does not, the emulator never recorded it and the overlay had nothing to show:
 
 - Older emulator builds and some cracks write to `%appdata%\Goldberg SteamEmu Saves\` instead. Add that folder to `gseSavesPaths`.
+- A game running CODEX or RUNE writes `%PUBLIC%\Documents\Steam\RUNE\<app_id>\achievements.ini` (or `...\CODEX\...`) instead, and that folder has to be on `gseSavesPaths`. Some games never record an unlock there at all: the file stays as it was when the game first started. For those, run [Add game…](usage/adding-a-game#games-running-codex-or-rune) again and tick **Replace it with GBE**.
 - A folder named `4294967295` means the emulator never got a valid AppID — check `steam_appid.txt`.
 - Achievements earned **before** you configured the game are never backfilled. The emulator only records an unlock at the moment the game reports it.
 
@@ -56,7 +57,7 @@ A game tracked through a non-GBE emulator can have two sources of text, its `ste
 
 ## The same achievement appears again
 
-If a game has a folder under two of your `gseSavesPaths` — say `%appdata%\GSE Saves\<app_id>` and `%appdata%\Goldberg SteamEmu Saves\<app_id>`, left behind by an older emulator build — an achievement recorded in one of them can be announced again when the other is written, and the log says so at startup and whenever you change the GSE Saves folders in [Settings](usage/settings): `[WARN] appid <app_id>: move the folder the game no longer writes to out of the GSE Saves paths, or remove its path from 'gseSavesPaths', then restart the app`, followed by the folders it found. Move that folder rather than delete it, since it holds that install's record of what you earned.
+If a game has a folder under two of your `gseSavesPaths` — say `%appdata%\GSE Saves\<app_id>` and `%appdata%\Goldberg SteamEmu Saves\<app_id>`, left behind by an older emulator build — an achievement recorded in one of them can be announced again when the other is written, and the log says so at startup and whenever you change the save folders in [Settings](usage/settings): `[WARN] appid <app_id>: move the folder the game no longer writes to out of the GSE Saves paths, or remove its path from 'gseSavesPaths', then restart the app`, followed by the folders it found. Move that folder rather than delete it, since it holds that install's record of what you earned. A folder whose unlock file has nothing earned cannot repeat anything and is not warned about, which is the usual state of the CODEX or RUNE folder a game leaves behind once it is switched to GBE.
 
 ## The hotkey does nothing
 
@@ -92,7 +93,7 @@ The app sends nothing anywhere. It writes a file and you decide what happens to 
 - Your `config.json`, with any API key replaced by `xxxxxx`. Folder paths are included, because which folder a game was found in is often the answer, but they are written in the portable form (`%appdata%\GSE Saves`) so your Windows account name does not travel with them. A `config.json` that is not valid JSON is reported as the parser's error, which names the line, without any of the file's text.
 - The log for the last five runs of the app, narrowed to the game you picked. Lines about your other games are removed and counted, so reporting one game does not publish your library. A run that logged exactly what the run before it logged is listed by its start time alone, since restarts usually repeat the same startup lines. The file itself keeps more runs; five covers hitting a problem, restarting, and trying again. A log that is missing or could not be read is reported as such rather than as an empty one.
 - Every `steam_settings` folder found for that game, deepest first. The first is where achievement text and icons come from, and a game having more than one is worth knowing.
-- That game's `steam_settings/achievements.json`, the `stats.json` beside it, and its GSE Saves unlock file, or a note saying which was missing or unreadable. The emulator counts achievement progress only against the stats `stats.json` defines.
+- That game's `steam_settings/achievements.json`, the `stats.json` beside it, and its unlock file (the GSE Saves `achievements.json`, or a CODEX or RUNE `achievements.ini`, included as its text), or a note saying which was missing or unreadable. The emulator counts achievement progress only against the stats `stats.json` defines.
 
 If a game is missing from the list, the app cannot see it at all. That is itself the diagnosis, and the sections above cover it.
 

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AchievementOverlay.GbeOverlay;
 
 namespace AchievementOverlay;
 
@@ -157,6 +158,57 @@ public static class AchievementMetadata
 
         return states;
     }
+
+    /// <summary>
+    /// The sections of a CODEX/RUNE <c>achievements.ini</c> that are achievements: every one but the
+    /// emulator's own index sections, which no tracker reads.
+    /// </summary>
+    public static IEnumerable<string> IniEntryNames(IniFile ini) =>
+        ini.SectionNames.Where(name => name.Length > 0 && !IniIndexSections.Contains(name));
+
+    private static readonly HashSet<string> IniIndexSections = new(StringComparer.OrdinalIgnoreCase) { "SteamAchievements", "Steam64", "Steam" };
+
+    /// <summary>
+    /// Parses a CODEX/RUNE <c>achievements.ini</c>: one section per achievement, named with its Steam
+    /// API name, holding <c>Achieved</c>, <c>UnlockTime</c> (unix seconds) and progress counters. An
+    /// entry with no <c>Achieved</c> key is earned when its progress has reached a non-zero target,
+    /// which is how CODEX's Gears 5 and Gears Tactics record an unlock. Section names compare
+    /// case-insensitively, as everywhere <see cref="IniFile"/> is used; two achievements of one game
+    /// differing only by case would merge. Never throws: like <see cref="ParseUnlockStates"/>, a bad
+    /// value costs its own achievement and is counted in one warning per file.
+    /// </summary>
+    public static Dictionary<string, AchievementUnlockState> ParseIniUnlockStates(string text)
+    {
+        var ini = IniFile.Parse(text);
+        var states = new Dictionary<string, AchievementUnlockState>();
+        var names = IniEntryNames(ini).ToList();
+        var skipped = 0;
+        string? firstError = null;
+
+        foreach (var name in names)
+        {
+            var achieved = ini.Get(name, "Achieved");
+            var unlockTime = ini.Get(name, "UnlockTime");
+            long time = 0;
+            if ((achieved != null && achieved is not ("0" or "1")) || (unlockTime != null && !long.TryParse(unlockTime, NumberStyles.Integer, CultureInfo.InvariantCulture, out time)))
+            {
+                skipped++;
+                firstError ??= $"'{name}': Achieved={achieved}, UnlockTime={unlockTime}";
+                continue;
+            }
+
+            states[name] = new AchievementUnlockState { Earned = achieved == null ? ProgressComplete(ini, name) : achieved == "1", EarnedTime = time };
+        }
+
+        if (skipped > 0)
+            Logger.Warn($"Skipped {skipped}/{names.Count} unreadable achievement entries (first: {firstError})");
+
+        return states;
+    }
+
+    private static bool ProgressComplete(IniFile ini, string name) =>
+        long.TryParse(ini.Get(name, "MaxProgress"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var max) && max > 0
+        && long.TryParse(ini.Get(name, "CurProgress"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var current) && current >= max;
 
     /// <summary>
     /// True when the unlock state carries its own display text, i.e. it came from a
@@ -483,13 +535,16 @@ public static class AchievementMetadata
     /// Returns null when neither the game's schema nor the unlock entry itself names it.
     /// </summary>
     public static ResolvedAchievement? Resolve(
-        GameCache gameCache, string appId, string achievementName, AchievementUnlockState? unlockState, string language)
+        GameCache gameCache, string appId, string achievementName, AchievementUnlockState? unlockState, bool fromIniFile, string language)
     {
         // How hard to look for a schema depends on what is at stake. Without inline text a missing
         // schema means no notification at all, so a full rescan per unlock is worth it; with inline
         // text the notification already works and the schema only upgrades it, so one rescan per
-        // appid is enough to pick up a config dropped in after startup.
-        var game = HasInlineText(unlockState)
+        // appid is enough to pick up a config dropped in after startup. A CODEX/RUNE unlock gets the
+        // one rescan too: its save folder holds every game from that group, so a miss there is
+        // routinely a game nobody added, and a rescan per unlock would walk every games path for a
+        // notification that cannot exist. A game added through the wizard is rescanned for anyway.
+        var game = HasInlineText(unlockState) || fromIniFile
             ? gameCache.LookupScanningOnce(appId)
             : gameCache.Lookup(appId);
 

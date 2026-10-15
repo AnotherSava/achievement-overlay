@@ -374,9 +374,9 @@
                             <Button Content="+  Add folder" HorizontalAlignment="Left" Padding="14,5" Margin="0,2,0,0"
                                     Click="OnAddGameFolder" />
 
-                            <TextBlock Style="{StaticResource SectionHeading}" Text="GSE Saves folders" Margin="0,24,0,2" />
+                            <TextBlock Style="{StaticResource SectionHeading}" Text="Save folders" Margin="0,24,0,2" />
                             <TextBlock Style="{StaticResource CardDescription}" Margin="0,0,0,8"
-                                       Text="Watched for unlocks. At least one has to exist, or the app won't start. Variables like %appdata% are kept as written." />
+                                       Text="Watched for unlocks: GBE's GSE Saves, and the CODEX or RUNE folder under %public%\Documents\Steam. At least one has to exist, or the app won't start. Variables like %appdata% are kept as written." />
                             <ItemsControl x:Name="SavesFoldersList" />
                             <Button Content="+  Add folder" HorizontalAlignment="Left" Padding="14,5" Margin="0,2,0,0"
                                     Click="OnAddSavesFolder" />

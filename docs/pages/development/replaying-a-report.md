@@ -69,7 +69,10 @@ A summary at the end tallies all of it, and lists any schema entries no unlock n
 ## Why it calls the app's own code
 
 The tool is a thin shell around `AchievementMetadata.ParseUnlockStates`, `ParseDefinitions` and
-`ResolvePreferringSchema`. It does not carry its own copy of the precedence rules, and it must not
+`ResolvePreferringSchema`. A report whose unlock file is a CODEX/RUNE `achievements.ini` takes a
+separate parse path, chosen by the file's name as the app chooses it: `UnlockFile.IsIni`, then
+`UnlockFile.Parse` for the states and `AchievementMetadata.IniEntryNames` over `IniFile.Parse` for the
+entry names. It does not carry its own copy of the precedence rules, and it must not
 grow one: a reimplementation answers "what does my copy do", never "what did they see", and it would
 drift from the resolver with nothing to say so — which is how a replay comes to clear a build that is
 actually broken. The tool is in the solution, and so in `.claude/commit-checks.sh`, for the same
@@ -80,8 +83,8 @@ source carries, not by repeating the rule that chose it. So the attribution stay
 changes, and a field marked `unclear` means the resolved text matches no source the tool can see —
 which is a signal to read, not a verdict.
 
-Nothing in `src/` exists to support this tool. The three entry points are already public because the
-app itself calls them.
+Nothing in `src/` exists to support this tool. Every entry point it calls is already public because
+the app itself calls it.
 
 ## What it cannot do
 

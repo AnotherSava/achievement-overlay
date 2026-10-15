@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
+using AchievementOverlay.GbeOverlay;
 
 namespace AchievementOverlay;
 
@@ -266,7 +267,13 @@ public sealed partial class DiagnosticReportWindow : Window
                 var stats = node["content"]?.AsArray().Count ?? 0;
                 return $"The game's {stats} stat definitions, which achievement progress is counted against.";
             case "Save file":
-                var entries = node["content"]?.AsObject().Count ?? 0;
+                // A JSON unlock file is carried parsed, a CODEX/RUNE achievements.ini as its text.
+                var entries = node["content"] switch
+                {
+                    JsonObject json => json.Count,
+                    JsonValue value when value.TryGetValue<string>(out var ini) => AchievementMetadata.IniEntryNames(IniFile.Parse(ini)).Count(),
+                    _ => 0
+                };
                 return $"The emulator's record of what you have unlocked: {entries} entries.";
             default:
                 return "";

@@ -40,8 +40,10 @@ public static class InterfaceGenerator
 
             await process.WaitForExitAsync(ct);
 
+            // The tool writes an empty file, and exits 0, for a DLL it finds no interface strings in — a
+            // CODEX/RUNE loader is one — so an empty list is no output, not a result.
             var produced = Path.Combine(workDir, "steam_interfaces.txt");
-            if (!File.Exists(produced))
+            if (!File.Exists(produced) || string.IsNullOrWhiteSpace(await File.ReadAllTextAsync(produced, ct)))
                 return false;
 
             Directory.CreateDirectory(steamSettingsDir);

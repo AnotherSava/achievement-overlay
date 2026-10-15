@@ -123,7 +123,7 @@ public sealed class NotificationQueue : IDisposable
     internal NotificationItem? ResolveMetadata(NewAchievementEventArgs args)
     {
         var resolved = AchievementMetadata.Resolve(
-            _gameCache, args.AppId, args.AchievementName, args.UnlockState, _config.Language);
+            _gameCache, args.AppId, args.AchievementName, args.UnlockState, args.FromIniFile, _config.Language);
         if (resolved == null)
             return null;
 

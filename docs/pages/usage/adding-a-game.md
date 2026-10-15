@@ -13,25 +13,31 @@ For the overlay to show anything, each game needs a `steam_settings/achievements
 
 It only asks for what it cannot work out on its own, so a typical run is two or three pages.
 
-1. **Game folder** — pick the game's install folder. The wizard finds the Steam DLL below it (even nested deep in an Unreal Engine layout) and tries to detect the AppID.
+1. **Game folder** — pick the game's install folder. The wizard finds the Steam DLL below it (even nested deep in an Unreal Engine layout) and tries to detect the AppID, reading it from the CODEX/RUNE emulator's `steam_emu.ini` when the game runs one.
 2. **Steam AppID** — shown only if the AppID could not be detected from the game folder. If a Steam store search guessed one, it is pre-filled for you to verify.
 3. **Steam Web API key** — shown only the first time; it is saved to [`config.json`](configuration) and reused afterwards. Required for the achievement schema; get one at [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey). The key is stored unencrypted — if that is a concern, revoke it right after the game is added. It is only needed while adding a game, and you will just enter a fresh one next time.
 4. **Hidden achievements** — shown only if the game actually has hidden achievements and you have not already saved a Firecrawl API key. Steam blanks out the descriptions of secret achievements; the real text lives on SteamDB, behind Cloudflare, so the tool fetches it through [Firecrawl](https://firecrawl.dev), a hosted scraper. Paste a free Firecrawl API key, or leave it blank to skip — those descriptions then stay as placeholders.
-5. **Ready** — review the summary and options (back up the original DLL, and an **Advanced** section for the GBE release folder), then click **Add game**.
+5. **Ready** — review the summary and options (back up the original DLL, and an **Advanced** section for the GBE release folder), then click **Add game**. For a game running the CODEX or RUNE emulator the page shows **Replace it with GBE** instead; see [below](#games-running-codex-or-rune).
 
-<a href="../../screenshots/add-game.png"><img src="../../screenshots/add-game.png" alt="The Add game wizard on its Ready page, showing the detected game folder and AppID, the backup option, and the Add game button"></a>
+<a href="../../screenshots/add-game.png"><img src="../../screenshots/add-game.png" alt="The Add game wizard on its Ready page, showing the game folder and AppID, the backup option, and the Add game button"></a>
 
 ## What it then does
 
-It fetches the achievement icons from Steam, downloads the matching GBE release, backs up and replaces the Steam DLL, and writes a `steam_settings/` folder with GBE's own overlay disabled — this app replaces it. The final page shows live progress.
+It fetches the achievement icons from Steam, downloads the matching GBE release, backs up and replaces the Steam DLL, and writes a `steam_settings/` folder with GBE's own overlay disabled — this app replaces it. A game that keeps its CODEX or RUNE emulator gets only the achievement list and icons; see [below](#games-running-codex-or-rune). The final page shows live progress.
 
-When it finishes, the game's folder is added to `gamesPaths` if it is not covered already, and the overlay starts tracking it immediately. No restart.
+When it finishes, the game's folder is added to `gamesPaths` if it is not covered already (and, for a game keeping CODEX or RUNE, the emulator's save folder to `gseSavesPaths`), and the overlay starts tracking it immediately. No restart.
 
 If a configuration already exists for the game, the wizard shows its location and asks before overwriting it.
 
+## Games running CODEX or RUNE
+
+Some games ship with the CODEX or RUNE Steam emulator in place of Steam's own library. That emulator records each unlock in an `achievements.ini` of its own, under `%PUBLIC%\Documents\Steam\RUNE` or `...\CODEX`, and the overlay reads it. So by default the wizard leaves the emulator alone: it writes only the achievement list and icons into `steam_settings/`, downloads nothing, and adds the emulator's save folder to `gseSavesPaths`, creating it if the game has never been launched.
+
+Tick **Replace it with GBE** only if the game's achievements never appear. Some games record no unlocks under this emulator, and GBE does. The wizard then runs as it does for any other game, taking the list of Steam interfaces GBE needs from the emulator's `steam_emu.ini`.
+
 ## Two things that can stop it
 
-- **Denuvo games** do not load `steam_api64.dll` at all. If Denuvo is detected with no crack present, the tool stops before changing anything.
+- **Denuvo games** do not load `steam_api64.dll` at all. If Denuvo is detected with no crack present, the tool stops before changing anything. A game that keeps its CODEX/RUNE emulator skips this check, since no GBE DLL is installed.
 - **Windows Defender** sometimes raises a false positive on current GBE releases as they download. The wizard offers to add the needed Defender exclusions (with a UAC prompt) and retries automatically. Alternatively, point the Advanced **GBE release folder** at an already-extracted release and uncheck "Download the latest GBE release".
 
 ## Doing it by hand

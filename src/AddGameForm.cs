@@ -23,7 +23,8 @@ public sealed class AddGameForm : Form, IConfigProgress
     private const int TextInset = 3;
 
     private readonly AppConfig _config;
-    private readonly Action<string> _onGameConfigured;
+    /// <summary>Told the game folder and the emulator save folders the game's unlocks will appear in.</summary>
+    private readonly Action<string, IReadOnlyList<string>> _onGameConfigured;
     private readonly ToolTip _toolTip = new();
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMinutes(5) };
     private readonly System.Windows.Forms.Timer _spinner = new() { Interval = 90 };
@@ -46,6 +47,12 @@ public sealed class AddGameForm : Form, IConfigProgress
     private readonly TextBox _gbePathBox = new() { BorderStyle = BorderStyle.FixedSingle };
     private readonly CheckBox _backupCheck = new() { Text = "Back up the original Steam library (recommended)", Checked = true, AutoSize = true, Margin = new Padding(0, 14, 0, 6) };
     private readonly CheckBox _downloadGbeCheck = new() { Text = "Download the latest GBE release", Checked = true, AutoSize = true, Margin = new Padding(0, 4, 0, 2) };
+    private readonly CheckBox _replaceEmulatorCheck = new() { Text = "Replace it with GBE", AutoSize = true, Margin = new Padding(0, 10, 0, 6) };
+    private readonly List<Control> _gbeControls = new();
+    private readonly List<Control> _emulatorControls = new();
+    private Label _keepEmulatorHelp = null!;
+    private Label _backupHelp = null!;
+    private Label _downloadHelp = null!;
     private readonly Label _advancedToggle = new() { AutoSize = true, Cursor = Cursors.Hand, Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold), Margin = new Padding(0, 10, 0, 2) };
     private readonly List<Control> _advancedControls = new();
     private bool _advancedExpanded;
@@ -55,6 +62,8 @@ public sealed class AddGameForm : Form, IConfigProgress
     private readonly Label _summaryAppIdKey = new() { Text = "Steam AppID:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 12, 0) };
     private readonly Label _summaryGameValue = new() { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 0, 2) };
     private readonly Label _summaryAppIdValue = new() { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0) };
+    private readonly Label _summaryEmulatorKey = new() { Text = "Steam emulator:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 2, 12, 0) };
+    private readonly Label _summaryEmulatorValue = new() { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 2, 0, 0) };
     private Label _hiddenInfo = null!;
 
     // Progress checklist: steps accumulate as rows; the running one spins, finished ones get a check.
@@ -95,6 +104,8 @@ public sealed class AddGameForm : Form, IConfigProgress
     private string _gameDir = "";
     private string _appId = "";
     private bool _appIdGuessed;
+    /// <summary>The CODEX/RUNE emulator the game runs, or null when it runs Steam's own DLL or GBE.</summary>
+    private SceneEmulator? _emulator;
     private bool _needAppId;
     private bool _needApiKey;
     private bool _force; // overwrite an existing steam_settings (decided right after folder selection)
@@ -106,7 +117,7 @@ public sealed class AddGameForm : Form, IConfigProgress
     /// <summary>Whether the last close request was refused, which a run in progress does.</summary>
     private bool _closeRefused;
 
-    public AddGameForm(AppConfig config, Action<string> onGameConfigured)
+    public AddGameForm(AppConfig config, Action<string, IReadOnlyList<string>> onGameConfigured)
     {
         _config = config;
         _onGameConfigured = onGameConfigured;
@@ -128,6 +139,7 @@ public sealed class AddGameForm : Form, IConfigProgress
         UpdateGbeDownloadState();
 
         _advancedToggle.Click += (_, _) => SetAdvancedExpanded(!_advancedExpanded);
+        _replaceEmulatorCheck.CheckedChanged += (_, _) => UpdateEmulatorControls();
         SetAdvancedExpanded(false);
 
         _spinner.Tick += (_, _) =>
@@ -148,7 +160,7 @@ public sealed class AddGameForm : Form, IConfigProgress
     {
         _advancedExpanded = expanded;
         foreach (var c in _advancedControls)
-            c.Visible = expanded;
+            c.Visible = expanded && InstallsGbe;
         _advancedToggle.Text = (expanded ? "▾" : "▸") + " Advanced options";
         if (expanded)
             UpdateGbeDownloadState();
@@ -168,6 +180,41 @@ public sealed class AddGameForm : Form, IConfigProgress
             _downloadGbeCheck.Checked = true;
             _downloadGbeCheck.Enabled = false;
         }
+    }
+
+    /// <summary>Whether this run installs GBE: always, unless the game runs CODEX/RUNE and the user keeps it.</summary>
+    private bool InstallsGbe => _emulator == null || _replaceEmulatorCheck.Checked;
+
+    /// <summary>Shows the emulator rows only for a CODEX/RUNE game, and the GBE options only when GBE is installed.</summary>
+    private void UpdateEmulatorControls()
+    {
+        foreach (var c in _emulatorControls)
+            c.Visible = _emulator != null;
+        _keepEmulatorHelp.Visible = _emulator != null && !InstallsGbe;
+        foreach (var c in _gbeControls)
+            c.Visible = InstallsGbe;
+
+        if (_emulator == null)
+        {
+            _backupCheck.Text = "Back up the original Steam library (recommended)";
+            _backupHelp.Text = "To track achievements, the overlay replaces the game's Steam library (steam_api64.dll) with GBE's "
+                + "drop-in version. GBE emulates the Steam API locally and records each unlock to a file this app watches, "
+                + "so tracking works without Steam running.\r\n\r\n"
+                + "With this on, the original library is first copied to steam_api64.dll.original — keep it so you can "
+                + "restore the game's normal Steam integration later (it's also the file the tool reads to generate the "
+                + "interface list GBE needs).";
+        }
+        else
+        {
+            _backupCheck.Text = "Back up the emulator's library (recommended)";
+            _backupHelp.Text = $"The overlay replaces the {_emulator.Name} emulator's library (steam_api64.dll) with GBE's "
+                + "drop-in version, which records each unlock to a file this app watches. The interface list GBE needs is "
+                + $"taken from the emulator's {SceneEmulatorDetector.EmuIni}.\r\n\r\n"
+                + "With this on, the emulator's library is first copied to steam_api64.dll.original — keep it so you can "
+                + "put the emulator back later.";
+        }
+
+        SetAdvancedExpanded(_advancedExpanded);
     }
 
     // --- Layout ---
@@ -279,16 +326,20 @@ public sealed class AddGameForm : Form, IConfigProgress
             {
                 g.Controls.Add(BuildSummary());
 
-                g.Controls.Add(_backupCheck);
-                g.Controls.Add(MakeHelp(
-                    "To track achievements, the overlay replaces the game's Steam library (steam_api64.dll) with GBE's "
-                    + "drop-in version. GBE emulates the Steam API locally and records each unlock to a file this app watches, "
-                    + "so tracking works without Steam running.\r\n\r\n"
-                    + "With this on, the original library is first copied to steam_api64.dll.original — keep it so you can "
-                    + "restore the game's normal Steam integration later (it's also the file the tool reads to generate the "
-                    + "interface list GBE needs)."));
+                _keepEmulatorHelp = MakeHelp("");
+                var replaceHelp = MakeHelp(
+                    "Only if this game's achievements never appear: some games record no unlocks under this emulator, "
+                    + "and GBE does.");
+                g.Controls.Add(_keepEmulatorHelp);
+                g.Controls.Add(_replaceEmulatorCheck);
+                g.Controls.Add(replaceHelp);
+                _emulatorControls.AddRange(new Control[] { _replaceEmulatorCheck, replaceHelp });
 
+                _backupHelp = MakeHelp(""); // text set in UpdateEmulatorControls, which knows what is being replaced
+                g.Controls.Add(_backupCheck);
+                g.Controls.Add(_backupHelp);
                 g.Controls.Add(_advancedToggle);
+                _gbeControls.AddRange(new Control[] { _backupCheck, _backupHelp, _advancedToggle });
 
                 var gbeLabel = new Label { Text = "GBE release folder", AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(0, 14, 0, 6) };
                 var gbeRow = DialogControls.MakeInputRow(_gbePathBox, MakeBrowseButton(_gbePathBox));
@@ -308,10 +359,12 @@ public sealed class AddGameForm : Form, IConfigProgress
 
         _progressPage = MakePage(
             "Adding game…",
-            "This can take a minute the first time, while the GBE emulator is downloaded.",
+            null,
             null,
             g =>
             {
+                _downloadHelp = MakeHelp("This can take a minute the first time, while the GBE emulator is downloaded.");
+                g.Controls.Add(_downloadHelp);
                 _stepsTable = new TableLayoutPanel { ColumnCount = 2, Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
                 _stepsTable.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 22));
                 _stepsTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -372,6 +425,9 @@ public sealed class AddGameForm : Form, IConfigProgress
         summary.Controls.Add(_summaryGameValue, 1, 0);
         summary.Controls.Add(_summaryAppIdKey, 0, 1);
         summary.Controls.Add(_summaryAppIdValue, 1, 1);
+        summary.Controls.Add(_summaryEmulatorKey, 0, 2);
+        summary.Controls.Add(_summaryEmulatorValue, 1, 2);
+        _emulatorControls.AddRange(new Control[] { _summaryEmulatorKey, _summaryEmulatorValue });
         return summary;
     }
 
@@ -527,6 +583,11 @@ public sealed class AddGameForm : Form, IConfigProgress
             case Page.Ready:
                 _summaryGameValue.Text = _gameDir;
                 _summaryAppIdValue.Text = _appId;
+                _summaryEmulatorValue.Text = _emulator?.Name ?? "";
+                _keepEmulatorHelp.Text = $"This game runs the {_emulator?.Name} Steam emulator, which records each unlock in "
+                    + "a file of its own. The overlay reads that file, so it adds only the achievement list and icons and "
+                    + "leaves the game's Steam library as it is.";
+                UpdateEmulatorControls();
                 UpdateGbeDownloadState();
                 break;
         }
@@ -679,6 +740,8 @@ public sealed class AddGameForm : Form, IConfigProgress
             }
 
             _gameDir = gameDir;
+            _emulator = await Task.Run(() => SceneEmulatorDetector.Detect(primary.Path));
+            _replaceEmulatorCheck.Checked = false;
 
             // If a config already exists at the target, confirm overwrite up front (not at the end).
             var existing = Path.Combine(Path.GetDirectoryName(primary.Path)!, "steam_settings");
@@ -696,7 +759,10 @@ public sealed class AddGameForm : Form, IConfigProgress
                 _force = true;
             }
 
-            var localAppId = await Task.Run(() => AppIdResolver.FromAppIdTxt(gameDir) ?? AppIdResolver.FromIniFiles(gameDir));
+            // The emulator reads only the steam_emu.ini beside it, so that one names the game; the generic
+            // scan takes the first match anywhere below, which can be another copy.
+            var localAppId = _emulator?.AppId
+                ?? await Task.Run(() => AppIdResolver.FromAppIdTxt(gameDir) ?? AppIdResolver.FromIniFiles(gameDir));
             string? guessed = null;
             if (localAppId == null && AppIdResolver.StoreSearchName(gameDir) is { } name)
             {
@@ -772,11 +838,13 @@ public sealed class AddGameForm : Form, IConfigProgress
             GbeFolder = string.IsNullOrWhiteSpace(_gbePathBox.Text) ? GbeBinaryManager.CacheRoot : _gbePathBox.Text.Trim(),
             DownloadLatest = _downloadGbeCheck.Checked,
             Backup = _backupCheck.Checked,
+            KeepEmulator = !InstallsGbe,
             Force = force
         };
 
         _logBox.Clear();
         ResetSteps();
+        _downloadHelp.Visible = !request.KeepEmulator;
         ShowPage(Page.Progress);
         _backButton.Visible = false;
         _nextButton.Visible = false;
@@ -810,7 +878,7 @@ public sealed class AddGameForm : Form, IConfigProgress
         {
             try
             {
-                _onGameConfigured(_gameDir);
+                _onGameConfigured(_gameDir, request.KeepEmulator ? _emulator!.SavesFolders : []);
             }
 #pragma warning disable CA1031 // Host-callback boundary: shows the failure as an error line in the progress log
             catch (Exception ex)

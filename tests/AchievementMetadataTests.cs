@@ -1086,7 +1086,7 @@ public sealed class AchievementMetadataTests : IDisposable
         CreateConfiguredGame("2840770", SchemaJson);
         var state = AchievementMetadata.ParseUnlockStates(UplayJson)["AFOP_Ach_8"];
 
-        var resolved = AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, "english");
+        var resolved = AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, false, "english");
 
         Assert.Equal("Schema Name", resolved!.DisplayName);
     }
@@ -1101,12 +1101,12 @@ public sealed class AchievementMetadataTests : IDisposable
         var state = AchievementMetadata.ParseUnlockStates(UplayJson)["AFOP_Ach_8"];
 
         // Spends this appid's one rescan while nothing is configured; the inline text carries it.
-        Assert.Equal("Homecoming", AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, "english")!.DisplayName);
+        Assert.Equal("Homecoming", AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, false, "english")!.DisplayName);
 
         CreateConfiguredGame("2840770", SchemaJson);
 
         // No second rescan: a notification already works, so the schema is not chased per unlock.
-        Assert.Equal("Homecoming", AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, "english")!.DisplayName);
+        Assert.Equal("Homecoming", AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, false, "english")!.DisplayName);
     }
 
     [Fact]
@@ -1119,11 +1119,29 @@ public sealed class AchievementMetadataTests : IDisposable
         var state = AchievementMetadata.ParseUnlockStates("""{"AFOP_Ach_8": {"earned": true, "earned_time": 1}}""")["AFOP_Ach_8"];
 
         // Without inline text a missing schema means no notification at all, so every miss rescans.
-        Assert.Null(AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, "english"));
+        Assert.Null(AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, false, "english"));
 
         CreateConfiguredGame("2840770", SchemaJson);
 
-        Assert.Equal("Schema Name", AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, "english")!.DisplayName);
+        Assert.Equal("Schema Name", AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, false, "english")!.DisplayName);
+    }
+
+    [Fact]
+    public void Resolve_IniUnlock_RescansOncePerAppId()
+    {
+        var gamesDir = Path.Combine(_tempDir, "games");
+        Directory.CreateDirectory(gamesDir);
+        var cache = new GameCache(new[] { gamesDir });
+        cache.ScanAll();
+        var state = AchievementMetadata.ParseIniUnlockStates("[AFOP_Ach_8]\nAchieved=1\nUnlockTime=1\n")["AFOP_Ach_8"];
+
+        // Spends this appid's one rescan while nothing is configured.
+        Assert.Null(AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, true, "english"));
+
+        CreateConfiguredGame("2840770", SchemaJson);
+
+        // No second rescan: a shared CODEX/RUNE folder holds games never added, so a miss is not chased per unlock.
+        Assert.Null(AchievementMetadata.Resolve(cache, "2840770", "AFOP_Ach_8", state, true, "english"));
     }
 
     // --- Schema digest (for the log line that describes a game's schema) ---

@@ -35,6 +35,7 @@ public sealed class AchievementHistory
     {
         var entries = new List<AchievementHistoryEntry>();
         var trackingConfigured = _config.GetCurrent().TrackingConfigured ?? new Dictionary<string, long>();
+        var confirmedAppIds = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var gseSavesPath in _config.GseSavesPaths)
         {
@@ -49,12 +50,11 @@ public sealed class AchievementHistory
                 var gameInfo = _gameCache.LookupCached(appId);
 
                 Dictionary<string, AchievementUnlockState>? states = null;
-                var achievementsFile = Path.Combine(dir, "achievements.json");
-                if (File.Exists(achievementsFile))
+                if (UnlockFile.Find(dir) is { } achievementsFile)
                 {
                     try
                     {
-                        states = AchievementMetadata.ParseUnlockStates(File.ReadAllText(achievementsFile));
+                        states = UnlockFile.Read(achievementsFile);
                     }
 #pragma warning disable CA1031 // Per-game boundary: logs the unreadable unlock file at Warn and lists the other games
                     catch (Exception ex)
@@ -72,8 +72,9 @@ public sealed class AchievementHistory
                 var gameName = gameInfo?.GameName ?? appId;
 
                 // Synthetic "tracking configured" milestone, timestamped by when the notification
-                // first fired. Added even before any real unlock exists.
-                if (trackingConfigured.TryGetValue(appId, out var configuredTime))
+                // first fired. Added even before any real unlock exists, and once per game: an appid
+                // can have a folder under several save paths (a GBE game with a leftover CODEX one).
+                if (trackingConfigured.TryGetValue(appId, out var configuredTime) && confirmedAppIds.Add(appId))
                 {
                     entries.Add(new AchievementHistoryEntry
                     {

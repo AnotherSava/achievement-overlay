@@ -131,6 +131,17 @@ public class DiagnosticReportTests
         Assert.Equal(1, (int?)entry["earned"]);
     }
 
+    [Fact]
+    public void Compose_CarriesAnIniUnlockFileAsItsText()
+    {
+        const string ini = "[CarStorage]\r\nAchieved=1\r\nUnlockTime=1710018873\r\n";
+        var report = Compose(Inputs(unlock: new DiagnosticFile { Path = @"C:\x\1458140\achievements.ini", Status = "ok", Content = ini }));
+
+        var unlock = report["unlockFile"]!;
+        Assert.Equal("ok", (string?)unlock["status"]);
+        Assert.Equal(ini, (string?)unlock["content"]);
+    }
+
     // --- Shape ---
 
     [Fact]
@@ -710,6 +721,34 @@ public class DiagnosticReportTests
         Assert.Equal("%userprofile%/Games", (string?)report["config"]!["content"]!["gamesPaths"]);
     }
 
+    [Theory]
+    // A game switched from CODEX/RUNE to GBE leaves an empty emulator file behind, which cannot repeat an unlock.
+    [InlineData("[SteamAchievements]\r\nCount=0\r\n", false)]
+    [InlineData("[ACH01]\r\nAchieved=1\r\nUnlockTime=1700000000\r\n\r\n[SteamAchievements]\r\n00000=ACH01\r\nCount=1\r\n", true)]
+    public void WatcherStart_AGameInTwoPaths_IsWarnedAboutOnlyWhenTheIniHoldsAnEarnedAchievement(string ini, bool warned)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "TwoSavesPathsEmpty_" + Guid.NewGuid().ToString("N"));
+        var gbe = Path.Combine(tempDir, "GSE Saves");
+        var rune = Path.Combine(tempDir, "RUNE");
+        try
+        {
+            File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(gbe, "4242")).FullName, UnlockFile.JsonName), """{"ACH01": {"earned": true, "earned_time": 1700000000}}""");
+            File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(rune, "4242")).FullName, UnlockFile.IniName), ini);
+
+            AppLog.While(() =>
+            {
+                using var watcher = new AchievementWatcher(new[] { gbe, rune });
+                watcher.Start();
+            });
+
+            Assert.Equal(warned, File.ReadLines(Logger.LogPath).Any(line => line.Contains("[WARN]", StringComparison.Ordinal) && line.Contains(tempDir, StringComparison.Ordinal)));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
     [Fact]
     public void KeepLinesForGame_TheWarningAboutAGameInTwoGseSavesPaths_ReachesThatGamesReport()
     {
@@ -721,7 +760,7 @@ public class DiagnosticReportTests
         try
         {
             foreach (var root in new[] { first, second })
-                File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(root, "4242")).FullName, "achievements.json"), "{}");
+                File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(root, "4242")).FullName, "achievements.json"), """{"ACH01": {"earned": true, "earned_time": 1700000000}}""");
 
             AppLog.While(() =>
             {

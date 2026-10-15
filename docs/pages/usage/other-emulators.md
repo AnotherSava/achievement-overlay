@@ -7,7 +7,7 @@ nav_order: 6
 
 # Other emulators
 
-The overlay is built around GBE, but it tracks any emulator that writes a GSE-Saves-style `achievements.json` — one JSON object per achievement, keyed by achievement name, with an `earned` flag and an `earned_time`. Both `true`/`false` and `1`/`0` are accepted for `earned`.
+The overlay is built around GBE, but it tracks any emulator that writes a GSE-Saves-style `achievements.json` — one JSON object per achievement, keyed by achievement name, with an `earned` flag and an `earned_time`. Both `true`/`false` and `1`/`0` are accepted for `earned`. It also reads the `achievements.ini` that CODEX and RUNE write instead; see [CODEX and RUNE](#codex-and-rune).
 
 Where such an emulator also writes `displayName` and `description` into each entry — the Goldberg Uplay R2 emulator does, when pointed at the GSE Saves folder — the unlock file describes itself, and the game needs **no `steam_settings/` folder, no `steam_appid.txt`, and no entry in `gamesPaths`**. Point the emulator's achievement output at `%appdata%\GSE Saves\<id>\` and it is tracked on the next unlock.
 
@@ -26,4 +26,10 @@ One thing outranks the schema, field by field: whichever source is written in th
 
 Leading zeros are the one difference in naming the overlay bridges by itself. Some Steam games number their achievements `001`, `002`, … while an emulator handed a bare id writes `1`, `2`, … — Assassin's Creed Odyssey and Origins are both like this, and no emulator setting can add the padding. Where a name is written entirely in digits on both sides, the two match once leading zeros are ignored, and such a match is used exactly like a name the schema states: its icon and its text both apply. Where two schema entries would fold onto the same number, the overlay refuses to choose between them and keeps the unlock file's own text.
 
-The [Add game…](adding-a-game) wizard is Steam-only: it works by replacing the game's Steam library with GBE's, which does not apply to other emulators. Use it on the Steam version of the game — or any GBE config generator — to produce the `steam_settings/` folder, then copy that folder across.
+## CODEX and RUNE
+
+Games running the CODEX or RUNE Steam emulator record unlocks in an `achievements.ini` of their own, one section per achievement, at `%PUBLIC%\Documents\Steam\CODEX\<app_id>\` or `...\RUNE\<app_id>\`. The overlay reads that file wherever a folder on `gseSavesPaths` holds it, and treats it like GBE's: the text and icons come from the game's `steam_settings/` schema, which the file does not carry.
+
+Run [Add game…](adding-a-game#games-running-codex-or-rune) on such a game. It keeps the emulator, writes the schema, and adds the emulator's save folder to `gseSavesPaths`. For a game that already has a schema, add the folder yourself under **Save folders** in [Settings](settings).
+
+The [Add game…](adding-a-game) wizard is otherwise Steam-only: it works by replacing the game's Steam library with GBE's, which does not apply to other emulators. Use it on the Steam version of the game — or any GBE config generator — to produce the `steam_settings/` folder, then copy that folder across.

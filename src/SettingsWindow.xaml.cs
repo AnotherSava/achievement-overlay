@@ -856,9 +856,9 @@ public partial class SettingsWindow : Window, IWin32Window
     {
         var savesPaths = AppConfig.ParseGamesPaths(string.Join(";", _savesFolders));
         if (savesPaths.Length == 0)
-            return (2, "Add at least one GSE Saves folder — the app has nothing to watch without one, and won't start.");
+            return (2, "Add at least one save folder — the app has nothing to watch without one, and won't start.");
         if (!savesPaths.Any(Directory.Exists))
-            return (2, "None of these GSE Saves folders exist:\r\n\r\n" + string.Join("\r\n", savesPaths));
+            return (2, "None of these save folders exist:\r\n\r\n" + string.Join("\r\n", savesPaths));
 
         if (SoundToggle.IsChecked == true && CustomSoundRadio.IsChecked == true)
         {

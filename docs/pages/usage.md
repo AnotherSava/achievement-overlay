@@ -15,6 +15,6 @@ The Steam emulator keeps each game's achievement state in a JSON file under `%ap
 
 The popup's text — the achievement's name and description — normally comes from the game's own `steam_settings/achievements.json`, which is what the emulator itself reads. That is the file the [Add game](usage/adding-a-game) wizard generates.
 
-Some emulators instead write the name and description straight into the unlock file. A game like that describes itself, and is tracked with no setup at all — see [Other emulators](usage/other-emulators).
+Some emulators instead write the name and description straight into the unlock file. A game like that describes itself, and is tracked with no setup at all — see [Other emulators](usage/other-emulators). The CODEX and RUNE emulators write an `achievements.ini` of their own instead, which the overlay reads as well — see [CODEX and RUNE](usage/other-emulators#codex-and-rune).
 
 Nothing here involves the game's process. The overlay never hooks, injects into, or reads memory from a running game, which is why it works with titles that refuse an in-game overlay.
