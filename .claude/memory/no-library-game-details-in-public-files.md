@@ -15,7 +15,10 @@ invented names ("Example Game", appid 2000001) or a well-known title that isn't 
 
 The one exception is the Red Dead Redemption overlay-incompatibility statements in the README, the
 docs index, troubleshooting and the GBE reference, and the RDR popup in
-`docs/screenshots/sample-notification.png` (kept by the owner on 2026-10-15). They stay. Screenshots
+`docs/screenshots/sample-notification.png` (kept by the owner on 2026-10-15). They stay. So do `docs/screenshots/add-game.png` (a library
+game's folder and appid) and `docs/screenshots/report-window.png` (a library game, two
+`trackingConfigured` appids, the RUNE saves path): the owner looked at both on 2026-10-15 and called
+them fine, so don't propose re-shooting them for this reason. Screenshots
 are public files too: a capture taken on this machine shows library names unless it is pointed at
 an invented game. CODEX/RUNE as names and the emulator's file format are fine to publish too.
 

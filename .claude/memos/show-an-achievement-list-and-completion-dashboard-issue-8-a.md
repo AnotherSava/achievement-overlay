@@ -110,7 +110,7 @@ Row fields: API name, resolved display name and description, colour icon path, g
 
 ### Which steam_settings copy supplies the schema
 
-The cache's `GameInfo.MetadataPath` is the `achievements.json` in the deepest `steam_settings` folder only. Game A's deepest copy has 25 blank descriptions where the root copy has all 54 filled, so a list, which shows every description at once, puts that defect in front of the user for the whole game. The memo "Fold the achievement schema across all of a game's steam_settings folders" is the fix, folding across `GameInfo.SettingsDirs` with first-definition-wins as `GbeOverlaySettingsReader` does. It should ship before or with Part 1. It also decides where the total comes from when two copies disagree on the achievement set; the local copies measured so far agree.
+The cache's `GameInfo.MetadataPath` is the `achievements.json` beside the Steam DLL the game loads, as `SteamDllDetector` works it out (deepest first when it cannot decide), and the list should read the schema from there, since that is the file the emulator records unlocks against. A repack's copy of that file can still carry blank hidden descriptions while another copy has them filled; running Add game on the game rewrites that file, and folding the schema across `GameInfo.SettingsDirs` was considered on 2026-10-15 and closed as not needed.
 
 ## Part 1: the per-game achievement list
 
