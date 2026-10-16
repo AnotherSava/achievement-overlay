@@ -42,6 +42,16 @@ public class AchievementSchemaWriterTests
     }
 
     [Fact]
+    public void ApplyDescriptions_VisibleAchievement_KeepsSteamText()
+    {
+        var list = AchievementSchemaWriter.Build(new[] { Ach("V", desc: "Steam's text") });
+        AchievementSchemaWriter.ApplyDescriptions(list,
+            new Dictionary<string, string> { ["V"] = "Scraped text" });
+
+        Assert.Equal("Steam's text", list[0].Description);
+    }
+
+    [Fact]
     public void ApplyDescriptions_NoMatch_LeavesUnchanged()
     {
         var list = AchievementSchemaWriter.Build(new[] { Ach("A", desc: "orig") });

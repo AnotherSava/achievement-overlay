@@ -60,16 +60,16 @@ public static class AchievementSchemaWriter
     }
 
     /// <summary>
-    /// Patches descriptions for achievements whose API name appears in
-    /// <paramref name="descriptions"/>. Used to fill in hidden-achievement text scraped
-    /// from SteamDB.
+    /// Patches descriptions for hidden achievements whose API name appears in
+    /// <paramref name="descriptions"/>, the text scraped from SteamDB. Visible achievements
+    /// keep the Steam Web API's text, which is the authoritative copy.
     /// </summary>
     public static void ApplyDescriptions(List<GbeAchievement> achievements, IReadOnlyDictionary<string, string> descriptions)
     {
         for (var i = 0; i < achievements.Count; i++)
         {
             var a = achievements[i];
-            if (descriptions.TryGetValue(a.Name, out var desc) && !string.IsNullOrWhiteSpace(desc) && desc != a.Description)
+            if (a.Hidden == "1" && descriptions.TryGetValue(a.Name, out var desc) && !string.IsNullOrWhiteSpace(desc) && desc != a.Description)
             {
                 achievements[i] = new GbeAchievement
                 {

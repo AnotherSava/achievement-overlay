@@ -46,11 +46,44 @@ public class SteamDbScraperTests
         Assert.Equal("Complete the tower", map["ACH_TOWER"]);
     }
 
+    // Visible achievements take their text from the Steam Web API, so the scrape leaves them out.
     [Fact]
-    public void ParseDescriptions_VisibleAchievement_MapsPlainDescription()
+    public void ParseDescriptions_VisibleAchievement_Skipped() => Assert.False(SteamDbScraper.ParseDescriptions(SampleMarkdown).ContainsKey("ACH_TRUST"));
+
+    // A page whose achievements are grouped puts the group name between the description and the
+    // percentage, and Firecrawl escapes the underscores in API names.
+    private const string GroupedMarkdown = """
+        ![](https://img/a.jpg)
+
+        Tower Tussle
+
+        _Hidden achievement:_ Complete the tower
+
+        Uncategorized
+
+        12.5%
+
+        ach\_tower
+
+        ![](https://img/c.jpg)
+
+        People Person
+
+        Have maximum trust
+
+        Uncategorized
+
+        43.3%
+
+        ach\_trust
+        """;
+
+    [Fact]
+    public void ParseDescriptions_GroupedPage_TakesTheDescriptionNotTheGroup()
     {
-        var map = SteamDbScraper.ParseDescriptions(SampleMarkdown);
-        Assert.Equal("Have maximum trust", map["ACH_TRUST"]);
+        var map = SteamDbScraper.ParseDescriptions(GroupedMarkdown);
+        Assert.Equal("Complete the tower", Assert.Single(map, kv => kv.Key == "ach_tower").Value);
+        Assert.Single(map);
     }
 
     [Fact]

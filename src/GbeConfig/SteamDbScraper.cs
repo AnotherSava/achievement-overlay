@@ -52,6 +52,9 @@ public static partial class SteamDbScraper
     [GeneratedRegex(@"^_*\s*hidden\s+achievement\s*[:.]?\s*_*\s*", RegexOptions.IgnoreCase)]
     private static partial Regex HiddenMarkerRegex();
 
+    [GeneratedRegex(@"\\([!-/:-@\[-`{-~])")]
+    private static partial Regex MarkdownEscapeRegex();
+
     /// <summary>The SteamDB page we scrape — also quoted in failure reasons so it can be opened by hand.</summary>
     public static string StatsPageUrl(string appId) => $"https://steamdb.info/app/{appId}/stats/";
 
@@ -226,9 +229,11 @@ public static partial class SteamDbScraper
         s.Length <= MaxQuotedError ? s : string.Concat(s.AsSpan(0, MaxQuotedError), "…");
 
     /// <summary>
-    /// Parses the SteamDB stats markdown into a map of achievement API name → description.
-    /// Anchors on the per-achievement percentage line: each achievement renders as display name,
-    /// description, percentage, then API name (the line right after the percentage).
+    /// Parses the SteamDB stats markdown into a map of hidden achievement API name → description.
+    /// Anchors on the per-achievement percentage line, which the API name follows. Before it come
+    /// the display name, the description and, on a page whose achievements are grouped, the group
+    /// name, so the description is found by SteamDB's "Hidden achievement:" marker rather than by
+    /// position. Visible achievements are skipped: their text comes from the Steam Web API.
     /// </summary>
     public static Dictionary<string, string> ParseDescriptions(string markdown)
     {
@@ -237,21 +242,30 @@ public static partial class SteamDbScraper
 
         for (var i = 0; i < lines.Count; i++)
         {
-            if (!PercentLineRegex().IsMatch(lines[i]))
+            if (!PercentLineRegex().IsMatch(lines[i]) || i + 1 >= lines.Count)
                 continue;
 
-            var apiName = i + 1 < lines.Count ? lines[i + 1] : null;   // API name follows the percentage
-            var description = i - 1 >= 0 ? lines[i - 1] : null;          // description precedes it
-            if (apiName == null || description == null || !ApiNameLineRegex().IsMatch(apiName))
+            var apiName = Unescape(lines[i + 1]);
+            if (!ApiNameLineRegex().IsMatch(apiName))
                 continue;
 
-            description = HiddenMarkerRegex().Replace(description, "").Trim();
-            if (description.Length > 0)
-                result[apiName] = description;
+            // Stops at the previous entry's percentage, so its marker is never taken for this one's.
+            for (var j = i - 1; j >= 0 && !PercentLineRegex().IsMatch(lines[j]); j--)
+            {
+                if (!HiddenMarkerRegex().IsMatch(lines[j]))
+                    continue;
+                var description = Unescape(HiddenMarkerRegex().Replace(lines[j], "")).Trim();
+                if (description.Length > 0)
+                    result[apiName] = description;
+                break;
+            }
         }
 
         return result;
     }
+
+    /// <summary>Removes markdown backslash escapes, which Firecrawl puts before underscores in API names.</summary>
+    private static string Unescape(string s) => MarkdownEscapeRegex().Replace(s, "$1");
 
     /// <summary>Splits markdown into trimmed, non-empty content lines, dropping image lines.</summary>
     private static List<string> Linearize(string markdown)
