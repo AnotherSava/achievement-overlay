@@ -8,8 +8,9 @@ public sealed record IconDownloadResult(int Downloaded, int Skipped, int Failed,
 
 /// <summary>
 /// Downloads achievement icons (unlocked + locked) into the
-/// <c>achievement_images/</c> folder, in parallel. Filenames match the paths written
-/// by <see cref="AchievementSchemaWriter"/>: <c>&lt;name&gt;.jpg</c> / <c>&lt;name&gt;_gray.jpg</c>.
+/// <c>achievement_images/</c> folder, in parallel, under the file names
+/// <see cref="AchievementSchemaWriter.IconFile"/> and <see cref="AchievementSchemaWriter.IconGrayFile"/>
+/// give, which are the ones the written schema points at.
 /// </summary>
 public static class IconDownloader
 {
@@ -23,9 +24,9 @@ public static class IconDownloader
         foreach (var a in schema)
         {
             if (!string.IsNullOrEmpty(a.Icon))
-                jobs.Add((a.Icon, Path.Combine(imageDir, $"{a.Name}.jpg")));
+                jobs.Add((a.Icon, Path.Combine(imageDir, AchievementSchemaWriter.IconFile(a.Name))));
             if (!string.IsNullOrEmpty(a.IconGray))
-                jobs.Add((a.IconGray, Path.Combine(imageDir, $"{a.Name}_gray.jpg")));
+                jobs.Add((a.IconGray, Path.Combine(imageDir, AchievementSchemaWriter.IconGrayFile(a.Name))));
         }
 
         var downloaded = 0;

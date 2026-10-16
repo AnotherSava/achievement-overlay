@@ -198,10 +198,11 @@ and icons for every achievement in the game, unlocked or not. It is a JSON array
 | `icon`, `icongray` | Unlocked and locked icon paths, relative to `steam_settings/` |
 | `progress` | Optional, for stat-based achievements: `operand1` names the stat, `operation` is the comparison, and `min_val`/`max_val` bound the progress bar |
 
-Icon paths differ by the tool that produced the config, and both work because the emulator simply
+Icon paths differ by the tool that produced the config, and all of them work because the emulator simply
 reads whatever path is written:
 
-- The **Add game… wizard** and `generate_emu_config` write `img/` with `<name>_1.png` (unlocked) and `<name>_0.png` (locked)
+- The **Add game… wizard** writes `achievement_images/` with `<name>.jpg` (unlocked) and `<name>_gray.jpg` (locked)
+- `generate_emu_config` writes `img/` with `<name>_1.png` (unlocked) and `<name>_0.png` (locked)
 - Some other generators write `images/` with `<name>.jpg` and `<name>_gray.jpg`
 
 If notifications show the default icon rather than the real one, the paths in the JSON and the files

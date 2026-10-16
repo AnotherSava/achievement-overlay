@@ -39,6 +39,12 @@ public static class AchievementSchemaWriter
     /// <summary>Relative directory (under steam_settings/) where icons are written.</summary>
     public const string ImageDir = "achievement_images";
 
+    /// <summary>The file name of an achievement's unlocked icon, inside <see cref="ImageDir"/>.</summary>
+    public static string IconFile(string name) => $"{name}.jpg";
+
+    /// <summary>The file name of an achievement's locked (grey) icon, inside <see cref="ImageDir"/>.</summary>
+    public static string IconGrayFile(string name) => $"{name}_gray.jpg";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -54,8 +60,8 @@ public static class AchievementSchemaWriter
             DisplayName = a.DisplayName,
             Description = a.Description,
             Hidden = a.Hidden != 0 ? "1" : "0",
-            Icon = $"{ImageDir}/{a.Name}.jpg",
-            IconGray = $"{ImageDir}/{a.Name}_gray.jpg"
+            Icon = $"{ImageDir}/{IconFile(a.Name)}",
+            IconGray = $"{ImageDir}/{IconGrayFile(a.Name)}"
         }).ToList();
     }
 
