@@ -108,6 +108,8 @@ public sealed class AddGameForm : Form, IConfigProgress
     private bool _appIdGuessed;
     /// <summary>The CODEX/RUNE emulator the game runs, or null when it runs Steam's own DLL or GBE.</summary>
     private SceneEmulator? _emulator;
+    /// <summary>Whether the game already loads a GBE steamclient through ColdClientLoader, so nothing is installed.</summary>
+    private bool _keepsGbe;
     private bool _needAppId;
     private bool _needApiKey;
     private bool _force; // overwrite an existing steam_settings (decided right after folder selection)
@@ -185,8 +187,8 @@ public sealed class AddGameForm : Form, IConfigProgress
         }
     }
 
-    /// <summary>Whether this run installs GBE: always, unless the game runs CODEX/RUNE and the user keeps it.</summary>
-    private bool InstallsGbe => _emulator == null || _replaceEmulatorCheck.Checked;
+    /// <summary>Whether this run installs GBE: always, unless GBE is already in place or the game runs CODEX/RUNE and the user keeps it.</summary>
+    private bool InstallsGbe => !_keepsGbe && (_emulator == null || _replaceEmulatorCheck.Checked);
 
     /// <summary>Shows the emulator rows only for a CODEX/RUNE game, and the GBE options only when GBE is installed.</summary>
     private void UpdateEmulatorControls()
@@ -748,22 +750,30 @@ public sealed class AddGameForm : Form, IConfigProgress
         _folderStatus.Text = "Detecting…";
         try
         {
-            var dlls = await Task.Run(() => DllLocator.FindAll(gameDir));
-            var primary = DllLocator.SelectPrimary(dlls);
-            if (primary == null)
+            var (target, refusal) = await Task.Run(() => InstallTarget.Choose(gameDir));
+            if (target == null)
             {
                 _folderStatus.ForeColor = Color.Firebrick;
-                _folderStatus.Text = "No steam_api64.dll / steam_api.dll found under this folder. Pick the game's install folder. This wizard configures Steam games only — other emulators are tracked automatically once they write to the GSE Saves folder.";
+                _folderStatus.Text = refusal + " Pick the game's install folder. This wizard configures Steam games only — other emulators are tracked automatically once they write to the GSE Saves folder.";
                 FitToActivePage();
                 return;
             }
 
             _gameDir = gameDir;
-            _emulator = await Task.Run(() => SceneEmulatorDetector.Detect(primary.Path));
+            _keepsGbe = target.Action == InstallAction.KeepGbe;
+            _emulator = _keepsGbe ? null : await Task.Run(() => SceneEmulatorDetector.Detect(target.Dll.Path));
             _replaceEmulatorCheck.Checked = false;
+            // A kept CODEX/RUNE emulator installs nothing, so only a game with none can be refused here.
+            if (_emulator == null && target.InstallRefusal is { } cannotInstall)
+            {
+                _folderStatus.ForeColor = Color.Firebrick;
+                _folderStatus.Text = cannotInstall;
+                FitToActivePage();
+                return;
+            }
 
             // If a config already exists at the target, confirm overwrite up front (not at the end).
-            var existing = Path.Combine(Path.GetDirectoryName(primary.Path)!, "steam_settings");
+            var existing = target.Dll.SettingsDir;
             _force = false;
             if (Directory.Exists(existing))
             {
@@ -900,7 +910,7 @@ public sealed class AddGameForm : Form, IConfigProgress
             await _appNames.FetchAsync([_appId]);
             try
             {
-                _onGameConfigured(_gameDir, request.KeepEmulator ? _emulator!.SavesFolders : []);
+                _onGameConfigured(_gameDir, _emulator != null && request.KeepEmulator ? _emulator.SavesFolders : []);
             }
 #pragma warning disable CA1031 // Host-callback boundary: shows the failure as an error line in the progress log
             catch (Exception ex)

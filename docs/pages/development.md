@@ -62,6 +62,7 @@ src/
   AchievementWatcher.cs       FileSystemWatcher over the save folders (GSE Saves, CODEX/RUNE)
   UnlockFile.cs               finding and parsing an appid folder's unlock file, JSON or INI
   GameCache.cs                the scan of gamesPaths: appid -> game folder and schema
+  SteamDllDetector.cs         which Steam DLL a game loads, for the scan and the wizard
   AchievementMetadata.cs      schema parsing, and choosing an achievement's display text
   NotificationQueue.cs        which popup shows next, and how they stack
   NotificationWindow.xaml     the popup itself
@@ -96,5 +97,7 @@ Pushing a `v*` tag builds and publishes both archives — self-contained and fra
 ## Going deeper
 
 The [GBE reference](development/gbe-reference) documents the emulator itself: where it stores unlocks, how its overlay config files are parsed, the achievement schema format, and why hidden achievement descriptions come back blank. It is the background behind most of what `GbeConfig/` and `GbeOverlay/` do.
+
+[Which Steam DLL a game loads](development/steam-dll-detection) gives the rules the scan and the Add game wizard share for working out which `steam_settings` folder a game's emulator reads, and what to do when an install breaks them.
 
 [Replaying a report](development/replaying-a-report) covers the maintainer tool that feeds a user's diagnostic report back through the resolver, so a report of wrong achievement text can be measured rather than reasoned about.

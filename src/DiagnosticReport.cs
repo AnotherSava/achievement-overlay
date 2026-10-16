@@ -31,7 +31,7 @@ public sealed class DiagnosticReportInputs
     public DiagnosticFile Unlock { get; init; } = DiagnosticFile.Absent;
 
     /// <summary>
-    /// Every <c>steam_settings</c> folder the game has, deepest first — the first is the one that
+    /// Every <c>steam_settings</c> folder the game has, in <see cref="GameInfo.SettingsDirs"/> order — the first is the one that
     /// supplied <see cref="Schema"/>. A game with two of them holding different text is a real and
     /// invisible failure mode, so the report names all of them rather than only the winner.
     /// </summary>
@@ -555,6 +555,12 @@ public static class DiagnosticReport
     {
         var unlockPath = FindUnlockFile(appId, gseSavesPaths);
         var gameFolders = new List<string>(game?.SettingsDirs ?? Array.Empty<string>());
+        // The folder of the Steam DLL the scan chose, so its "Steam DLL:" lines survive. Only that folder:
+        // the install's top folder can be a configured root or a prefix of a sibling game's folder, and
+        // either would keep lines about other games. The undecided warning names its candidates relative
+        // to the game folder, so it needs nothing disclosed.
+        if (game?.SteamDll?.Loaded is { } dll)
+            gameFolders.Add(Path.GetDirectoryName(dll.Path)!);
         // Every GSE Saves folder named after the game is its own, not only the one whose unlock file the
         // report carries: the watcher's warning about a game in two of those paths names each of them.
         gameFolders.AddRange(gseSavesPaths.Select(path => Path.Combine(path, appId)));

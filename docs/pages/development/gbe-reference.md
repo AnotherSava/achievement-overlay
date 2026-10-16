@@ -168,9 +168,9 @@ GBE uses SimpleIni in a narrow configuration, and a file written for it behaves 
 
 ## The achievement schema format
 
-Each configured game has a `steam_settings/achievements.json` next to its `steam_api64.dll`. This is
-the *schema* — the display text and icons for every achievement in the game, unlocked or not. It is a
-JSON array:
+Each configured game has a `steam_settings/achievements.json` next to the Steam DLL it loads, which
+[Which Steam DLL a game loads](steam-dll-detection) works out. This is the *schema* — the display text
+and icons for every achievement in the game, unlocked or not. It is a JSON array:
 
 ```json
 [
@@ -222,9 +222,10 @@ Two places do have the real text:
 
 - **SteamDB** — `https://steamdb.info/app/<app_id>/stats/` lists hidden descriptions inline. This is
   what the wizard reads through [Firecrawl](https://firecrawl.dev); the site sits behind Cloudflare,
-  so a plain HTTP request gets a 403. Each achievement appears as its display name, then
-  `Hidden achievement: <description>`, then its completion percentage, then the API name — match rows
-  back to the JSON on that API name, never on display order.
+  so a plain HTTP request gets a 403. Each hidden achievement appears as its display name, then
+  `Hidden achievement: <description>`, then (on a page that groups achievements) the group name, then
+  its completion percentage, then the API name — match rows back to the JSON on that API name, never
+  on display order. Firecrawl's markdown escapes the underscores in API names with backslashes.
 - **A legitimate local Steam install** — `Steam/appcache/stats/UserGameStatsSchema_<app_id>.bin` is a
   binary KeyValues blob Steam writes after the real client pulls a game's schema, and it contains
   every string including the hidden ones.

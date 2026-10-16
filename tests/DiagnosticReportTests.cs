@@ -784,4 +784,29 @@ public class DiagnosticReportTests
     public void Compose_LeavesAPathOutsideTheProfileAlone() =>
         Assert.Equal(@"C:\Games\Odyssey",
             (string?)Compose(Inputs(config: Present("""{"gamesPaths":"C:\\Games\\Odyssey"}""")))["config"]!["content"]!["gamesPaths"]);
+
+    [Fact]
+    public void Collect_SteamDllLine_IsKeptWithoutDisclosingASiblingGame()
+    {
+        // The DLL's own folder is disclosed rather than the install's, which is a prefix of the sibling's.
+        var game = @"C:\Games\Example Game";
+        var dll = Path.Combine(game, "bin", "coldclient", "steamclient64.dll");
+        var info = new GameInfo
+        {
+            AppId = "480",
+            GameName = "Example Game",
+            MetadataPath = Path.Combine(game, "bin", "coldclient", "steam_settings", "achievements.json"),
+            SettingsDirs = [Path.Combine(game, "bin", "coldclient", "steam_settings"), Path.Combine(game, "steam_settings")],
+            SteamDll = SteamDllDetection.Found(dll, SteamDllRule.ColdClientLoader)
+        };
+        var inputs = DiagnosticReport.Collect("480", info, null, Array.Empty<string>(), new[] { @"C:\Games" });
+        string[] lines =
+        [
+            $"[INFO]   Steam DLL: appid=480, rule=coldclient-loader, dll='{dll}'",
+            @"[WARN]   Error processing 'C:\Games\Example Game 2\steam_appid.txt': denied"
+        ];
+
+        Assert.Equal(new[] { lines[0] }, DiagnosticReport.KeepLinesForGame(lines, "480", inputs.ConfiguredRoots, inputs.GameFolders));
+    }
+
 }

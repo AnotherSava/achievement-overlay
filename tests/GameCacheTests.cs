@@ -499,9 +499,53 @@ public sealed class GameCacheTests : IDisposable
 
         var info = cache.LookupCached("1000002")!;
         Assert.Equal(new[] { nested, root }, info.SettingsDirs);
-        // The deepest is the schema source, so icons and achievement text are unaffected.
+        // With no Steam DLL to say which copy the emulator reads, the deepest is the schema source.
         Assert.Equal(Path.Combine(nested, "achievements.json"), info.MetadataPath);
         Assert.Single(cache.GetAll());
+    }
+
+    [Fact]
+    public void ScanAll_SteamDllTheGameLoads_PutsTheFolderBesideItFirst()
+    {
+        // GBE at the root beside the executable; the repack's deeper copy is a leftover nothing loads.
+        var root = CreateSettingsDir("1000003", "GameC");
+        var nested = CreateSettingsDir("1000003", "GameC", "bin", "coldclient");
+        PeFixture.WriteImporter(Path.Combine(_tempDir, "games", "GameC", "Game.exe"), imports: ["steam_api64.dll"]);
+        PeFixture.WriteGbeDll(Path.Combine(_tempDir, "games", "GameC", "steam_api64.dll"));
+
+        var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
+        cache.ScanAll();
+
+        var info = cache.LookupCached("1000003")!;
+        Assert.Equal(new[] { root, nested }, info.SettingsDirs);
+        Assert.Equal(Path.Combine(root, "achievements.json"), info.MetadataPath);
+        Assert.Equal(SteamDllRule.EmulatorSteamApi, info.SteamDll!.Loaded!.Rule);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ScanAll_SteamDllLine_IsKeptInAReport(bool withDll)
+    {
+        // The DLL sits beside a settings folder, never inside one, so its line needs the DLL's folder
+        // disclosed; the undecided warning names its candidates relative to the game folder.
+        CreateSettingsDir("1000005", "GameC");
+        CreateSettingsDir("1000005", "GameC", "bin", "coldclient");
+        if (withDll)
+        {
+            PeFixture.WriteImporter(Path.Combine(_tempDir, "games", "GameC", "Game.exe"), imports: ["steam_api64.dll"]);
+            PeFixture.WriteGbeDll(Path.Combine(_tempDir, "games", "GameC", "steam_api64.dll"));
+        }
+        var gamesPaths = new[] { Path.Combine(_tempDir, "games") };
+        var cache = new GameCache(gamesPaths);
+
+        AppLog.While(cache.ScanAll);
+
+        // The last line for this test's own appid rather than through LogLines: the undecided line
+        // names no absolute path for LogLines to match.
+        var line = File.ReadLines(Logger.LogPath).Last(line => line.Contains("Steam DLL: appid=1000005", StringComparison.Ordinal));
+        var inputs = DiagnosticReport.Collect("1000005", cache.LookupCached("1000005"), null, Array.Empty<string>(), gamesPaths);
+        Assert.Single(DiagnosticReport.KeepLinesForGame(new[] { line }, "1000005", inputs.ConfiguredRoots, inputs.GameFolders));
     }
 
     [Fact]

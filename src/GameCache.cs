@@ -13,14 +13,21 @@ public sealed class GameInfo
     public required string GameName { get; init; }
 
     /// <summary>
-    /// Every <c>steam_settings</c> folder this game has, deepest first. One install often carries
-    /// more than one — a repack drops a decorated copy at the game root while the emulator reads the
-    /// one beside the DLL (<c>bin/coldclient/</c>, <c>www/greenworks/lib/</c>) — and they rarely hold
-    /// the same things. The first is <see cref="MetadataPath"/>'s folder; the rest are consulted only
+    /// Every <c>steam_settings</c> folder this game has: the one beside the Steam DLL the game loads
+    /// first, when <see cref="SteamDll"/> found it, then deepest first. One install often carries more
+    /// than one — a repack drops a decorated copy at the game root while the emulator reads the one
+    /// beside its DLL (<c>bin/coldclient/</c>, <c>www/greenworks/lib/</c>) — and they rarely hold the
+    /// same things. The first is <see cref="MetadataPath"/>'s folder; the rest are consulted only
     /// for a game's own overlay settings, where a folder that GBE itself never reads can still be the
     /// only record of the sound and font the user chose.
     /// </summary>
     public required IReadOnlyList<string> SettingsDirs { get; init; }
+
+    /// <summary>
+    /// Which Steam DLL the game loads, worked out only for a game with more than one settings folder:
+    /// the folder beside that DLL is the one its emulator reads, so it leads <see cref="SettingsDirs"/>.
+    /// </summary>
+    public SteamDllDetection? SteamDll { get; init; }
 }
 
 /// <summary>
@@ -172,6 +179,7 @@ public sealed class GameCache
             // Carries the appid so the line identifies its own game: a diagnostic report keeps the
             // lines about one game and drops the rest, and it recognises them by the appid.
             Logger.Info($"  Schema: appid={game.AppId}, {DescribeSchema(game)}");
+            LogSteamDll(game);
         }
 
         return games.Count;
@@ -250,25 +258,56 @@ public sealed class GameCache
 
         var games = byGame.Select(entry =>
         {
-            // Deepest first: the emulator loads from beside its DLL, which is the nested copy in every
-            // layout seen so far (bin/coldclient, www/greenworks/lib, Binaries/Win64). Ordering by
-            // path keeps ties stable, so which folder supplies the schema stops depending on the order
-            // the filesystem happened to enumerate in.
+            // Deepest first, then by path so ties stay stable: which folder supplies the schema must not
+            // depend on the order the filesystem enumerated in. The emulator's own folder then leads.
             var ordered = entry.Value.Dirs
                 .OrderByDescending(d => d.Count(c => c is '\\' or '/'))
                 .ThenBy(d => d, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+            SteamDllDetection? steamDll = null;
+            if (ordered.Count > 1)
+            {
+                steamDll = SteamDllDetector.Detect(entry.Key.GameFolder);
+                var beside = steamDll.Loaded is { } loaded ? ordered.FindIndex(d => FolderPath.Parse(d).IsSameFolder(FolderPath.Parse(loaded.SettingsDir))) : -1;
+                if (beside > 0)
+                {
+                    var lead = ordered[beside];
+                    ordered.RemoveAt(beside);
+                    ordered.Insert(0, lead);
+                }
+            }
 
             return new GameInfo
             {
                 AppId = entry.Key.AppId,
                 MetadataPath = Path.Combine(ordered[0], "achievements.json"),
                 GameName = entry.Value.GameName,
-                SettingsDirs = ordered
+                SettingsDirs = ordered,
+                SteamDll = steamDll
             };
         }).ToList();
 
         return (games, skipped);
+    }
+
+    /// <summary>
+    /// Says which Steam DLL picked a multi-folder game's schema, so a Report a problem file carries the
+    /// evidence when the rules in <see cref="SteamDllDetector"/> meet an install they do not describe.
+    /// </summary>
+    private static void LogSteamDll(GameInfo game)
+    {
+        if (game.SteamDll is not { } detection)
+            return;
+        if (detection.Loaded is not { } loaded)
+        {
+            Logger.Warn($"  Steam DLL: appid={game.AppId}, undecided ({detection.Undecided}); reading the deepest settings folder");
+            return;
+        }
+
+        if (FolderPath.Parse(game.SettingsDirs[0]).IsSameFolder(FolderPath.Parse(loaded.SettingsDir)))
+            Logger.Info($"  Steam DLL: appid={game.AppId}, rule={loaded.RuleName}, dll='{loaded.Path}'");
+        else
+            Logger.Warn($"  Steam DLL: appid={game.AppId}, rule={loaded.RuleName}, dll='{loaded.Path}', but no achievements.json sits beside it; reading the deepest settings folder");
     }
 
     /// <summary>

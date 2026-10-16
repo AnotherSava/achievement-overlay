@@ -94,13 +94,27 @@ report carries an INI as its text rather than as parsed JSON. `WarnAboutGamesInS
 only folders whose file holds an earned achievement, because a game switched from RUNE to GBE leaves
 an empty emulator file behind that cannot repeat anything.
 
+## Steam DLL detection
+
+GBE reads the `steam_settings` beside its own DLL, so the app and the Add game wizard both need to know
+which Steam DLL a game loads, and nothing records it. `SteamDllDetector.Detect` works it out from the
+game folder's files — emulator markers, Valve's version info, PE import tables, `ColdClientLoader.ini`,
+and the folders Unreal and Unity load the DLL from by path — by ordered rules, and a tie stops it
+undecided rather than guessing. `GameCache` runs it for a game with more than one settings folder and
+logs the rule (`Steam DLL: appid=…`, a Warn when undecided or when no `achievements.json` sits beside
+the chosen DLL), and the wizard reaches it through `InstallTarget.Choose`, which also decides between
+replacing a `steam_api` and keeping a GBE `steamclient` behind a loader. The rules and the procedure for an install they get wrong are on
+`docs/pages/development/steam-dll-detection.md`, which must change together with `Detect`; each
+layout has a fixture in `tests/SteamDllDetectorTests.cs`, built by `tests/PeFixture.cs`, which writes
+minimal PE files with real import tables and version info.
+
 ## Config generator (Add game dialog)
 
-The tray menu's **Add game…** item opens `AddGameForm` — a wizard (despite the legacy class name) that is a self-contained replacement for the unmaintained `generate_emu_config`. It walks through pages (game folder → AppID, shown only if not auto-detected → API key, shown only if not already saved → hidden-achievements/Firecrawl-key, shown only if the fetched schema has hidden achievements and no Firecrawl key is saved → ready/options → progress). Detection happens when leaving the folder page; the achievement schema is fetched when leaving the last input page (to validate the AppID/key and decide the hidden step) and reused by the generator via the `prefetchedSchema` ctor arg. It produces a GBE-compatible `steam_settings/` folder: locates the Steam DLL, resolves the AppID, fetches the achievement schema + icons from the Steam Web API, fills in hidden descriptions by scraping SteamDB through the Firecrawl API (`SteamDbScraper`; SteamDB is behind Cloudflare so a plain HttpClient can't reach it), downloads the GBE release (`SharpCompress` for 7z), backs up and replaces the DLL, and writes `steam_interfaces.txt` via GBE's bundled tool.
+The tray menu's **Add game…** item opens `AddGameForm` — a wizard (despite the legacy class name) that is a self-contained replacement for the unmaintained `generate_emu_config`. It walks through pages (game folder → AppID, shown only if not auto-detected → API key, shown only if not already saved → hidden-achievements/Firecrawl-key, shown only if the fetched schema has hidden achievements and no Firecrawl key is saved → ready/options → progress). Detection happens when leaving the folder page; the achievement schema is fetched when leaving the last input page (to validate the AppID/key and decide the hidden step) and reused by the generator via the `prefetchedSchema` ctor arg. It produces a GBE-compatible `steam_settings/` folder: locates the Steam DLL the game loads (see **Steam DLL detection**), resolves the AppID, fetches the achievement schema + icons from the Steam Web API, fills in hidden descriptions by scraping SteamDB through the Firecrawl API (`SteamDbScraper`; SteamDB is behind Cloudflare so a plain HttpClient can't reach it), downloads the GBE release (`SharpCompress` for 7z), backs up and replaces the DLL (unless an emulator is kept, below), and writes `steam_interfaces.txt` via GBE's bundled tool.
 
 The engine lives under `src/GbeConfig/`. Modules keep parsing logic in pure static methods (unit-tested in `tests/GbeConfig/`) separate from the network/IO/subprocess work in `GbeConfigGenerator`, which is front-end agnostic — it reports progress through `IConfigProgress` (the dialog implements it to drive its checklist + log) and takes a `ConfigRequest`. The Steam Web API key and optional Firecrawl API key are stored as optional fields in the app's own `config.json` (via `SettingsData`/`AppConfig`).
 
-A game running the CODEX or RUNE emulator is the one case where the wizard installs nothing by default. `SceneEmulatorDetector.Detect` recognises it by a `steam_emu.ini` beside the selected DLL *and* a DLL that is not GBE (GBE is told by its `GSE Saves` strings; the emulator's loader has no marker of its own, and its files outlive a switch to GBE). The AppID then comes from that ini, ahead of `AppIdResolver`, and `ConfigRequest.KeepEmulator` makes `GbeConfigGenerator` write only the schema, icons and `steam_appid.txt`. Ticking **Replace it with GBE** runs the normal path, except that `steam_interfaces.txt` is written from the ini's `[Interfaces]` section: GBE's `generate_interfaces` finds nothing in the loader and writes an empty file, which `InterfaceGenerator` reports as no output. Plan and reasoning: `docs/plans/2026-10-14-codex-rune-emulator-support.md`.
+The wizard installs nothing in two cases. A game that already loads a GBE `steamclient` behind a ColdClientLoader (`InstallAction.KeepGbe`) gets only the schema, icons and `steam_appid.txt`, with no download, DRM check or backup. A game running the CODEX or RUNE emulator gets the same by default. `SceneEmulatorDetector.Detect` recognises it by a `steam_emu.ini` beside the selected DLL *and* a DLL that is not GBE (GBE is told by its `GSE Saves` strings; the emulator's loader has no marker of its own, and its files outlive a switch to GBE). The AppID then comes from that ini, ahead of `AppIdResolver`, and `ConfigRequest.KeepEmulator` makes `GbeConfigGenerator` write only the schema, icons and `steam_appid.txt`. Ticking **Replace it with GBE** runs the normal path, except that `steam_interfaces.txt` is written from the ini's `[Interfaces]` section: GBE's `generate_interfaces` finds nothing in the loader and writes an empty file, which `InterfaceGenerator` reports as no output. Plan and reasoning: `docs/plans/2026-10-14-codex-rune-emulator-support.md`.
 
 After a run, `TrayApplicationContext.RegisterNewGame` ensures the game's folder is covered by `gamesPaths` (using `GamesPathPlanner`) and rescans `GameCache`, so the game is tracked without a restart. For a kept CODEX/RUNE emulator it first adds the emulator's save folder to `gseSavesPaths` when it is not already listed (creating it when the game has never run), and rebuilds the watcher when it added or created one, as a GSE Saves change in Settings does; a folder already listed and present changes nothing. That rebuild carries the same accepted limit, an unlock inside the sub-second debounce being seeded rather than announced. Otherwise the watcher is left alone: it seeds every game in the GSE Saves paths at `Start()`, and a game whose folder appears later has its pre-`Start()` backlog seeded on first sight, whether or not it is configured yet. Re-seeding here could only record unlocks its diff has not reached yet — swallowing any unlock written while the game is being added.
 
@@ -400,10 +414,11 @@ Details the code depends on:
 
 - **A game usually has more than one `steam_settings` folder, and they hold different things.** A
   repack decorates the copy at the game root while the emulator reads a bare one beside its DLL
-  (`bin/coldclient/`, `www/greenworks/lib/`). `GameInfo.SettingsDirs` holds all of them, deepest
-  first, and the reader folds them into one key space with the same first-definition-wins rule GBE
-  applies across its four filenames — so a sound or font living only in the copy GBE ignores is still
-  used. `MetadataPath` stays the deepest folder, so schema and icon resolution are untouched.
+  (`bin/coldclient/`, `www/greenworks/lib/`). `GameInfo.SettingsDirs` holds all of them: the one
+  beside the Steam DLL the game loads first, as `SteamDllDetector` works it out (see **Steam DLL
+  detection**), then deepest first. The reader folds them into one key space with the same
+  first-definition-wins rule GBE applies across its four filenames — so a sound or font living only
+  in the copy GBE ignores is still used. `MetadataPath` is the first of them.
   Grouping is keyed by appid **and** first-level game folder: two installs claiming one appid are two
   games, and pooling their folders would answer an unlock with a mixture of both.
 - **The scan reads hidden folders** (`AppUtilities.RecursiveScan`). Repacks mark `steam_settings`

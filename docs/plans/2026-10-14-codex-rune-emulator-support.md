@@ -172,9 +172,10 @@ parked design if a switched game is reported repeating.
    folders to add (from D5). The GBE check reads the DLL's bytes for both marker strings, ASCII and
    UTF-16. Unit tests cover RUNE active, CODEX active, the emulator's files left beside a GBE DLL, no
    `steam_emu.ini`, and a `steam_emu.ini` with no `AppId`.
-2. **AppID.** `AddGameForm.DetectAndAdvanceAsync` runs the detector right after `DllLocator`, and an
-   AppId from it skips `AppIdResolver` and counts as detected, not guessed. The ini is read with
-   `IniFile.Parse`.
+2. **AppID.** `AddGameForm.DetectAndAdvanceAsync` runs the detector right after `DllLocator`
+   (since replaced by `InstallTarget.Choose`, after which the detector is skipped for a GBE
+   `steamclient` the wizard keeps), and an AppId from it skips `AppIdResolver` and counts as
+   detected, not guessed. The ini is read with `IniFile.Parse`.
 3. **Request.** `ConfigRequest` gains `KeepEmulator`. The Ready page shows, only when the emulator is
    detected:
    - a "Steam emulator" row in the summary naming it (RUNE, CODEX, or CODEX/RUNE);

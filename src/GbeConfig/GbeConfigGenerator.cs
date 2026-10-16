@@ -50,21 +50,20 @@ public sealed class GbeConfigGenerator
             return ConfigStatus.UserError;
         }
 
-        // --- Locate the Steam DLL (defines the target directory) ---
-        var dlls = DllLocator.FindAll(gameDir);
-        var primary = DllLocator.SelectPrimary(dlls);
-        if (primary == null)
+        // --- Locate the Steam DLL the game loads (defines the target directory) ---
+        var (target, refusal) = InstallTarget.Choose(gameDir);
+        if (target == null)
         {
-            Error("No steam_api64.dll / steam_api.dll found under the game directory.");
+            Error(refusal!);
             return ConfigStatus.UserError;
         }
-        var targetDir = Path.GetDirectoryName(primary.Path)!;
-        Info($"Steam DLL: {primary.Path}");
-        if (dlls.Count > 1)
+        var dllPath = target.Dll.Path;
+        Info($"Steam DLL: {dllPath} (rule {target.Dll.RuleName})");
+        var keep = _req.KeepEmulator || target.Action == InstallAction.KeepGbe;
+        if (!keep && target.InstallRefusal is { } cannotInstall)
         {
-            Warn("Multiple Steam DLLs found; using the one above. Others:");
-            foreach (var d in dlls.Skip(1))
-                Warn($"  {d.Path}");
+            Error(cannotInstall);
+            return ConfigStatus.UserError;
         }
 
         var appId = _req.AppId.Trim();
@@ -73,10 +72,10 @@ public sealed class GbeConfigGenerator
         // --- DRM detection ---
         // It asks whether the game will load the GBE DLL about to be installed, so it has nothing to say
         // about a game that keeps its emulator.
-        if (!_req.KeepEmulator && !ReportDrm(DrmDetector.Analyze(gameDir)))
+        if (!keep && !ReportDrm(DrmDetector.Analyze(gameDir)))
             return ConfigStatus.UserError;
 
-        var steamSettingsDir = Path.Combine(targetDir, "steam_settings");
+        var steamSettingsDir = target.Dll.SettingsDir;
         if (Directory.Exists(steamSettingsDir) && !_req.Force)
         {
             Error($"steam_settings/ already exists at '{steamSettingsDir}'. Enable 'Overwrite existing config' to replace it.");
@@ -87,7 +86,7 @@ public sealed class GbeConfigGenerator
         GbeRelease? gbe = null;
         try
         {
-            if (!_req.KeepEmulator)
+            if (!keep)
                 gbe = await GbeBinaryManager.EnsureAsync(_req.GbeFolder, _req.DownloadLatest, _http, _progress, ct);
         }
         catch (Exception ex) when (IsAntivirusBlock(ex))
@@ -155,7 +154,7 @@ public sealed class GbeConfigGenerator
                 var missing = schema.Where(a => a.Hidden != 0 && !scrape.Descriptions.ContainsKey(a.Name))
                     .Select(a => a.Name).ToList();
                 Info($"Patched {hiddenCount - missing.Count}/{hiddenCount} hidden description(s) "
-                    + $"({scrape.Descriptions.Count} achievement(s) found on the SteamDB page).");
+                    + $"({scrape.Descriptions.Count} hidden description(s) found on the SteamDB page).");
                 if (missing.Count > 0)
                 {
                     Warn($"SteamDB had no description for {missing.Count} hidden achievement(s): {Summarize(missing)}");
@@ -191,14 +190,14 @@ public sealed class GbeConfigGenerator
 
         // --- Back up original DLL and generate interfaces against it ---
         // Read before the backup and the copy below, while the DLL is still the emulator's.
-        var emulator = SceneEmulatorDetector.Detect(primary.Path);
-        var interfaceSourceDll = primary.Path;
+        var emulator = SceneEmulatorDetector.Detect(dllPath);
+        var interfaceSourceDll = dllPath;
         if (_req.Backup)
         {
-            var backupPath = primary.Path + ".original";
+            var backupPath = dllPath + ".original";
             if (!File.Exists(backupPath))
             {
-                File.Copy(primary.Path, backupPath);
+                File.Copy(dllPath, backupPath);
                 Info($"Backed up original DLL to {Path.GetFileName(backupPath)}");
             }
             else
@@ -235,7 +234,7 @@ public sealed class GbeConfigGenerator
 
         // --- Replace the DLL with GBE's regular build ---
         Step("Installing GBE steam_api64.dll...");
-        File.Copy(gbe.RegularDll64, primary.Path, overwrite: true);
+        File.Copy(gbe.RegularDll64, dllPath, overwrite: true);
 
         return Finish(partial, steamSettingsDir);
     }

@@ -45,4 +45,5 @@ See full project documentation at **[anothersava.github.io/achievement-overlay](
 - [Development](https://anothersava.github.io/achievement-overlay/pages/development)
   - [GBE reference](https://anothersava.github.io/achievement-overlay/pages/development/gbe-reference)
   - [Replaying a report](https://anothersava.github.io/achievement-overlay/pages/development/replaying-a-report)
+  - [Which Steam DLL a game loads](https://anothersava.github.io/achievement-overlay/pages/development/steam-dll-detection)
 - [Privacy](https://anothersava.github.io/achievement-overlay/pages/privacy)
