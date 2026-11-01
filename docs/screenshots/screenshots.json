@@ -61,7 +61,7 @@
       ],
       "shows": "The Add game wizard on its Ready page: the game folder and its Steam AppID, the back-up-the-original-library option with its explanation, the collapsed Advanced options section, and the Back / Cancel / Add game buttons",
       "policy": "auto",
-      "verifiedAt": "6248fbd",
+      "verifiedAt": "64e0a8c",
       "capture": {
         "command": "bash docs/screenshots/capture/add-game-window.sh",
         "steps": [
