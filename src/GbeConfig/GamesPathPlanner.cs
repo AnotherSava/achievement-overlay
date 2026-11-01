@@ -24,4 +24,31 @@ public static class GamesPathPlanner
 
         return Directory.GetParent(game.ToString())?.FullName ?? game.ToString();
     }
+
+    /// <summary>
+    /// The deepest <c>gamesPaths</c> entry containing a game chosen at <paramref name="gameDir"/>, or null
+    /// when none does. Remembered as the Add game wizard's next browse start, which is why only an entry
+    /// listed before the run qualifies and the wizard calls this before registering the game: config
+    /// travels in a diagnostic report, and a folder planned rather than listed can be a repack wrapper
+    /// named after the game.
+    /// </summary>
+    public static string? GamesRootOf(IEnumerable<string> existingPaths, string gameDir) => DeepestContaining(existingPaths, gameDir);
+
+    /// <summary>
+    /// Where the wizard's folder picker opens when no folder has been typed: the only games root when
+    /// there is one, otherwise the root containing <paramref name="lastGamesRoot"/>, otherwise null
+    /// (the picker's own default), since with several roots nothing else says which one is meant.
+    /// </summary>
+    public static string? ChooseBrowseStart(IReadOnlyList<string> gamesPaths, string? lastGamesRoot)
+    {
+        if (gamesPaths.Count == 1)
+            return gamesPaths[0];
+        return string.IsNullOrWhiteSpace(lastGamesRoot) ? null : DeepestContaining(gamesPaths, lastGamesRoot);
+    }
+
+    private static string? DeepestContaining(IEnumerable<string> paths, string folder)
+    {
+        var target = FolderPath.Parse(folder);
+        return paths.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => (Raw: p, Path: FolderPath.Parse(p))).Where(p => p.Path.Contains(target)).OrderByDescending(p => p.Path.Names.Count).Select(p => p.Raw).FirstOrDefault();
+    }
 }

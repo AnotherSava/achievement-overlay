@@ -59,6 +59,7 @@ public sealed class AddGameForm : Form, IConfigProgress
     private bool _advancedExpanded;
     private bool _placed;
     private readonly Label _folderStatus = new() { AutoSize = true, ForeColor = Color.Firebrick, MaximumSize = new Size(HelpWidth, 0), Margin = new Padding(0, 6, 0, 0) };
+    private readonly LinkLabel _steamDbLink = new() { AutoSize = true };
     private readonly Label _appIdNote = new() { AutoSize = true, MaximumSize = new Size(HelpWidth, 0), ForeColor = Color.DarkGoldenrod, Margin = new Padding(0, 0, 0, 6) };
     private readonly Label _summaryGameKey = new() { Text = "Game folder:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 12, 2) };
     private readonly Label _summaryAppIdKey = new() { Text = "Steam AppID:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 12, 0) };
@@ -93,6 +94,8 @@ public sealed class AddGameForm : Form, IConfigProgress
     private readonly Button _backButton = new() { Text = "Back", AutoSize = true };
     private readonly Button _nextButton = new() { Text = "Next", AutoSize = true };
     private readonly Button _closeButton = new() { Text = "Cancel", AutoSize = true };
+    /// <summary>A finished run's outcome, beside the buttons that act on it.</summary>
+    private readonly Label _resultLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Margin = new Padding(0, 8, 8, 0) };
 
     private readonly List<Page> _steps = new();
     private int _stepIndex;
@@ -138,6 +141,11 @@ public sealed class AddGameForm : Form, IConfigProgress
 
         BuildPages();
         BuildChrome();
+
+        // The link follows the AppID box, so a guessed or typed AppID opens its own SteamDB page for checking.
+        _appIdBox.TextChanged += (_, _) => UpdateSteamDbLink();
+        _steamDbLink.LinkClicked += (_, _) => OpenUrl(TypedAppId() is { } id ? SteamDbScraper.AppPageUrl(id) : "https://steamdb.info/");
+        UpdateSteamDbLink();
 
         _gbePathBox.Text = GbeBinaryManager.CacheRoot;
         _gbePathBox.TextChanged += (_, _) => UpdateGbeDownloadState();
@@ -242,7 +250,12 @@ public sealed class AddGameForm : Form, IConfigProgress
         _nextButton.Click += OnNextClick;
         _backButton.Click += (_, _) => { if (_stepIndex > 0) { _stepIndex--; ShowStep(); } };
         _buttonBar.Controls.AddRange(new Control[] { _nextButton, _closeButton, _backButton });
-        root.Controls.Add(_buttonBar, 0, 1);
+        var bottomRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, AutoSize = true, Margin = Padding.Empty };
+        bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        bottomRow.Controls.Add(_resultLabel, 0, 0);
+        bottomRow.Controls.Add(_buttonBar, 1, 0);
+        root.Controls.Add(bottomRow, 0, 1);
 
         Controls.Add(root);
         AcceptButton = _nextButton;
@@ -273,11 +286,13 @@ public sealed class AddGameForm : Form, IConfigProgress
             "This game's AppID couldn't be detected automatically. Every Steam game has a unique numeric ID — for example, "
             + "620 is Portal 2. You can read it from the game's Steam store URL (the number in "
             + "store.steampowered.com/app/<id>/) or from SteamDB.",
-            ("Look up a game on SteamDB", "https://steamdb.info/"),
+            null,
             g =>
             {
-                _appIdNote.Margin = new Padding(0, 0, 0, 6);
+                _appIdNote.Margin = new Padding(0, 0, 0, 4);
                 g.Controls.Add(_appIdNote);
+                _steamDbLink.Margin = new Padding(0, 0, 0, 6);
+                g.Controls.Add(_steamDbLink);
                 _appIdBox.Anchor = AnchorStyles.Left | AnchorStyles.Right;
                 _appIdBox.Margin = new Padding(TextInset, 2, TextInset, 2);
                 g.Controls.Add(_appIdBox);
@@ -494,6 +509,7 @@ public sealed class AddGameForm : Form, IConfigProgress
 
     private void ShowStep()
     {
+        _resultLabel.Text = "";
         var page = _steps[_stepIndex];
         ShowPage(page);
         _backButton.Visible = _stepIndex > 0;
@@ -623,12 +639,11 @@ public sealed class AddGameForm : Form, IConfigProgress
                 break;
 
             case Page.AppId:
-                if (string.IsNullOrWhiteSpace(_appIdBox.Text))
+                if (TypedAppId() is not { } newAppId)
                 {
-                    MessageBox.Show(this, "Enter the game's Steam AppID.", "Add game", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(this, "Enter the game's Steam AppID, a number such as 620.", "Add game", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                var newAppId = _appIdBox.Text.Trim();
                 if (newAppId != _appId)
                 {
                     _appId = newAppId;
@@ -852,6 +867,7 @@ public sealed class AddGameForm : Form, IConfigProgress
 
     private async Task StartRunAsync()
     {
+        _resultLabel.Text = "";
         // The overwrite decision was made right after folder selection (see DetectAndAdvanceAsync).
         var force = _force;
 
@@ -908,6 +924,9 @@ public sealed class AddGameForm : Form, IConfigProgress
             // Before registering, so the "tracking configured" popup the registration can raise already
             // names the game rather than its folder.
             await _appNames.FetchAsync([_appId]);
+            // Read before the host callback: registering the game can add a root planned for it to
+            // gamesPaths, and only an entry listed before this run may be remembered.
+            var gamesRoot = GamesPathPlanner.GamesRootOf(_config.GamesPaths, _gameDir);
             try
             {
                 _onGameConfigured(_gameDir, _emulator != null && request.KeepEmulator ? _emulator.SavesFolders : []);
@@ -918,19 +937,21 @@ public sealed class AddGameForm : Form, IConfigProgress
             {
                 Report(ConfigLogLevel.Error, $"Game configured, but updating the overlay failed: {ex.Message}");
             }
+            if (gamesRoot != null)
+                RememberGamesRoot(gamesRoot);
         }
 
-        Report(ConfigLogLevel.Info, "");
-        Report(ConfigLogLevel.Info, status switch
-        {
-            ConfigStatus.Success => "✓ Game added. The overlay is now tracking it.",
-            ConfigStatus.PartialSuccess => "✓ Game added with warnings (see above). The overlay is now tracking it.",
-            ConfigStatus.UserError => "✗ Could not add the game — go back and fix the issue above.",
-            ConfigStatus.DefenderBlocked => "✗ Windows Defender blocked GBE — see the options above.",
-            _ => "✗ Failed — see the error above."
-        });
-
         var success = status is ConfigStatus.Success or ConfigStatus.PartialSuccess;
+        _resultLabel.ForeColor = success ? Color.ForestGreen : Color.Firebrick;
+        _resultLabel.Text = status switch
+        {
+            ConfigStatus.Success => "✓ Game added and tracked",
+            ConfigStatus.PartialSuccess => "✓ Added with warnings",
+            ConfigStatus.UserError => "✗ Could not add the game",
+            ConfigStatus.DefenderBlocked => "✗ Blocked by Windows Defender",
+            _ => "✗ Failed"
+        };
+        Logger.Info($"[add-game] Result: {_resultLabel.Text}");
         FinishRun(success);
 
         if (status == ConfigStatus.DefenderBlocked)
@@ -1022,9 +1043,33 @@ public sealed class AddGameForm : Form, IConfigProgress
         FitToActivePage();
     }
 
+    private void RememberGamesRoot(string root)
+    {
+        try
+        {
+            _config.UpdateConfigValue(nameof(SettingsData.LastGamesRoot), root);
+        }
+        catch (ConfigSaveException ex)
+        {
+            // Only where the next folder picker opens depends on it, so the wizard carries on.
+            Logger.Warn($"Could not remember the games folder '{root}': {ex.Message}");
+        }
+    }
+
+    /// <summary>The AppID box's text when it has the form of an AppID, otherwise null.</summary>
+    private string? TypedAppId()
+    {
+        var text = _appIdBox.Text.Trim();
+        return AppIdResolver.IsAppId(text) ? text : null;
+    }
+
+    private void UpdateSteamDbLink() => _steamDbLink.Text = TypedAppId() is { } id ? $"Open app {id} on SteamDB" : "Look up a game on SteamDB";
+
     private void PickFolder(TextBox target)
     {
-        var picked = DialogControls.PickFolder(this, target.Text);
+        var current = target.Text.Trim();
+        var openIn = current.Length == 0 && target == _gameDirBox ? GamesPathPlanner.ChooseBrowseStart(_config.GamesPaths, _config.GetCurrent().LastGamesRoot) : null;
+        var picked = DialogControls.PickFolder(this, current, openIn);
         if (picked != null)
             target.Text = picked;
     }

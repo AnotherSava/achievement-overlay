@@ -84,4 +84,29 @@ public class GamesPathPlannerTests
         var result = GamesPathPlanner.PlanRootToAdd(new[] { @"C:\Games" }, @"D:\");
         Assert.Equal(Path.TrimEndingDirectorySeparator(Path.GetFullPath(@"D:\")), result);
     }
+
+    [Fact]
+    public void GamesRootOf_GameUnderNestedRoots_ReturnsDeepest() => Assert.Equal(@"D:\Games", GamesPathPlanner.GamesRootOf(new[] { @"D:\", @"D:\Games" }, @"D:\Games\Example Game\bin"));
+
+    [Fact]
+    public void GamesRootOf_GameOutsideEveryRoot_ReturnsNull() => Assert.Null(GamesPathPlanner.GamesRootOf(new[] { @"C:\Games" }, @"E:\Example Game-REPACK\Example Game"));
+
+    [Fact]
+    public void ChooseBrowseStart_SingleRoot_ReturnsItWhateverWasLast()
+    {
+        Assert.Equal(@"C:\Games", GamesPathPlanner.ChooseBrowseStart(new[] { @"C:\Games" }, null));
+        Assert.Equal(@"C:\Games", GamesPathPlanner.ChooseBrowseStart(new[] { @"C:\Games" }, @"E:\Other"));
+    }
+
+    [Fact]
+    public void ChooseBrowseStart_SeveralRoots_ReturnsTheOneLastUsed() => Assert.Equal(@"D:\Games", GamesPathPlanner.ChooseBrowseStart(new[] { @"C:\Games", @"D:\Games" }, @"d:\games"));
+
+    [Fact]
+    public void ChooseBrowseStart_SeveralRootsLastUsedNested_ReturnsDeepestContaining() => Assert.Equal(@"D:\Games", GamesPathPlanner.ChooseBrowseStart(new[] { @"D:\", @"D:\Games" }, @"D:\Games"));
+
+    [Fact]
+    public void ChooseBrowseStart_SeveralRootsNoHistory_ReturnsNull() => Assert.Null(GamesPathPlanner.ChooseBrowseStart(new[] { @"C:\Games", @"D:\Games" }, null));
+
+    [Fact]
+    public void ChooseBrowseStart_SeveralRootsLastUsedNoLongerListed_ReturnsNull() => Assert.Null(GamesPathPlanner.ChooseBrowseStart(new[] { @"C:\Games", @"D:\Games" }, @"E:\Other"));
 }

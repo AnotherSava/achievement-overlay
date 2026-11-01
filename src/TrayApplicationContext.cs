@@ -489,7 +489,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     /// <summary>Every appid folder under the save paths. GBE keeps its own 'settings' folder beside them; an appid is digits.</summary>
     private IEnumerable<string> AppIdFolders() =>
-        _watcher.GetExistingAppIdFolders().Where(appId => appId.Length > 0 && appId.All(char.IsAsciiDigit)).Distinct();
+        _watcher.GetExistingAppIdFolders().Where(AppIdResolver.IsAppId).Distinct();
 
     /// <summary>Every appid the app may show a name for, configured or not, that <see cref="HasSteamAppId"/> lets through.</summary>
     private List<string> AppIdsToName() =>

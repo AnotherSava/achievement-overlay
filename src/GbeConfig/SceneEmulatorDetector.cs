@@ -58,7 +58,7 @@ public static class SceneEmulatorDetector
     public static string? ReadAppId(IniFile emuIni)
     {
         var appId = emuIni.Get("Settings", "AppId");
-        return appId != null && appId.All(char.IsAsciiDigit) ? appId : null;
+        return AppIdResolver.IsAppId(appId) ? appId : null;
     }
 
     /// <summary>True when the DLL's bytes hold a GBE marker, in ASCII or UTF-16.</summary>

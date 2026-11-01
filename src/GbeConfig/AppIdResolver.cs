@@ -16,6 +16,9 @@ public static partial class AppIdResolver
     [GeneratedRegex(@"data-ds-appid\s*=\s*""(\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex StoreAppIdRegex();
 
+    /// <summary>Whether <paramref name="text"/> has the form of a Steam AppID: ASCII digits, at least one.</summary>
+    public static bool IsAppId(string? text) => !string.IsNullOrEmpty(text) && text.All(char.IsAsciiDigit);
+
     /// <summary>
     /// Reads an AppID from the first <c>steam_appid.txt</c> found under the game directory.
     /// </summary>
@@ -32,7 +35,7 @@ public static partial class AppIdResolver
                 var id = File.ReadAllText(file)
                     .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .FirstOrDefault();
-                if (!string.IsNullOrWhiteSpace(id) && id.All(char.IsDigit))
+                if (IsAppId(id))
                     return id;
             }
             catch (IOException)

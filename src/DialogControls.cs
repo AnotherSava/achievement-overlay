@@ -82,13 +82,16 @@ internal static class DialogControls
 
     /// <summary>
     /// Shows the folder picker and returns the chosen path, or null if it was cancelled. With no owner the
-    /// picker is owned by the active window.
+    /// picker is owned by the active window. <paramref name="initialDir"/> is shown highlighted inside its
+    /// parent, as the current choice; <paramref name="openIn"/> is opened, for picking a folder below it.
     /// </summary>
-    public static string? PickFolder(IWin32Window? owner, string? initialDir)
+    public static string? PickFolder(IWin32Window? owner, string? initialDir, string? openIn = null)
     {
         using var dialog = new FolderBrowserDialog { ShowNewFolderButton = false };
         if (!string.IsNullOrEmpty(initialDir) && Directory.Exists(initialDir))
             dialog.SelectedPath = initialDir;
+        if (!string.IsNullOrEmpty(openIn) && Directory.Exists(openIn))
+            dialog.InitialDirectory = openIn;
         var result = owner == null ? dialog.ShowDialog() : dialog.ShowDialog(owner);
         return result == DialogResult.OK ? dialog.SelectedPath : null;
     }

@@ -566,4 +566,11 @@ public sealed class SettingsData
     /// </summary>
     [JsonPropertyName("trackingConfigured")]
     public Dictionary<string, long>? TrackingConfigured { get; set; }
+
+    /// <summary>
+    /// The <c>gamesPaths</c> entry holding the game last added by the Add game wizard, so with several
+    /// <c>gamesPaths</c> its folder picker opens where the previous game was found. Updated at runtime.
+    /// </summary>
+    [JsonPropertyName("lastGamesRoot")]
+    public string? LastGamesRoot { get; set; }
 }

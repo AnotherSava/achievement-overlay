@@ -55,8 +55,11 @@ public static partial class SteamDbScraper
     [GeneratedRegex(@"\\([!-/:-@\[-`{-~])")]
     private static partial Regex MarkdownEscapeRegex();
 
+    /// <summary>The SteamDB page for <paramref name="appId"/>.</summary>
+    public static string AppPageUrl(string appId) => $"https://steamdb.info/app/{appId}/";
+
     /// <summary>The SteamDB page we scrape — also quoted in failure reasons so it can be opened by hand.</summary>
-    public static string StatsPageUrl(string appId) => $"https://steamdb.info/app/{appId}/stats/";
+    public static string StatsPageUrl(string appId) => AppPageUrl(appId) + "stats/";
 
     /// <summary>
     /// Scrapes the SteamDB stats page for <paramref name="appId"/> via Firecrawl and returns a map

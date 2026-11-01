@@ -9,8 +9,9 @@ internal static class SettingsDiff
 {
     /// <summary>
     /// Returns the user-facing settings that differ, keyed by <see cref="SettingsData"/> property
-    /// name. App-managed state — the trackingConfigured map — is never part of the comparison, so a
-    /// save can't drop or resurrect a game's setup confirmation.
+    /// name. App-managed state — the trackingConfigured map, lastGamesRoot — is never part of the
+    /// comparison, so a save can't drop or resurrect a game's setup confirmation or the remembered
+    /// games folder.
     /// </summary>
     public static Dictionary<string, object?> Compute(SettingsData current, SettingsData edited)
     {
