@@ -39,9 +39,34 @@ public sealed class GbeBinaryManagerTests : IDisposable
           ]
         }
         """;
-        var (tag, url) = GbeBinaryManager.ParseLatestRelease(json);
+        var (tag, asset, url) = GbeBinaryManager.ParseLatestRelease(json);
         Assert.Equal("release-1.2.3", tag);
+        Assert.Equal("emu-win-release.7z", asset);
         Assert.Equal("https://x/win.7z", url);
+    }
+
+    [Fact]
+    public void ParseLatestRelease_SplitBuilds_PicksVs26()
+    {
+        var json = """
+        {
+          "tag_name": "release-2026_09_27",
+          "assets": [
+            {"name": "emu-win-release-vs22.7z", "browser_download_url": "https://x/vs22.7z"},
+            {"name": "emu-win-release-vs26.7z", "browser_download_url": "https://x/vs26.7z"}
+          ]
+        }
+        """;
+        var (_, asset, url) = GbeBinaryManager.ParseLatestRelease(json);
+        Assert.Equal("emu-win-release-vs26.7z", asset);
+        Assert.Equal("https://x/vs26.7z", url);
+    }
+
+    [Fact]
+    public void ParseLatestRelease_OnlyVs22_Throws()
+    {
+        var json = """{"tag_name": "v1", "assets": [{"name": "emu-win-release-vs22.7z", "browser_download_url": "u"}]}""";
+        Assert.Throws<InvalidOperationException>(() => GbeBinaryManager.ParseLatestRelease(json));
     }
 
     [Fact]

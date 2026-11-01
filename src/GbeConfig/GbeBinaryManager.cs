@@ -19,7 +19,13 @@ public sealed record GbeRelease(string RegularDll64, string GenerateInterfacesEx
 public static class GbeBinaryManager
 {
     private const string LatestReleaseApi = "https://api.github.com/repos/Detanup01/gbe_fork/releases/latest";
-    private const string AssetName = "emu-win-release.7z";
+
+    /// <summary>
+    /// The Windows release archive, in order of preference. GBE renamed its VS 2026 build from the
+    /// plain name to <c>-vs26</c> (gbe_fork issue #605); <c>-vs22</c> beside it is a Windows 7
+    /// compatibility build this app has no use for, since it needs Windows 10 itself.
+    /// </summary>
+    private static readonly string[] AssetNames = ["emu-win-release-vs26.7z", "emu-win-release.7z"];
 
     public static string CacheRoot =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -45,7 +51,7 @@ public static class GbeBinaryManager
         }
 
         log.Report(ConfigLogLevel.Step, "Resolving latest GBE release...");
-        var (tag, downloadUrl) = await GetLatestReleaseAsync(http, ct);
+        var (tag, assetName, downloadUrl) = await GetLatestReleaseAsync(http, ct);
         log.Report(ConfigLogLevel.Debug, $"Latest GBE tag: {tag}");
 
         var tagDir = Path.Combine(folder, tag);
@@ -56,7 +62,7 @@ public static class GbeBinaryManager
             return cached;
         }
 
-        log.Report(ConfigLogLevel.Step, $"Downloading GBE release {tag} ({AssetName})...");
+        log.Report(ConfigLogLevel.Step, $"Downloading GBE release {tag} ({assetName})...");
         // Download the archive INTO the GBE folder (not %TEMP%) so a single Defender exclusion on
         // this folder covers both the .7z and the extracted DLLs — otherwise extraction is blocked.
         Directory.CreateDirectory(folder);
@@ -99,7 +105,7 @@ public static class GbeBinaryManager
         return new GbeRelease(regularDll, generator, version);
     }
 
-    private static async Task<(string Tag, string DownloadUrl)> GetLatestReleaseAsync(HttpClient http, CancellationToken ct)
+    private static async Task<(string Tag, string AssetName, string DownloadUrl)> GetLatestReleaseAsync(HttpClient http, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, LatestReleaseApi);
         request.Headers.UserAgent.ParseAdd("AchievementOverlay");
@@ -111,26 +117,29 @@ public static class GbeBinaryManager
         return ParseLatestRelease(json);
     }
 
-    public static (string Tag, string DownloadUrl) ParseLatestRelease(string json)
+    public static (string Tag, string AssetName, string DownloadUrl) ParseLatestRelease(string json)
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
         var tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() ?? "latest" : "latest";
 
+        var urls = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
         {
             foreach (var asset in assets.EnumerateArray())
             {
-                var name = asset.TryGetProperty("name", out var n) ? n.GetString() : null;
-                if (string.Equals(name, AssetName, StringComparison.OrdinalIgnoreCase)
-                    && asset.TryGetProperty("browser_download_url", out var u))
-                {
-                    return (tag, u.GetString() ?? throw new InvalidOperationException("Release asset has no download URL"));
-                }
+                if (asset.TryGetProperty("name", out var n) && n.GetString() is { } name && asset.TryGetProperty("browser_download_url", out var u))
+                    urls[name] = u.GetString();
             }
         }
 
-        throw new InvalidOperationException($"Latest GBE release has no '{AssetName}' asset");
+        foreach (var assetName in AssetNames)
+        {
+            if (urls.TryGetValue(assetName, out var url))
+                return (tag, assetName, url ?? throw new InvalidOperationException("Release asset has no download URL"));
+        }
+
+        throw new InvalidOperationException($"Latest GBE release has none of the expected assets ({string.Join(", ", AssetNames)})");
     }
 
     private static async Task DownloadAsync(string url, string destination, HttpClient http, IConfigProgress log, CancellationToken ct)
