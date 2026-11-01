@@ -270,7 +270,7 @@ public sealed class GbeConfigGenerator
     private bool ReportDrm(DrmReport drm)
     {
         if (drm.LargestExePath != null)
-            Debug($"Largest exe: {drm.LargestExePath} ({drm.LargestExeSizeBytes / (1024 * 1024)} MB)");
+            Debug($"DRM size check: largest exe is {drm.LargestExePath} ({drm.LargestExeSizeBytes / (1024.0 * 1024):0.#} MB; Denuvo is suspected above {DrmDetector.SuspiciousExeSizeBytes / (1024 * 1024)} MB)");
 
         if (!drm.DenuvoLikely)
             return true;
