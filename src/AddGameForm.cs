@@ -775,6 +775,10 @@ public sealed class AddGameForm : Form, IConfigProgress
             }
 
             _gameDir = gameDir;
+            // Here, before any run: registering a game can add a root planned for it to gamesPaths, and
+            // only an entry listed before then may be remembered.
+            if (GamesPathPlanner.GamesRootOf(_config.GamesPaths, gameDir) is { } gamesRoot)
+                RememberGamesRoot(gamesRoot);
             _keepsGbe = target.Action == InstallAction.KeepGbe;
             _emulator = _keepsGbe ? null : await Task.Run(() => SceneEmulatorDetector.Detect(target.Dll.Path));
             _replaceEmulatorCheck.Checked = false;
@@ -924,9 +928,6 @@ public sealed class AddGameForm : Form, IConfigProgress
             // Before registering, so the "tracking configured" popup the registration can raise already
             // names the game rather than its folder.
             await _appNames.FetchAsync([_appId]);
-            // Read before the host callback: registering the game can add a root planned for it to
-            // gamesPaths, and only an entry listed before this run may be remembered.
-            var gamesRoot = GamesPathPlanner.GamesRootOf(_config.GamesPaths, _gameDir);
             try
             {
                 _onGameConfigured(_gameDir, _emulator != null && request.KeepEmulator ? _emulator.SavesFolders : []);
@@ -937,8 +938,6 @@ public sealed class AddGameForm : Form, IConfigProgress
             {
                 Report(ConfigLogLevel.Error, $"Game configured, but updating the overlay failed: {ex.Message}");
             }
-            if (gamesRoot != null)
-                RememberGamesRoot(gamesRoot);
         }
 
         var success = status is ConfigStatus.Success or ConfigStatus.PartialSuccess;

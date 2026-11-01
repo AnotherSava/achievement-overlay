@@ -28,7 +28,7 @@ public static class GamesPathPlanner
     /// <summary>
     /// The deepest <c>gamesPaths</c> entry containing a game chosen at <paramref name="gameDir"/>, or null
     /// when none does. Remembered as the Add game wizard's next browse start, which is why only an entry
-    /// listed before the run qualifies and the wizard calls this before registering the game: config
+    /// already listed qualifies and the wizard calls this when the folder is chosen, before any run can register the game: config
     /// travels in a diagnostic report, and a folder planned rather than listed can be a repack wrapper
     /// named after the game.
     /// </summary>
