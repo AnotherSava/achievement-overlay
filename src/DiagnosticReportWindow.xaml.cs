@@ -143,7 +143,7 @@ public sealed partial class DiagnosticReportWindow : Window
             // part's value and so rewrite whether the current part is included.
             var hidden = _choices.Count(c => c.Unconfigured);
             var hint = hidden > 0
-                ? $"No configured games. Tick Include unconfigured games (*) to list the {hidden} game(s) not set up here."
+                ? $"No configured games. Tick Include unconfigured games (*) to list the {AppUtilities.CountOf(hidden, "game")} not set up here."
                 : "No games found. Add a game, or run one once so its save folder appears, then try again.";
             _reportText = "";
             foreach (var section in _sections)
