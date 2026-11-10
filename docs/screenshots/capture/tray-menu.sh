@@ -13,7 +13,7 @@ OUT="$REPO/docs/screenshots/tray-menu.png"
 DRIVER="$REPO/docs/screenshots/capture/tray-menu.ps1"
 
 echo "=== Deploying the current build so the shot matches the working tree ==="
-bash "$REPO/scripts/deploy.sh" >/dev/null
+(cd "$REPO" && bash ~/.claude/skills/deploy/scripts/run.sh) >/dev/null
 sleep 3
 
 echo "=== Capturing ==="
