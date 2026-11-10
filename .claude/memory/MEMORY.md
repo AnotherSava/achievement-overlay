@@ -7,3 +7,4 @@
 - [CODEX/RUNE local test bed](codex-rune-local-test-bed.secret.md) — encrypted; this machine's CODEX/RUNE games and how the issue #11 plan tests on them; keep its specifics out of public files
 - [No library-game details in public files](no-library-game-details-in-public-files.md) — every owned game's names, appids, paths, crack folders stay out; use Example Game / Portal 2; check removed lines too
 - [GOG Galaxy emulator test](gog-galaxy-emulator-test.secret.md) — encrypted; paused GOG emulator research and a game folder currently modified by it; read before touching that install
+- [Firecrawl v1 shutdown](firecrawl-v1-shutdown.md) — v1 returns 410 from 2026-12-10; old installs then leave hidden descriptions as placeholders; update, do not debug

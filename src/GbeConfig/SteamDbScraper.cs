@@ -31,7 +31,7 @@ public sealed record SteamDbScrapeResult(Dictionary<string, string>? Description
 /// </summary>
 public static partial class SteamDbScraper
 {
-    private const string FirecrawlEndpoint = "https://api.firecrawl.dev/v1/scrape";
+    private const string FirecrawlEndpoint = "https://api.firecrawl.dev/v2/scrape";
 
     /// <summary>How much of an unrecognized error body to quote in a failure reason.</summary>
     private const int MaxQuotedError = 300;
@@ -148,6 +148,7 @@ public static partial class SteamDbScraper
             401 or 403 => "Firecrawl rejected the API key",
             402 => "the Firecrawl account is out of credits",
             404 => "the Firecrawl endpoint was not found (the API version may have changed)",
+            410 => "Firecrawl retired this API version — a newer release of this app uses the current one",
             408 or 504 => "Firecrawl timed out loading the page",
             429 => "Firecrawl's rate limit was hit",
             >= 500 => "Firecrawl reported a server error",

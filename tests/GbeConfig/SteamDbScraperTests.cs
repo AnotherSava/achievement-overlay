@@ -133,6 +133,7 @@ public class SteamDbScraperTests
     [InlineData(401, "rejected the API key")]
     [InlineData(402, "out of credits")]
     [InlineData(404, "endpoint was not found")]
+    [InlineData(410, "retired this API version")]
     [InlineData(429, "rate limit")]
     [InlineData(503, "server error")]
     public void Interpret_HttpError_NamesTheCause(int status, string expectedFragment)
