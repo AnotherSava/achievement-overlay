@@ -1033,6 +1033,8 @@ public sealed class AddGameForm : Form, IConfigProgress
 #pragma warning restore CA1031
             {
                 Report(ConfigLogLevel.Error, $"Game configured, but updating the overlay failed: {ex.Message}");
+                // The files are written but the game may not be tracked yet, so the result must not read as clean.
+                status = ConfigStatus.PartialSuccess;
             }
         }
 
