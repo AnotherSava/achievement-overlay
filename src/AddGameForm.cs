@@ -18,6 +18,10 @@ public sealed class AddGameForm : Form, IConfigProgress
 
     private const int FormWidth = 560;
     private const int HelpWidth = FormWidth - 40;
+    // The progress log opens below the buttons, so the steps above it stay put. Its lines quote full game paths,
+    // which is why the dialog widens while it is shown.
+    private const int DetailsWidth = 760;
+    private const int DetailsHeight = 300;
     // Labels inset their text by a few px (GDI text padding); text boxes don't, so indent the
     // boxes by the same amount to line their left edge up with the help/label text above them.
     private const int TextInset = 3;
@@ -58,6 +62,16 @@ public sealed class AddGameForm : Form, IConfigProgress
     private readonly List<Control> _advancedControls = new();
     private bool _advancedExpanded;
     private bool _placed;
+    private TableLayoutPanel _root = null!;
+    private bool _detailsExpanded;
+    /// <summary>The dialog's client width with the details hidden, captured each time they open.</summary>
+    private int _collapsedWidth;
+    /// <summary>The client width and log height with the details open, kept so a drag outlives a collapse and a refit;
+    /// 0 until they first open.</summary>
+    private int _expandedWidth;
+    private int _detailsHeight;
+    /// <summary>Set while <see cref="FitToActivePage"/> resizes the dialog, so only the user's own resize is recorded.</summary>
+    private bool _fitting;
     private readonly Label _folderStatus = new() { AutoSize = true, ForeColor = Color.Firebrick, MaximumSize = new Size(HelpWidth, 0), Margin = new Padding(0, 6, 0, 0) };
     private readonly LinkLabel _steamDbLink = new() { AutoSize = true };
     private readonly Label _appIdNote = new() { AutoSize = true, MaximumSize = new Size(HelpWidth, 0), ForeColor = Color.DarkGoldenrod, Margin = new Padding(0, 0, 0, 6) };
@@ -70,7 +84,6 @@ public sealed class AddGameForm : Form, IConfigProgress
     private Label _hiddenInfo = null!;
 
     // Progress checklist: steps accumulate as rows; the running one spins, finished ones get a check.
-    private Panel _stepsHost = null!;
     private TableLayoutPanel _stepsTable = null!;
     private static readonly string[] SpinnerFrames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
     private Label? _currentStepIcon;
@@ -79,21 +92,23 @@ public sealed class AddGameForm : Form, IConfigProgress
 
     private readonly TextBox _logBox = new()
     {
-        Anchor = AnchorStyles.Left | AnchorStyles.Right,
-        Height = 130,
+        Dock = DockStyle.Fill,
+        Visible = false,
+        Margin = new Padding(3, 10, 3, 0), // the 3 px every page sits in by, as _content's default margin
         AutoSize = false,
         Multiline = true,
         WordWrap = true,
         ReadOnly = true,
         ScrollBars = ScrollBars.Vertical,
         BackColor = Color.White,
-        Font = new Font(FontFamily.GenericMonospace, 8.25f)
+        Font = new Font("Consolas", 9f)
     };
 
     // Navigation
     private readonly Button _backButton = new() { Text = "Back", AutoSize = true };
     private readonly Button _nextButton = new() { Text = "Next", AutoSize = true };
     private readonly Button _closeButton = new() { Text = "Cancel", AutoSize = true };
+    private readonly Button _detailsToggle = new() { AutoSize = true, Visible = false };
     /// <summary>A finished run's outcome, beside the buttons that act on it.</summary>
     private readonly Label _resultLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Margin = new Padding(0, 8, 8, 0) };
 
@@ -239,23 +254,27 @@ public sealed class AddGameForm : Form, IConfigProgress
 
     private void BuildChrome()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        var root = _root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         root.Controls.Add(_content, 0, 0);
 
-        _buttonBar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
+        _buttonBar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
         _closeButton.Click += OnCloseClick;
         _nextButton.Click += OnNextClick;
         _backButton.Click += (_, _) => { if (_stepIndex > 0) { _stepIndex--; ShowStep(); } };
-        _buttonBar.Controls.AddRange(new Control[] { _nextButton, _closeButton, _backButton });
+        _detailsToggle.Click += (_, _) => SetDetailsExpanded(!_detailsExpanded);
+        SetDetailsToggleText();
+        _buttonBar.Controls.AddRange(new Control[] { _nextButton, _closeButton, _backButton, _detailsToggle });
         var bottomRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, AutoSize = true, Margin = Padding.Empty };
         bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         bottomRow.Controls.Add(_resultLabel, 0, 0);
         bottomRow.Controls.Add(_buttonBar, 1, 0);
         root.Controls.Add(bottomRow, 0, 1);
+        root.Controls.Add(_logBox, 0, 2);
 
         Controls.Add(root);
         AcceptButton = _nextButton;
@@ -390,16 +409,10 @@ public sealed class AddGameForm : Form, IConfigProgress
             {
                 _downloadHelp = MakeHelp("This can take a minute the first time, while the GBE emulator is downloaded.");
                 g.Controls.Add(_downloadHelp);
-                _stepsTable = new TableLayoutPanel { ColumnCount = 2, Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
+                _stepsTable = new TableLayoutPanel { ColumnCount = 2, Anchor = AnchorStyles.Left | AnchorStyles.Right, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = new Padding(0, 4, 0, 0) };
                 _stepsTable.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 22));
                 _stepsTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-                _stepsHost = new Panel { AutoScroll = true, Height = 150, Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(0, 4, 0, 0) };
-                _stepsHost.Controls.Add(_stepsTable);
-                g.Controls.Add(_stepsHost);
-
-                g.Controls.Add(new Label { Text = "Details", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 2) });
-                _logBox.Margin = new Padding(0, 0, 0, 0);
-                g.Controls.Add(_logBox);
+                g.Controls.Add(_stepsTable);
             });
 
         foreach (var page in new[] { _folderPage, _appIdPage, _apiKeyPage, _firecrawlPage, _readyPage, _progressPage })
@@ -516,6 +529,7 @@ public sealed class AddGameForm : Form, IConfigProgress
         _nextButton.Visible = true;
         _nextButton.Text = page == Page.Ready ? "Add game" : "Next";
         _closeButton.Text = "Cancel";
+        _detailsToggle.Visible = false;
         OnEnterPage(page);
         FitToActivePage();
     }
@@ -543,54 +557,133 @@ public sealed class AddGameForm : Form, IConfigProgress
         BeginInvoke(FitToActivePage);
     }
 
-    /// <summary>Wraps help text to the current width and resizes the dialog to the active page's height.</summary>
+    /// <summary>The height of the content row that holds exactly the page <paramref name="grid"/>, which is what the row
+    /// is pinned to while the details log is open.</summary>
+    private int ContentRowHeight(Control grid) => grid.Height + _content.Margin.Vertical;
+
+    /// <summary>Wraps help text to the current width and resizes the dialog to the active page's height, plus the
+    /// details log below the buttons when it is open.</summary>
     private void FitToActivePage()
     {
         if (!IsHandleCreated || _activePanel?.Tag is not Control grid)
             return;
 
+        _fitting = true;
+        try
+        {
+            var details = _activePanel == _progressPage && _detailsExpanded;
+            ApplyDetailsMode(details);
+            WrapHelpLabels();
+
+            // Lay out at the current width, then size the dialog so the page's grid fits exactly. (The grid's
+            // PreferredSize under-measures stacked wrapped labels, but its realized height is correct.) The button
+            // row is measured from the realized layout too: a hand-summed constant under-counted it by a few px,
+            // clipping the last line of a label that had just wrapped.
+            PerformLayout();
+            var contentRow = ContentRowHeight(grid);
+            var detailsRow = details ? _detailsHeight + _logBox.Margin.Vertical : 0;
+            // With the log open the page keeps exactly its own height, so the log takes whatever the user adds.
+            _root.RowStyles[0] = details ? new RowStyle(SizeType.Absolute, contentRow) : new RowStyle(SizeType.Percent, 100);
+            _root.RowStyles[2] = details ? new RowStyle(SizeType.Percent, 100) : new RowStyle(SizeType.AutoSize);
+            if (WindowState != FormWindowState.Normal)
+                return;
+
+            var desired = Padding.Vertical + contentRow + _root.GetRowHeights()[1] + detailsRow;
+            var chrome = Height - ClientSize.Height;
+            var maxClient = Screen.FromControl(this).WorkingArea.Height - chrome - 16;
+
+            // Normally the dialog is sized exactly to its content (no scrollbar). If the content is taller than the
+            // screen (small resolution / high zoom), clamp to the screen and let the page scroll so nothing is
+            // unreachable; an open log gives up its height first.
+            var clamped = desired > maxClient;
+            _activePanel.AutoScroll = clamped && !details;
+            ClientSize = new Size(ClientSize.Width, clamped ? maxClient : desired);
+
+            // The top-left corner stays where it first lands, so a page or an option that changes the size grows the
+            // dialog downward and rightward instead of moving everything on screen. It first lands a little above
+            // the middle to leave room for the taller pages that follow, and moves only when an edge would leave the
+            // screen. First placement goes on the monitor under the pointer, as a centred dialog would; after that,
+            // the one the dialog is on.
+            var area = (_placed ? Screen.FromControl(this) : Screen.FromPoint(Cursor.Position)).WorkingArea;
+            if (!_placed)
+            {
+                Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + Math.Max(0, (area.Height - Height) / 3));
+                _placed = true;
+                return;
+            }
+            if (Bottom > area.Bottom)
+                Top = Math.Max(area.Top, area.Bottom - Height);
+            if (Right > area.Right)
+                Left = Math.Max(area.Left, area.Right - Width);
+        }
+        finally
+        {
+            _fitting = false;
+        }
+    }
+
+    /// <summary>Shows or hides the log and switches between the fixed dialog and the wider, resizable one.</summary>
+    private void ApplyDetailsMode(bool details)
+    {
+        if (_logBox.Visible == details)
+            return;
+
+        if (details)
+        {
+            _collapsedWidth = ClientSize.Width;
+            if (_expandedWidth == 0)
+            {
+                // Scaled from the collapsed width rather than from DPI, so the two keep the proportion they were
+                // designed at whatever scaling the dialog was laid out under.
+                _expandedWidth = _collapsedWidth * DetailsWidth / FormWidth;
+                _detailsHeight = _collapsedWidth * DetailsHeight / FormWidth;
+            }
+        }
+        else if (WindowState != FormWindowState.Normal)
+        {
+            WindowState = FormWindowState.Normal;
+        }
+
+        MinimumSize = Size.Empty;
+        FormBorderStyle = details ? FormBorderStyle.Sizable : FormBorderStyle.FixedDialog;
+        MaximizeBox = details;
+        _logBox.Visible = details;
+        ClientSize = new Size(details ? _expandedWidth : _collapsedWidth, ClientSize.Height);
+        if (details)
+            MinimumSize = new Size(Width - ClientSize.Width + _collapsedWidth, 0);
+    }
+
+    private void SetDetailsExpanded(bool expanded)
+    {
+        _detailsExpanded = expanded;
+        SetDetailsToggleText();
+        FitToActivePage();
+    }
+
+    private void SetDetailsToggleText() => _detailsToggle.Text = _detailsExpanded ? "Hide details \u25B4" : "Show details \u25BE";
+
+    private void WrapHelpLabels()
+    {
         var wrap = Math.Max(200, ClientSize.Width - Padding.Horizontal);
         foreach (var label in _wrapLabels)
             label.MaximumSize = new Size(wrap, 0);
+    }
 
-        // Lay out at the current width, then size the dialog so the page's grid fits exactly.
-        // (The grid's PreferredSize under-measures stacked wrapped labels, but its realized
-        // height is correct.) Measure the fixed chrome around the content — form padding plus the
-        // button-bar row, including its margin — from the realized layout rather than adding it up
-        // by hand: the content panel and the grid both dock-fill/dock-top the same width, so the
-        // client height that makes the content exactly as tall as the grid is grid.Height plus
-        // whatever the client currently spends on non-content. A hand-summed constant used to
-        // under-count this by a few px, clipping the last line of a label that had just wrapped
-        // (e.g. the two-line "no Steam library found" status on the folder page).
+    protected override void OnClientSizeChanged(EventArgs e)
+    {
+        base.OnClientSizeChanged(e);
+        // A resize by the user, which only the open log allows: re-wrap the page at the new width, hold it at its own
+        // height, and remember the size so the next refit keeps it.
+        if (_fitting || !_logBox.Visible || _activePanel?.Tag is not Control grid)
+            return;
+        WrapHelpLabels();
         PerformLayout();
-        var nonContentHeight = ClientSize.Height - _content.Height;
-        var desired = grid.Height + nonContentHeight;
-        var chrome = Height - ClientSize.Height;
-        var maxClient = Screen.FromControl(this).WorkingArea.Height - chrome - 16;
-
-        // Normally the dialog is sized exactly to its content (no scrollbar). If the content is
-        // taller than the screen (small resolution / high zoom), clamp to the screen and let the
-        // page scroll so nothing is unreachable.
-        var clamped = desired > maxClient;
-        _activePanel.AutoScroll = clamped;
-        ClientSize = new Size(ClientSize.Width, clamped ? maxClient : desired);
-
-        // The top-left corner stays where it first lands, so a page or an option that changes the height
-        // grows the dialog downward instead of moving everything on screen. It first lands a little above
-        // the middle to leave room for the taller pages that follow, and moves up only when the bottom
-        // would leave the screen.
-        // First placement goes on the monitor under the pointer, as a centred dialog would; after that, the one
-        // the dialog is on.
-        var area = (_placed ? Screen.FromControl(this) : Screen.FromPoint(Cursor.Position)).WorkingArea;
-        if (!_placed)
-        {
-            Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + Math.Max(0, (area.Height - Height) / 3));
-            _placed = true;
-        }
-        else if (Bottom > area.Bottom)
-        {
-            Top = Math.Max(area.Top, area.Bottom - Height);
-        }
+        _root.RowStyles[0] = new RowStyle(SizeType.Absolute, ContentRowHeight(grid));
+        PerformLayout();
+        if (WindowState != FormWindowState.Normal)
+            return;
+        _expandedWidth = ClientSize.Width;
+        _detailsHeight = _logBox.Height;
     }
 
     private void OnEnterPage(Page page)
@@ -897,6 +990,7 @@ public sealed class AddGameForm : Form, IConfigProgress
         ShowPage(Page.Progress);
         _backButton.Visible = false;
         _nextButton.Visible = false;
+        _detailsToggle.Visible = true;
         FitToActivePage();
         _running = true;
         _cts?.Dispose();
@@ -911,6 +1005,7 @@ public sealed class AddGameForm : Form, IConfigProgress
         catch (OperationCanceledException)
         {
             Report(ConfigLogLevel.Warning, "Cancelled.");
+            SetDetailsExpanded(true);
             FinishRun();
             return;
         }
@@ -919,6 +1014,7 @@ public sealed class AddGameForm : Form, IConfigProgress
 #pragma warning restore CA1031
         {
             Report(ConfigLogLevel.Error, ex.Message);
+            SetDetailsExpanded(true);
             FinishRun();
             return;
         }
@@ -951,6 +1047,9 @@ public sealed class AddGameForm : Form, IConfigProgress
             _ => "✗ Failed"
         };
         Logger.Info($"[add-game] Result: {_resultLabel.Text}");
+        // Anything short of a clean run is explained only in the log.
+        if (status != ConfigStatus.Success)
+            SetDetailsExpanded(true);
         FinishRun(success);
 
         if (status == ConfigStatus.DefenderBlocked)
@@ -1155,12 +1254,12 @@ public sealed class AddGameForm : Form, IConfigProgress
         var label = new Label { Text = text, AutoSize = false, Height = rowHeight, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Margin = new Padding(0, 1, 0, 1) };
         _stepsTable.Controls.Add(icon, 0, row);
         _stepsTable.Controls.Add(label, 1, row);
-        _stepsHost.ScrollControlIntoView(label);
 
         _currentStepIcon = icon;
         _currentStepLabel = label;
         _spinnerFrame = 0;
         _spinner.Start();
+        FitToActivePage(); // the checklist grows a row, and the dialog with it
     }
 
     /// <summary>Marks the running step done (✓) or failed (✗) and stops the spinner.</summary>
@@ -1168,6 +1267,8 @@ public sealed class AddGameForm : Form, IConfigProgress
     {
         if (_currentStepIcon == null)
             return;
+        // "Downloading icons..." reads as still running once it carries a tick.
+        _currentStepLabel?.Text = TrimTrailingEllipsis(_currentStepLabel.Text);
         _currentStepIcon.Font = new Font("Segoe UI Symbol", 9f, FontStyle.Bold);
         _currentStepIcon.Text = ok ? "✓" : "✗"; // ✓ / ✗
         _currentStepIcon.ForeColor = ok ? Color.SeaGreen : Color.Firebrick;
@@ -1175,6 +1276,9 @@ public sealed class AddGameForm : Form, IConfigProgress
         _currentStepLabel = null;
         _spinner.Stop();
     }
+
+    private static string TrimTrailingEllipsis(string text) =>
+        text.EndsWith("...", StringComparison.Ordinal) ? text[..^3] : text.EndsWith('…') ? text[..^1] : text;
 
     /// <summary>Updates the running step's text in place (e.g. with a percentage).</summary>
     void IConfigProgress.UpdateStep(string text)
