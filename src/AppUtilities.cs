@@ -11,6 +11,11 @@ namespace AchievementOverlay;
 /// </summary>
 public static class AppUtilities
 {
+    // --- Text ---
+
+    /// <summary>"1 icon", "3 icons": a count with its noun, for text people read, rather than "icon(s)".</summary>
+    public static string CountOf(int n, string noun) => $"{n} {noun}{(n == 1 ? "" : "s")}";
+
     // --- App version ---
 
     /// <summary>The SDK's default version, which is what a build with no version passed in carries.</summary>

@@ -298,7 +298,7 @@ public sealed partial class DiagnosticReportWindow : Window
         {
             case "App and game":
                 var dirs = node["game"]?["settingsDirs"]?.AsArray().Count ?? 0;
-                return $"The app version and the build it came from, and the {dirs} steam_settings folder{(dirs == 1 ? "" : "s")} found for this game.";
+                return $"The app version and the build it came from, and the {AppUtilities.CountOf(dirs, "steam_settings folder")} found for this game.";
             case "App config":
                 var settings = node["content"]?.AsObject().Count ?? 0;
                 return $"Your {settings} settings as the app reads them, with any API key replaced by {DiagnosticReport.Redacted}.";
@@ -307,9 +307,9 @@ public sealed partial class DiagnosticReportWindow : Window
                 var lines = node["sessions"]?.AsArray().Sum(s => s?["lines"]?.AsArray().Count ?? 0) ?? 0;
                 var dropped = (int?)node["linesAboutOtherGamesRemoved"] ?? 0;
                 var removed = dropped > 0
-                    ? $", and {dropped} line{(dropped == 1 ? "" : "s")} about your other games removed"
+                    ? $", and {AppUtilities.CountOf(dropped, "line")} about your other games removed"
                     : "";
-                return $"The last {sessions} run{(sessions == 1 ? "" : "s")} of the app: {lines} lines, narrowed to this game{removed}.";
+                return $"The last {AppUtilities.CountOf(sessions, "run")} of the app: {lines} lines, narrowed to this game{removed}.";
             case "Achievement schema":
                 var achievements = node["content"]?.AsArray().Count ?? 0;
                 return $"The game's {achievements} achievement definitions, where its names, text and icons come from.";

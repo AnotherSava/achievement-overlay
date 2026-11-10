@@ -800,7 +800,7 @@ public partial class SettingsWindow : Window, IWin32Window
             var count = GameCache.FindGames(path, roots).Games.Count;
             return count == 0
                 ? ("no games with achievement metadata found", "StatusWarn")
-                : ($"{count} game{(count == 1 ? "" : "s")} with achievement metadata", "StatusGood");
+                : ($"{AppUtilities.CountOf(count, "game")} with achievement metadata", "StatusGood");
         }
 #pragma warning disable CA1031 // Status-line boundary: shows the failure on the folder's card
         catch (Exception ex)
@@ -820,7 +820,7 @@ public partial class SettingsWindow : Window, IWin32Window
         {
             // GBE keeps its global configs in a "settings" folder beside the appid folders.
             var count = Directory.GetDirectories(path).Count(dir => !string.Equals(Path.GetFileName(dir), "settings", StringComparison.OrdinalIgnoreCase));
-            return ($"found · {count} game folder{(count == 1 ? "" : "s")} inside", "StatusGood");
+            return ($"found · {AppUtilities.CountOf(count, "game folder")} inside", "StatusGood");
         }
 #pragma warning disable CA1031 // Status-line boundary: shows the failure on the folder's card
         catch (Exception ex)

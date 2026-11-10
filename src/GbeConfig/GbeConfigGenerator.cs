@@ -139,7 +139,7 @@ public sealed class GbeConfigGenerator
         var hiddenCount = schema.Count(a => a.Hidden != 0);
         if (hiddenCount > 0)
         {
-            Step($"Fetching {hiddenCount} hidden description(s) from SteamDB...");
+            Step($"Fetching {AppUtilities.CountOf(hiddenCount, "hidden description")} from SteamDB...");
             var scrape = await SteamDbScraper.FetchHiddenDescriptionsAsync(appId, _req.FirecrawlApiKey, _http, ct);
             if (scrape.Descriptions == null)
             {
@@ -153,11 +153,11 @@ public sealed class GbeConfigGenerator
                 AchievementSchemaWriter.ApplyDescriptions(achievements, scrape.Descriptions);
                 var missing = schema.Where(a => a.Hidden != 0 && !scrape.Descriptions.ContainsKey(a.Name))
                     .Select(a => a.Name).ToList();
-                Info($"Patched {hiddenCount - missing.Count}/{hiddenCount} hidden description(s) "
-                    + $"({scrape.Descriptions.Count} hidden description(s) found on the SteamDB page).");
+                Info($"Patched {hiddenCount - missing.Count} of {AppUtilities.CountOf(hiddenCount, "hidden description")} "
+                    + $"({AppUtilities.CountOf(scrape.Descriptions.Count, "hidden description")} found on the SteamDB page).");
                 if (missing.Count > 0)
                 {
-                    Warn($"SteamDB had no description for {missing.Count} hidden achievement(s): {Summarize(missing)}");
+                    Warn($"SteamDB had no description for {AppUtilities.CountOf(missing.Count, "hidden achievement")}: {Summarize(missing)}");
                     partial = true;
                 }
             }
@@ -170,7 +170,7 @@ public sealed class GbeConfigGenerator
         Info($"Icons: {iconResult.Downloaded} downloaded, {iconResult.Skipped} skipped, {iconResult.Failed} failed.");
         if (iconResult.Failed > 0)
         {
-            Warn($"{iconResult.Failed} icon(s) failed to download, the first with: {iconResult.FirstError}");
+            Warn($"{AppUtilities.CountOf(iconResult.Failed, "icon")} failed to download, the first with: {iconResult.FirstError}");
             partial = true;
         }
 
@@ -211,7 +211,7 @@ public sealed class GbeConfigGenerator
         {
             // GBE's tool finds no interface strings in the emulator's loader, and steam_emu.ini lists them.
             await File.WriteAllLinesAsync(Path.Combine(steamSettingsDir, "steam_interfaces.txt"), emulator.Interfaces, ct);
-            Info($"Wrote steam_interfaces.txt from the {emulator.Interfaces.Count} interface(s) {SceneEmulatorDetector.EmuIni} lists.");
+            Info($"Wrote steam_interfaces.txt from the {AppUtilities.CountOf(emulator.Interfaces.Count, "interface")} {SceneEmulatorDetector.EmuIni} lists.");
         }
         else
         {
@@ -282,7 +282,7 @@ public sealed class GbeConfigGenerator
 
         if (drm.HasCrackIndicator)
         {
-            Warn($"Crack indicators present ({drm.CrackIndicators.Count} file(s)); proceeding.");
+            Warn($"Crack indicators present ({AppUtilities.CountOf(drm.CrackIndicators.Count, "file")}); proceeding.");
             return true;
         }
 
