@@ -658,6 +658,10 @@ public sealed class AddGameForm : Form, IConfigProgress
         _detailsExpanded = expanded;
         SetDetailsToggleText();
         FitToActivePage();
+        // Lines appended while the log was hidden never scrolled it, and the newest line is the one that
+        // explains the result. After the resize, so the box scrolls at its final height.
+        if (expanded)
+            BeginInvoke(() => { _logBox.SelectionStart = _logBox.TextLength; _logBox.ScrollToCaret(); });
     }
 
     private void SetDetailsToggleText() => _detailsToggle.Text = _detailsExpanded ? "Hide details \u25B4" : "Show details \u25BE";
