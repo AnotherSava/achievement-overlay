@@ -23,7 +23,7 @@ It only asks for what it cannot work out on its own, so a typical run is two or 
 
 ## What it then does
 
-It fetches the achievement icons from Steam, downloads the matching GBE release, backs up and replaces the Steam DLL, and writes a `steam_settings/` folder with GBE's own overlay disabled — this app replaces it. A game that keeps its CODEX or RUNE emulator gets only the achievement list and icons; see [below](#games-running-codex-or-rune). So does a game that already runs GBE behind a ColdClientLoader, since its emulator is already in place. The final page shows live progress.
+It fetches the achievement icons from Steam, downloads the matching GBE release, backs up and replaces the Steam DLL, and writes a `steam_settings/` folder with GBE's own overlay disabled — this app replaces it. A game that keeps its CODEX or RUNE emulator gets only the achievement list and icons; see [below](#games-running-codex-or-rune). So does a game that already runs GBE behind a ColdClientLoader, since its emulator is already in place. The final page shows live progress as a checklist of steps. **Show details** opens the full log below it, and it opens by itself when a run is cancelled, fails, or finishes with warnings, since the log is where the reason is.
 
 When it finishes, the game's folder is added to `gamesPaths` if it is not covered already (and, for a game keeping CODEX or RUNE, the emulator's save folder to `gseSavesPaths`), and the overlay starts tracking it immediately. No restart.
 
