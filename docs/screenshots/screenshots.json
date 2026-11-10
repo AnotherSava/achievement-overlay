@@ -77,6 +77,25 @@
       }
     },
     {
+      "id": "add-game-progress",
+      "files": [
+        "add-game-progress.png"
+      ],
+      "shows": "The Add game wizard after a finished run: the step checklist, the result line, and the details log open below the Hide details / Close buttons, scrolled to its last line",
+      "verifiedAt": "at-capture",
+      "capture": {
+        "command": "CAPTURE_STEAM_DLL=<a stock steam_api64.dll> bash docs/screenshots/capture/add-game-progress.sh",
+        "steps": [
+          "Deploy the current build so the shot matches the working tree, not the installed release",
+          "Build a throwaway 'Example Game' folder under C:/Games holding a copy of a stock Valve steam_api64.dll and a steam_appid.txt of 620 (Portal 2): pressing Add game replaces the DLL, so the run must never touch a real game, and the anchor keeps every library game out of the log",
+          "Walk the wizard to Ready, press Add game, and wait for Cancel to relabel itself Close",
+          "Click Show details, so the log opens below the buttons; a clean run leaves it closed",
+          "Use -CropToOpaque and add the hairline with lib/docborder.py, as for the Ready-page shot",
+          "Delete the throwaway folder and restore the installed config.json, which the run's registration can write to"
+        ]
+      }
+    },
+    {
       "id": "report-window",
       "files": [
         "report-window.png"

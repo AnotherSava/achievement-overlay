@@ -1,11 +1,14 @@
-# Opens the Add game wizard, walks it to its Ready page, and captures it.
-# Driven by add-game-window.sh, which deploys first. Output path comes from $env:CAPTURE_OUT.
+# Opens the Add game wizard, walks it to its Ready page, and captures it there or, with
+# CAPTURE_STAGE=progress, after a finished run with its details log open.
+# Driven by add-game-window.sh and add-game-progress.sh, which deploy first. Output path comes from
+# $env:CAPTURE_OUT.
 #
-# THIS SCRIPT WRITES NOTHING TO ANY GAME. The wizard backs up and replaces a game's steam_api64.dll
-# only when its final button is pressed, and that button is this script's stop condition rather than
-# a step it takes: the Next button relabels itself "Add game" on the Ready page, so the loop reads
-# the label before every click and stops on the one that would act. Closing the window afterwards is
-# the wizard's cancel.
+# ON THE READY STAGE THIS SCRIPT WRITES NOTHING TO ANY GAME. The wizard backs up and replaces a game's
+# steam_api64.dll only when its final button is pressed, and that button is the stop condition rather
+# than a step: the Next button relabels itself "Add game" on the Ready page, so the loop reads the
+# label before every click and stops on the one that would act. Closing the window afterwards is the
+# wizard's cancel. The progress stage does press it, and refuses unless CAPTURE_THROWAWAY is set, which
+# add-game-progress.sh sets for the folder it created and deletes afterwards.
 
 $ErrorActionPreference = 'Stop'
 
@@ -17,6 +20,8 @@ $ErrorActionPreference = 'Stop'
 # the point.
 $GameDir = $env:CAPTURE_GAME_DIR
 if (-not $GameDir) { throw "Set CAPTURE_GAME_DIR to a game folder with a Steam DLL and no steam_settings of its own." }
+$Progress = $env:CAPTURE_STAGE -eq 'progress'
+if ($Progress -and $env:CAPTURE_THROWAWAY -ne '1') { throw "The progress stage modifies the game folder; run it through add-game-progress.sh, which builds a throwaway one." }
 
 Add-Type @"
 using System;using System.Runtime.InteropServices;
@@ -101,6 +106,26 @@ for ($step = 0; $step -lt 8; $step++) {
 }
 if (-not $reached) { throw "The wizard never reached its Ready page." }
 Start-Sleep -Milliseconds 900
+
+if ($Progress) {
+  Click-Element -Element $next
+  # The run ends when Cancel relabels itself Close. The first run downloads GBE, so allow minutes.
+  $close = $null
+  for ($wait = 0; $wait -lt 600; $wait++) {
+    $close = Get-VisibleControl -Type ([System.Windows.Automation.ControlType]::Button) -Names @('Close')
+    if ($close) { break }
+    Start-Sleep -Milliseconds 500
+  }
+  if (-not $close) { throw "The Add game run never finished." }
+  # A clean run leaves the log closed; a run with warnings has already opened it.
+  $toggle = Get-VisibleControl -Type ([System.Windows.Automation.ControlType]::Button) -Names @("Show details $([char]0x25BE)")
+  if ($toggle) { Click-Element -Element $toggle }
+  if (-not (Get-VisibleControl -Type ([System.Windows.Automation.ControlType]::Button) -Names @("Hide details $([char]0x25B4)"))) {
+    Start-Sleep -Milliseconds 500
+    if (-not (Get-VisibleControl -Type ([System.Windows.Automation.ControlType]::Button) -Names @("Hide details $([char]0x25B4)"))) { throw "The details log did not open." }
+  }
+  Start-Sleep -Milliseconds 900
+}
 
 # CropToOpaque: this window is opaque, so its rounded bottom corners are its own border curving into
 # the client rectangle, which alpha recovery preserves rather than removes.
