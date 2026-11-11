@@ -19,7 +19,7 @@ Grab the latest build from [GitHub Releases](https://github.com/AnotherSava/achi
 
 After extracting, open `config.json` next to the executable and check `gamesPaths` — it should list the folders your games are installed in. Every other value has a working default; the full list is on the [Configuration](usage/configuration) page.
 
-Run the exe and the app appears in the system tray. There is no main window: everything happens through the [tray menu](usage/tray-menu).
+Run the exe and the app appears in the system tray. Everything happens through the [tray menu](usage/tray-menu); a left click on the icon opens the [Games](usage/games) window.
 
 ## SmartScreen and code signing
 

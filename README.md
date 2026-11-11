@@ -14,6 +14,7 @@ A Windows background app that sits in the system tray. The emulator records ever
 - **Adjustable popup** — set its position, width, background colour, opacity and font, with a **Show me** preview. Text colours are worked out from the background you pick, so a light popup flips to dark text rather than becoming unreadable
 - **Recent achievements** — press Ctrl+Shift+H to review the last few unlocks, and to check the overlay is alive
 - **Add game wizard** — generates a game's achievement metadata from the Steam Web API, filling in hidden descriptions from SteamDB
+- **Games window** — every game the app knows of, with its emulator, achievement count and setup problems, plus one-click set-up and revert
 - **Automatic game detection** — scans the folders you name for games carrying achievement metadata
 - **Other emulators** — a game whose unlock file carries its own achievement names is tracked with no configuration at all, and CODEX and RUNE games are read from the emulator's own `achievements.ini`
 - **Setup confirmation** — a one-time "Gearhead" popup confirms tracking works before the first real unlock

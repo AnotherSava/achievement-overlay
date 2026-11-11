@@ -71,6 +71,8 @@ src/
   RecentAchievementsDisplay.cs  the panel behind the global shortcut
   SettingsWindow.xaml         the four-page settings window
   SettingsDiff.cs             what the window changed, keyed by property name
+  GamesWindow.xaml            the Games window: every game, with Add game, Set up and Revert
+  GameList.cs                 what each Games window row shows, and the setup checks behind its icon
   AddGameForm.cs              the Add game wizard
   GbeConfig/                  the config generator engine behind the wizard
   GbeOverlay/                 reading a game's own configs.overlay.ini

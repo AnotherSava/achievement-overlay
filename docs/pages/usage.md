@@ -7,7 +7,7 @@ has_children: true
 
 # Usage
 
-The app has no main window. It starts minimised to the system tray, watches for unlocks in the background, and shows a popup when one arrives. Everything you can change lives behind the [tray menu](usage/tray-menu).
+The app has no main window. It starts minimised to the system tray, watches for unlocks in the background, and shows a popup when one arrives. Everything you can change lives behind the [tray menu](usage/tray-menu), and a left click on the icon opens the [Games](usage/games) window, which lists every game and is where you add or revert one.
 
 ## How it works
 

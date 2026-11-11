@@ -22,9 +22,9 @@
       "files": [
         "tray-menu.png"
       ],
-      "shows": "The system tray context menu: Show recent achievements, Add game, Pause notifications, Settings, Open config/logs location, Report a problem, Exit",
+      "shows": "The system tray context menu: Games (in bold, the left-click default), Show recent achievements, Pause notifications, Settings, Open config/logs location, Report a problem, Exit",
       "policy": "auto",
-      "verifiedAt": "4b38cd8",
+      "verifiedAt": "at-capture",
       "capture": {
         "command": "bash docs/screenshots/capture/tray-menu.sh",
         "steps": [
@@ -61,7 +61,7 @@
       ],
       "shows": "The Add game wizard on its Ready page: the game folder and its Steam AppID, the back-up-the-original-library option with its explanation, the collapsed Advanced options section, and the Back / Cancel / Add game buttons",
       "policy": "auto",
-      "verifiedAt": "6cecef2",
+      "verifiedAt": "de21277",
       "capture": {
         "command": "bash docs/screenshots/capture/add-game-window.sh",
         "steps": [
@@ -82,7 +82,8 @@
         "add-game-progress.png"
       ],
       "shows": "The Add game wizard after a finished run: the step checklist, the result line, and the details log open below the Hide details / Close buttons, scrolled to its last line",
-      "verifiedAt": "at-capture",
+      "policy": "confirm",
+      "verifiedAt": "de21277",
       "capture": {
         "command": "CAPTURE_STEAM_DLL=<a stock steam_api64.dll> bash docs/screenshots/capture/add-game-progress.sh",
         "steps": [

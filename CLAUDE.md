@@ -295,10 +295,10 @@ brushes, the icon, the work-area clamp). A second window carrying its own copy o
 copy that drifts: a shade corrected in one dialog would leave the other wrong with nothing to say why.
 
 **Unconfigured games are listed on request.** A save folder with no cache entry and no self-describing
-unlock file — typically a CODEX/RUNE game never put through Add game — is a `DiagnosticGameChoice`
-with `Unconfigured` set, hidden until **Include unconfigured games (\*)** is ticked, then listed after
-every configured game with a `*`. Its store name, when looked up, names it in the list, in the saved
-report's `game.name` and in the suggested file name; the report still has no settings folders, schema
+unlock file — typically a CODEX/RUNE game never put through Add game — is a `GameChoice` (the same
+list the Games window shows) with `Unconfigured` set, hidden until **Include unconfigured games
+(\*)** is ticked, then listed after every configured game with a `*`. Its store name, when looked up,
+names it in the list, in the saved report's `game.name` and in the suggested file name; the report still has no settings folders, schema
 or stats for it. With no game listed, every part's pane holds a hint instead (games hidden behind the box, or
 none found), and Copy and Save are off.
 
