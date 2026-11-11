@@ -34,7 +34,7 @@ public sealed class GameConfigCheckTests : IDisposable
 
     /// <summary>The checks for a RUNE game, with its save folder watched or with only an unrelated one.</summary>
     private List<string> Check(GameInfo game, string emulator = "RUNE", bool watched = true) =>
-        GameList.ConfigProblemsOf(game, emulator, watched ? [AppConfig.ExpandEnvironmentVariables(AchievementOverlay.GbeConfig.SceneEmulatorDetector.RuneSaves)] : [_savesDir]);
+        GameList.ConfigProblemsOf(game, GameCache.LoadDefinitions(game), emulator, watched ? [AppConfig.ExpandEnvironmentVariables(AchievementOverlay.GbeConfig.SceneEmulatorDetector.RuneSaves)] : [_savesDir]);
 
     [Fact]
     public void Complete_HasNoProblems() => Assert.Empty(Check(Game()));

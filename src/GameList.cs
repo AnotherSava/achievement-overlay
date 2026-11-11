@@ -48,9 +48,20 @@ public sealed class GameRow
 
     public string? ConfigTooltip => ConfigProblems switch
     {
-        null => null,
+        null => Choice.Unconfigured ? "Not set up: no achievement list for this game yet." : null,
         { Count: 0 } => "Set up completely: every achievement has its text and icon, and its unlocks are watched.",
         var problems => string.Join("\n", problems)
+    };
+
+    /// <summary>
+    /// The config cell's name for a screen reader, which cannot see the icon or the tinted row that say the same:
+    /// for a game not set up the tint is the only other signal, and it is colour alone.
+    /// </summary>
+    public string? ConfigLabel => ConfigProblems switch
+    {
+        null => Choice.Unconfigured ? "Not set up" : null,
+        { Count: 0 } => "Set up completely",
+        var problems => $"{AppUtilities.CountOf(problems.Count, "setup problem")}"
     };
 
     /// <summary>
@@ -92,7 +103,8 @@ public static class GameList
         var (unlockFile, states, _) = UnlockFile.ReadFirst(choice.AppId, gseSavesPaths);
         var earned = states?.Values.Where(state => state.Earned).ToList() ?? [];
         // Only an achievement list knows the total: an unlock file may hold just the achievements touched so far.
-        var total = choice.Game != null ? GameCache.LoadDefinitions(choice.Game)?.Count : null;
+        var definitions = choice.Game != null ? GameCache.LoadDefinitions(choice.Game) : null;
+        var total = definitions?.Count;
         var last = earned.Count > 0 ? earned.Max(state => state.EarnedTime) : 0;
         var lastTime = last > 0 ? DateTimeOffset.FromUnixTimeSeconds(last) : (DateTimeOffset?)null;
 
@@ -107,7 +119,7 @@ public static class GameList
             gameFolder = game.GameDir ?? Path.GetDirectoryName(game.SettingsDirs[0])!;
             emulator = ReadEmulatorInFolder(Path.GetDirectoryName(game.SettingsDirs[0])!);
             blocker = GameReverter.CannotRevert(settingsDir);
-            problems = ConfigProblemsOf(game, emulator, gseSavesPaths);
+            problems = ConfigProblemsOf(game, definitions, emulator, gseSavesPaths);
         }
         else
         {
@@ -161,7 +173,8 @@ public static class GameList
     /// description or icon, or unlocks written where the overlay is not watching. All of it is read from disk, so it
     /// runs offline; whether the list is still Steam's current one is not checked.
     /// </summary>
-    public static List<string> ConfigProblemsOf(GameInfo game, string emulator, IReadOnlyList<string> gseSavesPaths)
+    /// <param name="definitions">The game's achievement list as <see cref="GameCache.LoadDefinitions"/> read it; null when unreadable.</param>
+    public static List<string> ConfigProblemsOf(GameInfo game, IReadOnlyList<AchievementDefinition>? definitions, string emulator, IReadOnlyList<string> gseSavesPaths)
     {
         var problems = new List<string>();
         var settingsDir = game.SettingsDirs[0];
@@ -172,7 +185,6 @@ public static class GameList
         else if (!SteamDllDetector.SteamApiNames.Concat(SteamDllDetector.SteamClientNames).Any(name => File.Exists(Path.Combine(dllDir, name))))
             problems.Add("No Steam library sits beside the achievement list, so no emulator reads it.");
 
-        var definitions = GameCache.LoadDefinitions(game);
         if (definitions == null)
         {
             problems.Add("The achievement list cannot be read.");

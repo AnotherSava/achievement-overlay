@@ -19,7 +19,6 @@ public sealed partial class GamesWindow : Window, IWin32Window
     private readonly Func<IReadOnlyList<GameChoice>> _loadGames;
     private readonly Action<IWin32Window, string?, string?> _addGame;
     private readonly Action _gamesChanged;
-    private readonly System.Diagnostics.Stopwatch _opened = System.Diagnostics.Stopwatch.StartNew();
 
     /// <param name="config">Supplies the save folders unlock files are read from, and keeps the hidden columns.</param>
     /// <param name="loadGames">The games to list, read again on every refresh.</param>
@@ -44,11 +43,7 @@ public sealed partial class GamesWindow : Window, IWin32Window
         foreach (var (key, column) in ToggleableColumns())
             column.Visibility = hidden.Contains(key, StringComparer.Ordinal) ? Visibility.Collapsed : Visibility.Visible;
 
-        Loaded += async (_, _) =>
-        {
-            Logger.Info($"Games window shown {_opened.ElapsedMilliseconds} ms after it was opened.");
-            await RefreshAsync();
-        };
+        Loaded += async (_, _) => await RefreshAsync();
     }
 
     public IntPtr Handle => new System.Windows.Interop.WindowInteropHelper(this).Handle;
@@ -144,7 +139,6 @@ public sealed partial class GamesWindow : Window, IWin32Window
         var gamesPaths = _config.GamesPaths;
         var now = DateTimeOffset.Now; // one clock read, so rows written by the same moment agree
         List<GameRow> rows;
-        var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             rows = await Task.Run(() =>
@@ -162,7 +156,6 @@ public sealed partial class GamesWindow : Window, IWin32Window
             return;
         }
         Grid.ItemsSource = rows;
-        Logger.Info($"Games window listed {AppUtilities.CountOf(rows.Count, "game")} in {watch.ElapsedMilliseconds} ms.");
 
         var unconfigured = rows.Count(row => row.Choice.Unconfigured);
         Status.Text = AppUtilities.CountOf(rows.Count, "game") + (unconfigured > 0 ? $", {unconfigured} not set up" : "");
