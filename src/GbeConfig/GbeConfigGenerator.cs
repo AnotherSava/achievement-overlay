@@ -87,7 +87,7 @@ public sealed class GbeConfigGenerator
         try
         {
             if (!keep)
-                gbe = await GbeBinaryManager.EnsureAsync(_req.GbeFolder, _req.DownloadLatest, _http, _progress, ct);
+                gbe = await GbeBinaryManager.EnsureAsync(_req.GbeFolder, _req.DownloadLatest, _req.DebugBuild, _http, _progress, ct);
         }
         catch (Exception ex) when (IsAntivirusBlock(ex))
         {
@@ -131,6 +131,21 @@ public sealed class GbeConfigGenerator
             Warn("No achievements returned for this AppID (check the API key and that the game has achievements).");
         Info($"Achievements: {schema.Count}");
 
+        // Saved even when the run fails part-way, so whatever it did write can still be reverted.
+        var record = SetupRecord.Begin(steamSettingsDir);
+        try
+        {
+            return await WriteAsync(record, schema, appId, gbe, dllPath, steamSettingsDir, ct);
+        }
+        finally
+        {
+            record.Save();
+        }
+    }
+
+    /// <summary>Writes the config and installs GBE, recording every file it writes in <paramref name="record"/>.</summary>
+    private async Task<ConfigStatus> WriteAsync(SetupRecord record, List<SteamSchemaAchievement> schema, string appId, GbeRelease? gbe, string dllPath, string steamSettingsDir, CancellationToken ct)
+    {
         Directory.CreateDirectory(steamSettingsDir);
         var partial = false;
 
@@ -166,7 +181,7 @@ public sealed class GbeConfigGenerator
         // --- Download icons ---
         Step("Downloading achievement icons...");
         var imageDir = Path.Combine(steamSettingsDir, AchievementSchemaWriter.ImageDir);
-        var iconResult = await IconDownloader.DownloadAllAsync(schema, imageDir, _http, overwrite: _req.Force, ct: ct);
+        var iconResult = await IconDownloader.DownloadAllAsync(schema, imageDir, _http, record.BeforeWrite, overwrite: _req.Force, ct: ct);
         Info($"Icons: {iconResult.Downloaded} downloaded, {iconResult.Skipped} skipped, {iconResult.Failed} failed.");
         if (iconResult.Failed > 0)
         {
@@ -175,9 +190,8 @@ public sealed class GbeConfigGenerator
         }
 
         // --- Write config files ---
-        await File.WriteAllTextAsync(Path.Combine(steamSettingsDir, "achievements.json"),
-            AchievementSchemaWriter.Serialize(achievements), ct);
-        await File.WriteAllTextAsync(Path.Combine(steamSettingsDir, "steam_appid.txt"), appId, ct);
+        await WriteFileAsync(record, Path.Combine(steamSettingsDir, "achievements.json"), AchievementSchemaWriter.Serialize(achievements), ct);
+        await WriteFileAsync(record, Path.Combine(steamSettingsDir, "steam_appid.txt"), appId, ct);
         if (gbe == null)
         {
             Info("Wrote achievements.json, steam_appid.txt");
@@ -185,16 +199,18 @@ public sealed class GbeConfigGenerator
             return Finish(partial, steamSettingsDir);
         }
 
-        await File.WriteAllTextAsync(Path.Combine(steamSettingsDir, "configs.overlay.ini"), OverlayConfig, ct);
+        await WriteFileAsync(record, Path.Combine(steamSettingsDir, "configs.overlay.ini"), OverlayConfig, ct);
         Info("Wrote achievements.json, steam_appid.txt, configs.overlay.ini");
 
         // --- Back up original DLL and generate interfaces against it ---
         // Read before the backup and the copy below, while the DLL is still the emulator's.
         var emulator = SceneEmulatorDetector.Detect(dllPath);
         var interfaceSourceDll = dllPath;
+        string? backupName = null;
         if (_req.Backup)
         {
-            var backupPath = dllPath + ".original";
+            var backupPath = dllPath + GameReverter.BackupExtension;
+            backupName = Path.GetFileName(backupPath);
             if (!File.Exists(backupPath))
             {
                 File.Copy(dllPath, backupPath);
@@ -207,36 +223,60 @@ public sealed class GbeConfigGenerator
             interfaceSourceDll = backupPath;
         }
 
-        if (emulator is { Interfaces.Count: > 0 })
+        // GBE's tool finds no interface strings in an emulator's loader. The game's own library, where the
+        // emulator kept it, is what the game was built against; steam_emu.ini's list is the fallback.
+        record.BeforeWrite(Path.Combine(steamSettingsDir, "steam_interfaces.txt"));
+        if (emulator?.OriginalDll is { } originalDll && await GenerateInterfacesAsync(gbe, originalDll, steamSettingsDir, ct))
         {
-            // GBE's tool finds no interface strings in the emulator's loader, and steam_emu.ini lists them.
+            Info($"Wrote steam_interfaces.txt from the game's original Steam library, {Path.GetFileName(originalDll)}.");
+        }
+        else if (emulator is { Interfaces.Count: > 0 })
+        {
             await File.WriteAllLinesAsync(Path.Combine(steamSettingsDir, "steam_interfaces.txt"), emulator.Interfaces, ct);
             Info($"Wrote steam_interfaces.txt from the {AppUtilities.CountOf(emulator.Interfaces.Count, "interface")} {SceneEmulatorDetector.EmuIni} lists.");
         }
-        else
+        else if (!await GenerateInterfacesAsync(gbe, interfaceSourceDll, steamSettingsDir, ct))
         {
-            try
-            {
-                Step("Generating steam_interfaces.txt...");
-                var ok = await InterfaceGenerator.GenerateAsync(gbe.GenerateInterfacesExe64, interfaceSourceDll, steamSettingsDir, ct);
-                if (!ok)
-                {
-                    Warn("generate_interfaces produced no output; steam_interfaces.txt was not written.");
-                    partial = true;
-                }
-            }
-            catch (Exception ex) when (ex is IOException or FileNotFoundException)
-            {
-                Warn($"Interface generation failed: {ex.Message}");
-                partial = true;
-            }
+            partial = true;
+        }
+
+        if (_req.KeepPlayerId && emulator?.PlayerSteamId is { } steamId)
+        {
+            await WriteFileAsync(record, Path.Combine(steamSettingsDir, "configs.user.ini"), $"[user::general]\naccount_steamid={steamId}\n", ct);
+            Info($"Wrote configs.user.ini: GBE plays as the {emulator.Name} emulator's Steam ID ({steamId}), so saves filed under it stay found.");
         }
 
         // --- Replace the DLL with GBE's regular build ---
-        Step("Installing GBE steam_api64.dll...");
+        Step(_req.DebugBuild ? "Installing GBE steam_api64.dll (debug build)..." : "Installing GBE steam_api64.dll...");
+        record.RecordDll(Path.GetFileName(dllPath), backupName);
         File.Copy(gbe.RegularDll64, dllPath, overwrite: true);
+        if (_req.DebugBuild)
+            Info($"The debug build writes every Steam call to {Path.Combine(Path.GetDirectoryName(dllPath)!, "STEAM_LOG.txt")} while the game runs.");
 
         return Finish(partial, steamSettingsDir);
+    }
+
+    private static async Task WriteFileAsync(SetupRecord record, string path, string text, CancellationToken ct)
+    {
+        record.BeforeWrite(path);
+        await File.WriteAllTextAsync(path, text, ct);
+    }
+
+    /// <summary>Runs GBE's interface tool on <paramref name="dll"/>; false, with a warning, when it writes nothing.</summary>
+    private async Task<bool> GenerateInterfacesAsync(GbeRelease gbe, string dll, string steamSettingsDir, CancellationToken ct)
+    {
+        try
+        {
+            Step("Generating steam_interfaces.txt...");
+            if (await InterfaceGenerator.GenerateAsync(gbe.GenerateInterfacesExe64, dll, steamSettingsDir, ct))
+                return true;
+            Warn($"generate_interfaces found no interfaces in {Path.GetFileName(dll)}.");
+        }
+        catch (Exception ex) when (ex is IOException or FileNotFoundException)
+        {
+            Warn($"Interface generation failed: {ex.Message}");
+        }
+        return false;
     }
 
     private ConfigStatus Finish(bool partial, string steamSettingsDir)

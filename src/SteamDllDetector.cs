@@ -55,8 +55,11 @@ public static class SteamDllDetector
     private const string LoaderIni = "ColdClientLoader.ini";
     private const string ValveCompany = "Valve Corporation";
 
-    private static readonly string[] SteamApiNames = ["steam_api64.dll", "steam_api.dll"];
-    private static readonly string[] SteamClientNames = ["steamclient64.dll", "steamclient.dll"];
+    /// <summary>Steam's API DLL in both bitnesses, 64-bit first.</summary>
+    public static IReadOnlyList<string> SteamApiNames { get; } = ["steam_api64.dll", "steam_api.dll"];
+
+    /// <summary>Steam's client DLL in both bitnesses, 64-bit first; GBE's loader setup replaces this one.</summary>
+    public static IReadOnlyList<string> SteamClientNames { get; } = ["steamclient64.dll", "steamclient.dll"];
     private static readonly string[] ImporterExtensions = [".exe", ".dll", ".node"];
 
     // Unreal Engine loads the Steam DLL from here by explicit path, so nothing beside it imports it.

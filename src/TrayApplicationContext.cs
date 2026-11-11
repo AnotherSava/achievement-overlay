@@ -39,7 +39,8 @@ public sealed class TrayApplicationContext : ApplicationContext
 #pragma warning restore CA2213
     private SettingsWindow? _settingsWindow;
     private DiagnosticReportWindow? _reportWindow;
-    /// <summary>Set when Exit had to close one of the two WPF dialogs first; see <see cref="CompletePendingExit"/>.</summary>
+    private GamesWindow? _gamesWindow;
+    /// <summary>Set when Exit had to close one of the WPF dialogs first; see <see cref="CompletePendingExit"/>.</summary>
     private bool _exitPending;
     /// <summary>Null when the Windows startup entry could not be read, which leaves the setting unavailable.</summary>
     private bool? _startWithWindowsEnabled;
@@ -123,8 +124,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         _recentItem.Click += (_, _) => _recentDisplay.Toggle();
         RebuildHotkey();
 
-        var addGameItem = new ToolStripMenuItem("Add game…");
-        addGameItem.Click += (_, _) => OpenAddGameDialog();
+        // Bold, because it is what a left click on the icon opens: Windows marks a tray menu's default item that way.
+        var gamesItem = new ToolStripMenuItem("Games…") { Font = new Font(SystemFonts.MenuFont ?? Control.DefaultFont, FontStyle.Bold) };
+        gamesItem.Click += (_, _) => OpenGamesWindow();
 
         var settingsItem = new ToolStripMenuItem("Settings…");
         settingsItem.Click += (_, _) => OpenSettingsDialog();
@@ -152,10 +154,16 @@ public sealed class TrayApplicationContext : ApplicationContext
             ContextMenuStrip = new ContextMenuStrip()
         };
 
+        _trayIcon.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+                OpenGamesWindow();
+        };
+
         _trayIcon.ContextMenuStrip.Items.AddRange(new ToolStripItem[]
         {
+            gamesItem,
             _recentItem,
-            addGameItem,
             new ToolStripSeparator(),
             _pauseItem,
             new ToolStripSeparator(),
@@ -315,30 +323,45 @@ public sealed class TrayApplicationContext : ApplicationContext
     /// </summary>
     private Dictionary<string, AchievementUnlockState>? ReadUnlockStates(string appId, out bool unreadable)
     {
-        unreadable = false;
-
-        foreach (var gseSavesPath in _config.GseSavesPaths)
-        {
-            if (UnlockFile.Find(Path.Combine(gseSavesPath, appId)) is not { } file)
-                continue;
-
-            try
-            {
-                return UnlockFile.Read(file);
-            }
-#pragma warning disable CA1031 // Per-path boundary: logs the failure at Warn and reports the file as unreadable
-            catch (Exception ex)
-#pragma warning restore CA1031
-            {
-                Logger.Warn($"Could not read achievements for appid {appId}: {ex.Message}");
-                unreadable = true;
-            }
-        }
-
-        return null;
+        (_, var states, unreadable) = UnlockFile.ReadFirst(appId, _config.GseSavesPaths);
+        return states;
     }
 
-    private void OpenAddGameDialog()
+    /// <summary>
+    /// Opens the Games window, which lists every game and is where games are added and reverted. A tray
+    /// left click opens it too, so it can be asked for while it is already open; that brings it forward.
+    /// </summary>
+    private void OpenGamesWindow()
+    {
+        if (_gamesWindow != null)
+        {
+            _gamesWindow.Activate();
+            return;
+        }
+
+        // Constructed fresh every time, as the report window is: ShowDialog on a closed WPF Window throws.
+        _gamesWindow = new GamesWindow(_config, GameChoices, OpenAddGameDialog, OnGamesReverted);
+        try
+        {
+            _gamesWindow.ShowDialog();
+        }
+        finally
+        {
+            _gamesWindow = null;
+            if (_exitPending)
+                CompletePendingExit();
+        }
+    }
+
+    /// <summary>A revert changed a game's files: rescan, so a game whose config was removed stops being tracked.</summary>
+    private void OnGamesReverted()
+    {
+        _gameCache.ScanAll();
+        Logger.Info($"Game cache now has {_gameCache.GetAll().Count} game(s) after a revert.");
+    }
+
+    /// <summary>Opens the wizard owned by <paramref name="owner"/>, starting from a folder and an AppID when the Games window knows them.</summary>
+    private void OpenAddGameDialog(IWin32Window owner, string? gameDir, string? appIdHint)
     {
         if (_addGameForm != null)
         {
@@ -346,10 +369,10 @@ public sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        _addGameForm = new AddGameForm(_config, _appNames, RegisterNewGame);
+        _addGameForm = new AddGameForm(_config, _appNames, RegisterNewGame, gameDir, appIdHint);
         try
         {
-            _addGameForm.ShowDialog();
+            _addGameForm.ShowDialog(owner);
         }
         finally
         {
@@ -426,32 +449,10 @@ public sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        var choices = new List<DiagnosticGameChoice>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var game in _gameCache.GetAll())
-        {
-            if (seen.Add(game.AppId))
-                choices.Add(new DiagnosticGameChoice { AppId = game.AppId, Game = game, Name = _appNames.Name(game.AppId, game) });
-        }
-
-        foreach (var appId in AppIdFolders())
-        {
-            if (!seen.Add(appId))
-                continue;
-            // A self-describing unlock file is a tracked game even with no cache entry; any other folder is a
-            // game that was never set up, listed by its store name once a lookup has found one.
-            choices.Add(new DiagnosticGameChoice { AppId = appId, Unconfigured = !HasSelfDescribingUnlockFile(appId), Name = _appNames.Name(appId, null) });
-        }
-
-        // Configured games first, then the ones never set up, each group by name.
-        choices.Sort((a, b) => a.Unconfigured != b.Unconfigured ? a.Unconfigured.CompareTo(b.Unconfigured)
-            : string.Compare(a.ToString(), b.ToString(), StringComparison.CurrentCultureIgnoreCase));
-
         // Constructed fresh every time: ShowDialog on a closed WPF Window throws, so the instance
         // cannot be cached across opens. A Window is not IDisposable either, so the finally only says
         // "nothing is open now", exactly as the settings window's does.
-        _reportWindow = new DiagnosticReportWindow(choices, _config.GseSavesPaths, _config.GamesPaths);
+        _reportWindow = new DiagnosticReportWindow(GameChoices(), _config.GseSavesPaths, _config.GamesPaths);
         try
         {
             _reportWindow.ShowDialog();
@@ -462,6 +463,35 @@ public sealed class TrayApplicationContext : ApplicationContext
             if (_exitPending)
                 CompletePendingExit();
         }
+    }
+
+    /// <summary>
+    /// Every game the app knows of, for the Games window and the report alike: the game cache <em>and</em>
+    /// the save folders, because a game tracked only through a self-describing unlock file has no cache
+    /// entry, and a save folder for a game never set up here is worth showing as one.
+    /// </summary>
+    private List<GameChoice> GameChoices()
+    {
+        var choices = new List<GameChoice>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var game in _gameCache.GetAll())
+        {
+            if (seen.Add(game.AppId))
+                choices.Add(new GameChoice { AppId = game.AppId, Game = game, Name = _appNames.Name(game.AppId, game) });
+        }
+
+        foreach (var appId in AppIdFolders())
+        {
+            if (!seen.Add(appId))
+                continue;
+            // A self-describing unlock file is a tracked game even with no cache entry; any other folder is a
+            // game that was never set up, listed by its store name once a lookup has found one.
+            choices.Add(new GameChoice { AppId = appId, Unconfigured = !HasSelfDescribingUnlockFile(appId), Name = _appNames.Name(appId, null) });
+        }
+
+        choices.Sort(GameChoice.ListOrder);
+        return choices;
     }
 
     /// <summary>
@@ -698,12 +728,13 @@ public sealed class TrayApplicationContext : ApplicationContext
         // ShowDialog would return with its window still open, and the code after it would run on a
         // disposed tray. Close them instead, and let the method that opened each finish the exit once
         // its ShowDialog has returned.
-        if (_settingsWindow != null || _reportWindow != null)
+        if (_settingsWindow != null || _reportWindow != null || _gamesWindow != null)
         {
             Logger.Info("Exit waits for the open dialog to close.");
             _exitPending = true;
             _settingsWindow?.Close();
             _reportWindow?.Close();
+            _gamesWindow?.Close();
             return;
         }
 
@@ -717,7 +748,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     /// </summary>
     private void CompletePendingExit()
     {
-        if (_settingsWindow == null && _reportWindow == null)
+        if (_settingsWindow == null && _reportWindow == null && _gamesWindow == null)
             DisposeAndExit();
     }
 

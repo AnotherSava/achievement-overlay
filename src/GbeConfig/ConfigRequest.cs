@@ -32,6 +32,15 @@ public sealed class ConfigRequest
     /// </summary>
     public bool KeepEmulator { get; init; }
 
+    /// <summary>Install GBE's debug build, which logs every Steam call the game makes to <c>STEAM_LOG.txt</c> beside the DLL.</summary>
+    public bool DebugBuild { get; init; }
+
+    /// <summary>
+    /// When GBE replaces a CODEX/RUNE emulator, play as the emulator's Steam ID, so a game that files its saves
+    /// under that ID still finds them. Has no effect when the emulator's ID is not known.
+    /// </summary>
+    public bool KeepPlayerId { get; init; } = true;
+
     /// <summary>Overwrite an existing <c>steam_settings/</c> folder.</summary>
     public bool Force { get; init; }
 }

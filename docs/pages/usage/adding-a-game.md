@@ -2,12 +2,12 @@
 layout: default
 title: Adding a game
 parent: Usage
-nav_order: 4
+nav_order: 5
 ---
 
 # Adding a game
 
-For the overlay to show anything, each game needs a `steam_settings/achievements.json` next to the Steam DLL it loads. The app can generate this for you — right-click the tray icon and choose **Add game…** to launch a short wizard. It is a self-contained replacement for the unmaintained `generate_emu_config` tool.
+For the overlay to show anything, each game needs a `steam_settings/achievements.json` next to the Steam DLL it loads. The app can generate this for you: left-click the tray icon to open the [Games](games) window and click **Add game…** to launch a short wizard. To undo a setup later, use **Revert…** in the same window. It is a self-contained replacement for the unmaintained `generate_emu_config` tool.
 
 ## What the wizard asks
 
@@ -17,7 +17,7 @@ It only asks for what it cannot work out on its own, so a typical run is two or 
 2. **Steam AppID** — shown only if the AppID could not be detected from the game folder. If a Steam store search guessed one, it is pre-filled for you to verify, and the SteamDB link opens that AppID's page.
 3. **Steam Web API key** — shown only the first time; it is saved to [`config.json`](configuration) and reused afterwards. Required for the achievement schema; get one at [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey). The key is stored unencrypted — if that is a concern, revoke it right after the game is added. It is only needed while adding a game, and you will just enter a fresh one next time.
 4. **Hidden achievements** — shown only if the game actually has hidden achievements and you have not already saved a Firecrawl API key. Steam blanks out the descriptions of secret achievements; the real text lives on SteamDB, behind Cloudflare, so the tool fetches it through [Firecrawl](https://firecrawl.dev), a hosted scraper. Paste a free Firecrawl API key, or leave it blank to skip — those descriptions then stay as placeholders.
-5. **Ready** — review the summary and options (back up the original DLL, and an **Advanced** section for the GBE release folder), then click **Add game**. For a game running the CODEX or RUNE emulator the page shows **Replace it with GBE** instead; see [below](#games-running-codex-or-rune).
+5. **Ready** — review the summary and options (back up the original DLL, and an **Advanced** section for the GBE release folder and GBE's debug build), then click **Add game**. For a game running the CODEX or RUNE emulator the page shows **Replace it with GBE** instead; see [below](#games-running-codex-or-rune).
 
 <a href="../../screenshots/add-game.png"><img src="../../screenshots/add-game.png" alt="The Add game wizard on its Ready page, showing the game folder and AppID, the backup option, and the Add game button"></a>
 
@@ -35,7 +35,16 @@ If a configuration already exists for the game, the wizard shows its location an
 
 Some games ship with the CODEX or RUNE Steam emulator in place of Steam's own library. That emulator records each unlock in an `achievements.ini` of its own, under `%PUBLIC%\Documents\Steam\RUNE` or `...\CODEX`, and the overlay reads it. So by default the wizard leaves the emulator alone: it writes only the achievement list and icons into `steam_settings/`, downloads nothing, and adds the emulator's save folder to `gseSavesPaths`, creating it if the game has never been launched.
 
-Tick **Replace it with GBE** only if the game's achievements never appear. Some games record no unlocks under this emulator, and GBE does. The wizard then runs as it does for any other game, taking the list of Steam interfaces GBE needs from the emulator's `steam_emu.ini`.
+Tick **Replace it with GBE** only if the game's achievements never appear. Some games record no unlocks under this emulator, and GBE does. The wizard then runs as it does for any other game, with two differences:
+
+- The list of Steam interfaces GBE needs is read from the game's original Steam library when RUNE kept it beside itself (`steam_api64.rne`), and otherwise from the emulator's `steam_emu.ini`.
+- For RUNE, **Keep the emulator's player ID** is ticked by default. Many games file their saves under the player's Steam ID, so GBE plays as the ID RUNE did and the game finds its saves. Untick it to start fresh; the old saves stay where they are.
+
+Achievements the emulator already recorded do not carry over: GBE keeps its own record, starting empty.
+
+## GBE's debug build
+
+**Install GBE's debug build**, under **Advanced**, installs the build of GBE that writes every Steam call the game makes to `STEAM_LOG.txt` beside the library. It shows whether a game asks for its achievements by name, by number, or not at all, which is the first thing to know about a game whose achievements are not recorded. The log grows for as long as the game runs, so run the wizard again without it once you have what you need.
 
 ## What can stop it
 

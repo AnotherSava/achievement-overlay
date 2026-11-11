@@ -16,7 +16,7 @@ public static class IconDownloader
 {
     public static async Task<IconDownloadResult> DownloadAllAsync(
         IEnumerable<SteamSchemaAchievement> schema, string imageDir, HttpClient http,
-        bool overwrite = false, CancellationToken ct = default)
+        Action<string>? beforeWrite = null, bool overwrite = false, CancellationToken ct = default)
     {
         Directory.CreateDirectory(imageDir);
 
@@ -47,6 +47,7 @@ public static class IconDownloader
             try
             {
                 var bytes = await http.GetByteArrayAsync(job.Url, ct);
+                beforeWrite?.Invoke(job.Path);
                 await File.WriteAllBytesAsync(job.Path, bytes, ct);
                 Interlocked.Increment(ref downloaded);
             }

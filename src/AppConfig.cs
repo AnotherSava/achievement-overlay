@@ -573,4 +573,11 @@ public sealed class SettingsData
     /// </summary>
     [JsonPropertyName("lastGamesRoot")]
     public string? LastGamesRoot { get; set; }
+
+    /// <summary>
+    /// The Games window's columns the user unticked under Columns…, by their key in <c>GamesWindow</c>. Hidden
+    /// ones are stored rather than shown ones, so a column added later appears without a config change.
+    /// </summary>
+    [JsonPropertyName("hiddenGamesColumns")]
+    public List<string>? HiddenGamesColumns { get; set; }
 }

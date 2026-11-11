@@ -39,6 +39,11 @@ internal static class Program
             e.Handled = true;
         };
 
+        // While a WPF window is open with ShowDialog, WPF runs the message loop, and WinForms' message filters - which
+        // close the tray menu and every other ContextMenuStrip on a click elsewhere - never see a message. This routes
+        // the WPF loop's messages through them too.
+        System.Windows.Forms.Integration.WindowsFormsHost.EnableWindowsFormsInterop();
+
         try
         {
             using var context = new TrayApplicationContext();

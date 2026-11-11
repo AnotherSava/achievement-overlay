@@ -48,6 +48,41 @@ public sealed class SceneEmulatorDetectorTests : IDisposable
     }
 
     [Fact]
+    public void Detect_Rune_OffersTheKeptOriginalLibraryAndTheDefaultPlayerId()
+    {
+        Write("steam_emu.ini", EmuIni);
+        Write("steam_api64.rne", "");
+
+        var emulator = SceneEmulatorDetector.Detect(_dll);
+
+        Assert.NotNull(emulator);
+        Assert.Equal(Path.Combine(_tempDir, "steam_api64.rne"), emulator.OriginalDll);
+        Assert.Equal("76561197960271872", emulator.PlayerSteamId);
+    }
+
+    [Fact]
+    public void Detect_Codex_OffersNeitherTheOriginalLibraryNorAPlayerId()
+    {
+        Write("steam_emu.ini", EmuIni);
+        Write("steam_api64.cdx", "");
+
+        var emulator = SceneEmulatorDetector.Detect(_dll);
+
+        Assert.NotNull(emulator);
+        Assert.Null(emulator.OriginalDll);
+        Assert.Null(emulator.PlayerSteamId);
+    }
+
+    [Theory]
+    [InlineData("[Settings]\r\nAppId=480\r\n#AccountId=0\r\n", "76561197960271872")]
+    [InlineData("[Settings]\r\nAccountId=12345\r\n", "76561197960278073")]
+    [InlineData("[Settings]\r\nAccountId=0\r\n", null)]
+    [InlineData("[Settings]\r\nAccountId=-5\r\n", null)]
+    [InlineData("[Settings]\r\nAccountId=abc\r\n", null)]
+    public void RunePlayerSteamId_ReadsAccountIdOrRunesDefault(string text, string? expected) =>
+        Assert.Equal(expected, SceneEmulatorDetector.RunePlayerSteamId(IniFile.Parse(text)));
+
+    [Fact]
     public void Detect_Codex_NamesCodexAndItsSavesFolder()
     {
         Write("steam_emu.ini", EmuIni);

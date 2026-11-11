@@ -31,5 +31,32 @@ public static class UnlockFile
     /// <summary>Reads and parses the unlock file at <paramref name="path"/>.</summary>
     public static Dictionary<string, AchievementUnlockState> Read(string path) => Parse(path, File.ReadAllText(path));
 
+    /// <summary>
+    /// The first readable unlock file for <paramref name="appId"/> across <paramref name="savesPaths"/>, and its
+    /// states; both null when none exists or none could be read, <c>Unreadable</c> telling the two apart.
+    /// </summary>
+    public static (string? File, Dictionary<string, AchievementUnlockState>? States, bool Unreadable) ReadFirst(string appId, IEnumerable<string> savesPaths)
+    {
+        var unreadable = false;
+        foreach (var savesPath in savesPaths)
+        {
+            if (Find(Path.Combine(savesPath, appId)) is not { } file)
+                continue;
+            try
+            {
+                return (file, Read(file), false);
+            }
+#pragma warning disable CA1031 // Per-path boundary: logs the failure at Warn and reports the file as unreadable
+            catch (Exception ex)
+#pragma warning restore CA1031
+            {
+                Logger.Warn($"Could not read achievements for appid {appId}: {ex.Message}");
+                unreadable = true;
+            }
+        }
+
+        return (null, null, unreadable);
+    }
+
     public static bool IsIni(string path) => Path.GetFileName(path).Equals(IniName, StringComparison.OrdinalIgnoreCase);
 }

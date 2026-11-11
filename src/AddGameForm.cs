@@ -53,6 +53,9 @@ public sealed class AddGameForm : Form, IConfigProgress
     private readonly CheckBox _backupCheck = new() { Text = "Back up the original Steam library (recommended)", Checked = true, AutoSize = true, Margin = new Padding(0, 14, 0, 6) };
     private readonly CheckBox _downloadGbeCheck = new() { Text = "Download the latest GBE release", Checked = true, AutoSize = true, Margin = new Padding(0, 4, 0, 2) };
     private readonly CheckBox _replaceEmulatorCheck = new() { Text = "Replace it with GBE", AutoSize = true, Margin = new Padding(0, 10, 0, 6) };
+    private readonly CheckBox _keepPlayerIdCheck = new() { Text = "Keep the emulator's player ID, so the game finds its saves", Checked = true, AutoSize = true, Margin = new Padding(0, 10, 0, 6) };
+    private readonly CheckBox _debugBuildCheck = new() { Text = "Install GBE's debug build", AutoSize = true, Margin = new Padding(0, 10, 0, 2) };
+    private readonly List<Control> _playerIdControls = new();
     private readonly List<Control> _gbeControls = new();
     private readonly List<Control> _emulatorControls = new();
     private Label _keepEmulatorHelp = null!;
@@ -124,6 +127,7 @@ public sealed class AddGameForm : Form, IConfigProgress
     private string _gameDir = "";
     private string _appId = "";
     private bool _appIdGuessed;
+    private readonly string? _appIdHint;
     /// <summary>The CODEX/RUNE emulator the game runs, or null when it runs Steam's own DLL or GBE.</summary>
     private SceneEmulator? _emulator;
     /// <summary>Whether the game already loads a GBE steamclient through ColdClientLoader, so nothing is installed.</summary>
@@ -139,11 +143,19 @@ public sealed class AddGameForm : Form, IConfigProgress
     /// <summary>Whether the last close request was refused, which a run in progress does.</summary>
     private bool _closeRefused;
 
-    public AddGameForm(AppConfig config, SteamAppNames appNames, Action<string, IReadOnlyList<string>> onGameConfigured)
+    /// <param name="gameDir">The install folder to start from, filled in on the folder page; null to let the user pick.</param>
+    /// <param name="appIdHint">
+    /// The AppID the game is known by elsewhere, from its save folder. Offered on the AppID page when the folder names
+    /// none, ahead of a store search, which can only guess from the folder's name.
+    /// </param>
+    public AddGameForm(AppConfig config, SteamAppNames appNames, Action<string, IReadOnlyList<string>> onGameConfigured, string? gameDir = null, string? appIdHint = null)
     {
         _appNames = appNames;
         _config = config;
         _onGameConfigured = onGameConfigured;
+        _appIdHint = appIdHint;
+        if (gameDir != null)
+            _gameDirBox.Text = gameDir;
 
         Text = "Add game";
         Icon = AppUtilities.LoadAppIcon(false);
@@ -168,6 +180,7 @@ public sealed class AddGameForm : Form, IConfigProgress
 
         _advancedToggle.Click += (_, _) => SetAdvancedExpanded(!_advancedExpanded);
         _replaceEmulatorCheck.CheckedChanged += (_, _) => UpdateEmulatorControls();
+        _debugBuildCheck.CheckedChanged += (_, _) => UpdateGbeDownloadState();
         SetAdvancedExpanded(false);
 
         _spinner.Tick += (_, _) =>
@@ -198,7 +211,7 @@ public sealed class AddGameForm : Form, IConfigProgress
     /// <summary>The "download latest" option is forced on when the folder has no GBE release to reuse.</summary>
     private void UpdateGbeDownloadState()
     {
-        var hasExisting = GbeBinaryManager.LocateBinaries(_gbePathBox.Text.Trim(), "") != null;
+        var hasExisting = GbeBinaryManager.LocateBinaries(_gbePathBox.Text.Trim(), "", _debugBuildCheck.Checked) != null;
         if (hasExisting)
         {
             _downloadGbeCheck.Enabled = true;
@@ -220,6 +233,8 @@ public sealed class AddGameForm : Form, IConfigProgress
             c.Visible = _emulator != null;
         foreach (var c in _gbeControls)
             c.Visible = InstallsGbe;
+        foreach (var c in _playerIdControls)
+            c.Visible = InstallsGbe && _emulator?.PlayerSteamId != null;
 
         // One text for both choices: it sits above the checkbox, so a wording that changed with the tick would
         // change its height and move the checkbox out from under the pointer.
@@ -240,9 +255,9 @@ public sealed class AddGameForm : Form, IConfigProgress
         else
         {
             _backupCheck.Text = "Back up the emulator's library (recommended)";
+            var interfaceSource = _emulator.OriginalDll is { } original ? $"read from the game's original library the emulator kept, {Path.GetFileName(original)}" : $"taken from the emulator's {SceneEmulatorDetector.EmuIni}";
             _backupHelp.Text = $"The overlay replaces the {_emulator.Name} emulator's library (steam_api64.dll) with GBE's "
-                + "drop-in version, which records each unlock to a file this app watches. The interface list GBE needs is "
-                + $"taken from the emulator's {SceneEmulatorDetector.EmuIni}.\r\n\r\n"
+                + $"drop-in version, which records each unlock to a file this app watches. The interface list GBE needs is {interfaceSource}.\r\n\r\n"
                 + "With this on, the emulator's library is first copied to steam_api64.dll.original — keep it so you can "
                 + "put the emulator back later.";
         }
@@ -379,6 +394,13 @@ public sealed class AddGameForm : Form, IConfigProgress
                 g.Controls.Add(replaceHelp);
                 _emulatorControls.AddRange(new Control[] { _keepEmulatorHelp, _replaceEmulatorCheck, replaceHelp });
 
+                var playerIdHelp = MakeHelp(
+                    "Many games file their saves under the player's Steam ID. Untick this to start fresh instead: the game "
+                    + "then finds no saves, and the old ones stay where they are.");
+                g.Controls.Add(_keepPlayerIdCheck);
+                g.Controls.Add(playerIdHelp);
+                _playerIdControls.AddRange(new Control[] { _keepPlayerIdCheck, playerIdHelp });
+
                 _backupHelp = MakeHelp(""); // text set in UpdateEmulatorControls, which knows what is being replaced
                 g.Controls.Add(_backupCheck);
                 g.Controls.Add(_backupHelp);
@@ -398,7 +420,12 @@ public sealed class AddGameForm : Form, IConfigProgress
                 g.Controls.Add(gbeRow);
                 g.Controls.Add(_downloadGbeCheck);
                 g.Controls.Add(gbeHelp);
-                _advancedControls.AddRange(new Control[] { gbeLabel, gbeRow, _downloadGbeCheck, gbeHelp });
+                var debugHelp = MakeHelp(
+                    "The debug build writes every Steam call the game makes to STEAM_LOG.txt beside the library, which shows "
+                    + "why a game's achievements are not recorded. The log grows for as long as the game runs.");
+                g.Controls.Add(_debugBuildCheck);
+                g.Controls.Add(debugHelp);
+                _advancedControls.AddRange(new Control[] { gbeLabel, gbeRow, _downloadGbeCheck, gbeHelp, _debugBuildCheck, debugHelp });
             });
 
         _progressPage = MakePage(
@@ -701,7 +728,11 @@ public sealed class AddGameForm : Form, IConfigProgress
                 _appIdBox.Text = _appId;
                 _appIdNote.Visible = _appIdGuessed;
                 if (_appIdGuessed)
-                    _appIdNote.Text = $"Guessed {_appId} from a Steam store search — please verify it's the right game.";
+                {
+                    _appIdNote.Text = _appId == _appIdHint
+                        ? $"{_appId} is the AppID the game saved its achievements under, and this folder names none — please verify it's the right game."
+                        : $"Guessed {_appId} from a Steam store search — please verify it's the right game.";
+                }
                 _appIdBox.Focus();
                 break;
             case Page.ApiKey:
@@ -879,6 +910,7 @@ public sealed class AddGameForm : Form, IConfigProgress
             _keepsGbe = target.Action == InstallAction.KeepGbe;
             _emulator = _keepsGbe ? null : await Task.Run(() => SceneEmulatorDetector.Detect(target.Dll.Path));
             _replaceEmulatorCheck.Checked = false;
+            _keepPlayerIdCheck.Checked = true;
             // A kept CODEX/RUNE emulator installs nothing, so only a game with none can be refused here.
             if (_emulator == null && target.InstallRefusal is { } cannotInstall)
             {
@@ -908,8 +940,10 @@ public sealed class AddGameForm : Form, IConfigProgress
             // scan takes the first match anywhere below, which can be another copy.
             var localAppId = _emulator?.AppId
                 ?? await Task.Run(() => AppIdResolver.FromAppIdTxt(gameDir) ?? AppIdResolver.FromIniFiles(gameDir));
-            string? guessed = null;
-            if (localAppId == null && AppIdResolver.StoreSearchName(gameDir) is { } name)
+            // The hint is only as good as the folder matching the game it came from, which the user may have
+            // changed, so it is offered on the AppID page like a guess rather than taken.
+            var guessed = localAppId == null ? _appIdHint : null;
+            if (localAppId == null && guessed == null && AppIdResolver.StoreSearchName(gameDir) is { } name)
             {
                 _folderStatus.Text = "Searching the Steam store…";
                 guessed = await AppIdResolver.FromStoreSearchAsync(name, _http);
@@ -985,6 +1019,8 @@ public sealed class AddGameForm : Form, IConfigProgress
             DownloadLatest = _downloadGbeCheck.Checked,
             Backup = _backupCheck.Checked,
             KeepEmulator = !InstallsGbe,
+            DebugBuild = _debugBuildCheck.Checked,
+            KeepPlayerId = _keepPlayerIdCheck.Checked,
             Force = force
         };
 

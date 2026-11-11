@@ -37,6 +37,7 @@ See full project documentation at **[anothersava.github.io/achievement-overlay](
   - [Tray menu](https://anothersava.github.io/achievement-overlay/pages/usage/tray-menu)
   - [Settings](https://anothersava.github.io/achievement-overlay/pages/usage/settings)
   - [Configuration](https://anothersava.github.io/achievement-overlay/pages/usage/configuration)
+  - [Games](https://anothersava.github.io/achievement-overlay/pages/usage/games)
   - [Adding a game](https://anothersava.github.io/achievement-overlay/pages/usage/adding-a-game)
   - [Per-game settings](https://anothersava.github.io/achievement-overlay/pages/usage/per-game-settings)
   - [Other emulators](https://anothersava.github.io/achievement-overlay/pages/usage/other-emulators)

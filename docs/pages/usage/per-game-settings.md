@@ -2,7 +2,7 @@
 layout: default
 title: Per-game settings
 parent: Usage
-nav_order: 5
+nav_order: 6
 ---
 
 # Per-game settings

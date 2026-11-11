@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Text;
 using AchievementOverlay.GbeOverlay;
@@ -11,7 +12,9 @@ namespace AchievementOverlay.GbeConfig;
 /// <param name="AppId">Its <c>[Settings] AppId</c>, or null when it has none.</param>
 /// <param name="SavesFolders">The folders it writes <c>achievements.ini</c> into, raw as config stores them.</param>
 /// <param name="Interfaces">The Steam interface versions its <c>[Interfaces]</c> section lists.</param>
-public sealed record SceneEmulator(string Name, string? AppId, IReadOnlyList<string> SavesFolders, IReadOnlyList<string> Interfaces);
+/// <param name="OriginalDll">The game's own Valve library the emulator kept beside itself, or null when there is none.</param>
+/// <param name="PlayerSteamId">The 64-bit Steam ID it plays as, or null when it picks one at random or it is not known.</param>
+public sealed record SceneEmulator(string Name, string? AppId, IReadOnlyList<string> SavesFolders, IReadOnlyList<string> Interfaces, string? OriginalDll = null, string? PlayerSteamId = null);
 
 /// <summary>
 /// Tells whether the CODEX/RUNE emulator is what a game's Steam DLL currently is. Its files outlive a
@@ -26,6 +29,16 @@ public static class SceneEmulatorDetector
     /// <summary>The emulator fixes this path itself; <c>steam_emu.ini</c> has no key to move it.</summary>
     public const string RuneSaves = @"%public%\Documents\Steam\RUNE";
     public const string CodexSaves = @"%public%\Documents\Steam\CODEX";
+
+    /// <summary>The base every individual account's 64-bit Steam ID adds its 32-bit account ID to.</summary>
+    private const ulong IndividualAccountBase = 76561197960265728UL;
+
+    /// <summary>
+    /// The account ID RUNE plays as when <c>steam_emu.ini</c> leaves <c>AccountId</c> commented out, as
+    /// its template does. Measured, not documented: three RUNE games with the template's line filed their
+    /// saves under 76561197960271872, which is this ID on <see cref="IndividualAccountBase"/>.
+    /// </summary>
+    private const ulong RuneDefaultAccountId = 6144;
 
     /// <summary>Strings only a GBE build carries: the names of the save folders it creates.</summary>
     private static readonly string[] GbeMarkers = { "GSE Saves", "Goldberg SteamEmu Saves" };
@@ -51,7 +64,25 @@ public static class SceneEmulatorDetector
         };
 
         var ini = IniFile.Parse(File.ReadAllText(emuIni));
-        return new SceneEmulator(name, ReadAppId(ini), folders, ini.Entries("Interfaces").Values.ToList());
+        // RUNE keeps the game's own library under the DLL's name with a .rne extension. A CODEX .cdx is left
+        // out: no CODEX install has been seen to say whether it is the original or the emulator's payload.
+        var rne = Path.ChangeExtension(dllPath, ".rne");
+        var originalDll = name == "RUNE" && File.Exists(rne) ? rne : null;
+        var steamId = name == "RUNE" ? RunePlayerSteamId(ini) : null;
+        return new SceneEmulator(name, ReadAppId(ini), folders, ini.Entries("Interfaces").Values.ToList(), originalDll, steamId);
+    }
+
+    /// <summary>
+    /// The 64-bit Steam ID a RUNE <c>steam_emu.ini</c> plays as: its <c>[Settings] AccountId</c> on the
+    /// individual-account base, RUNE's default when the key is absent, and null for 0 or anything
+    /// unreadable, since the template says 0 picks a random ID.
+    /// </summary>
+    public static string? RunePlayerSteamId(IniFile emuIni)
+    {
+        var raw = emuIni.Get("Settings", "AccountId");
+        if (raw == null)
+            return (IndividualAccountBase + RuneDefaultAccountId).ToString(CultureInfo.InvariantCulture);
+        return uint.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out var accountId) && accountId > 0 ? (IndividualAccountBase + accountId).ToString(CultureInfo.InvariantCulture) : null;
     }
 
     /// <summary>The <c>[Settings] AppId</c> of a <c>steam_emu.ini</c>, or null when it is absent or not a number.</summary>

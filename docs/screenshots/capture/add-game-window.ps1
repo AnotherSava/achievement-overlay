@@ -50,11 +50,32 @@ if (-not (Test-Path -LiteralPath $GameDir)) { throw "Game folder not found: $Gam
 
 $proc = (Get-Process AchievementOverlay).Id
 
+# The wizard is reached through the Games window, which the tray menu's Games item opens.
 if ([AddGameWin]::Find([uint32]$proc) -eq [IntPtr]::Zero) {
   Open-TrayMenu | Out-Null
-  $item = Find-ByName -ControlType ([System.Windows.Automation.ControlType]::MenuItem) -Name "Add game*"
-  if (-not $item) { throw "Add game item not found in the tray menu." }
+  $item = Find-ByName -ControlType ([System.Windows.Automation.ControlType]::MenuItem) -Name "Games*"
+  if (-not $item) { throw "Games item not found in the tray menu." }
   Click-Element -Element $item
+
+  # Matched by process and a title pattern: the title's dash is not ASCII, and this script must stay ASCII.
+  $gamesWin = $null
+  $processCondition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, [int]$proc)
+  for ($i = 0; $i -lt 40; $i++) {
+    Start-Sleep -Milliseconds 250
+    foreach ($top in [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $processCondition)) {
+      if ($top.Current.Name -like "Achievement Overlay*Games") { $gamesWin = $top; break }
+    }
+    if ($gamesWin) { break }
+  }
+  if (-not $gamesWin) { throw "Games window never appeared." }
+
+  $buttonCondition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+  $addButton = $null
+  foreach ($element in $gamesWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, $buttonCondition)) {
+    if ($element.Current.Name -like "Add game*") { $addButton = $element; break }
+  }
+  if (-not $addButton) { throw "Add game button not found in the Games window." }
+  Click-Element -Element $addButton
 }
 
 $hwnd = [IntPtr]::Zero

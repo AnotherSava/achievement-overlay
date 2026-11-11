@@ -39,6 +39,8 @@ public static class DialogChrome
         Set("NoticeBorder", dark ? "#2F4152" : "#CFE1F2");
         Set("StatusGood", dark ? "#6CCB5F" : "#0F7B0F");
         Set("StatusWarn", dark ? "#FFC83D" : "#9A6A00");
+        // A Games window row for a game not set up: a faint warm tint, unlike the selection, the notice band and the cards.
+        Set("RowNotSetUp", dark ? "#2E2A22" : "#F7F2E6");
     }
 
     private static bool IsSystemInDarkMode()

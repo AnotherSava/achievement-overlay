@@ -2,7 +2,7 @@
 layout: default
 title: Other emulators
 parent: Usage
-nav_order: 6
+nav_order: 7
 ---
 
 # Other emulators

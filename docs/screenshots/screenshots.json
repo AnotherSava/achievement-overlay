@@ -66,7 +66,7 @@
         "command": "bash docs/screenshots/capture/add-game-window.sh",
         "steps": [
           "Deploy the current build so the shot matches the working tree, not the installed release",
-          "Open the tray menu and click Add game...",
+          "Open the tray menu, click Games..., and click Add game... in the Games window",
           "Keep the anchor: the driver points the wizard at a game with a Steam DLL and no steam_settings of its own, so the Ready page shows the ordinary run rather than the 'a configuration already exists' warning. A different game changes what the prose beside the image describes. CAPTURE_GAME_DIR names that game folder and is required: the folder is one machine's install, so the script carries no default",
           "Type the folder into the box rather than using Browse: FolderBrowserDialog is a native modal that blocks the driver thread and cannot be filled by name",
           "Click Next until the button relabels itself 'Add game', then stop. That label IS the stop condition, not a step: pressing it backs up and replaces the game's steam_api64.dll. The driver reads the label before every click and closes the window afterwards, which is the wizard's cancel",

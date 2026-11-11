@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO;
+using AchievementOverlay.GbeConfig;
 
 namespace AchievementOverlay;
 
@@ -11,6 +12,9 @@ public sealed class GameInfo
     public required string AppId { get; init; }
     public required string MetadataPath { get; init; }
     public required string GameName { get; init; }
+
+    /// <summary>The game's own folder, the one <see cref="GameName"/> is taken from; null where a game is built by hand.</summary>
+    public string? GameDir { get; init; }
 
     /// <summary>
     /// Every <c>steam_settings</c> folder this game has: the one beside the Steam DLL the game loads
@@ -71,12 +75,9 @@ public sealed class GameCache
     public void ScanAll()
     {
         Logger.Info("Starting game cache scan...");
-        var count = 0;
+        var found = new List<GameInfo>();
 
-        var configured = GetGamesPaths().Select(path => (Path: path, Folder: FolderPath.Parse(path))).ToList();
-        var roots = configured.Select(entry => entry.Folder).ToList();
-        var survivors = FolderPath.Minimal(roots);
-        var scanned = configured.Where(entry => survivors.Any(survivor => ReferenceEquals(survivor, entry.Folder))).ToList();
+        var (configured, roots, scanned) = PlanScan(GetGamesPaths());
 
         // Said in the log, so a report shows why a configured folder has no scan of its own.
         foreach (var (path, folder) in configured)
@@ -94,14 +95,35 @@ public sealed class GameCache
                 continue;
             }
 
-            count += ScanDirectory(basePath, roots);
+            found.AddRange(ScanDirectory(basePath, roots));
         }
 
-        Logger.Info($"Game cache scan complete. Found {count} game(s) with achievement metadata:");
+        // Evicted only after the walk, so a lookup racing the scan still finds a game that is staying.
+        var foundAppIds = found.Select(game => game.AppId).ToHashSet();
+        foreach (var appId in _cache.Keys.Where(appId => !foundAppIds.Contains(appId)))
+        {
+            _cache.TryRemove(appId, out _);
+            Logger.Info($"  Dropped: appid={appId}, no longer found in the games paths");
+        }
+
+        Logger.Info($"Game cache scan complete. Found {found.Count} game(s) with achievement metadata:");
 
         // A configured path as a diagnostic report spells its configured roots: without a trailing
         // separator. The report reads 'D:\Games\' as a folder inside the root 'D:\Games' and drops the line.
         static string AsReported(string path) => Path.TrimEndingDirectorySeparator(path);
+    }
+
+    /// <summary>
+    /// What a walk of <paramref name="gamesPaths"/> covers: every entry with its folder, every folder as a root
+    /// games are named below, and the entries walked, <see cref="FolderPath.Minimal"/> of them, so a folder
+    /// inside another entry is walked once as part of that one. The Games window walks the same set.
+    /// </summary>
+    public static (List<(string Path, FolderPath Folder)> Configured, List<FolderPath> Roots, List<(string Path, FolderPath Folder)> Scanned) PlanScan(IReadOnlyList<string> gamesPaths)
+    {
+        var configured = gamesPaths.Select(path => (Path: path, Folder: FolderPath.Parse(path))).ToList();
+        var roots = configured.Select(entry => entry.Folder).ToList();
+        var survivors = FolderPath.Minimal(roots);
+        return (configured, roots, configured.Where(entry => survivors.Any(survivor => ReferenceEquals(survivor, entry.Folder))).ToList());
     }
 
     public IEnumerable<string> GetAllAppIds() => _cache.Keys;
@@ -151,7 +173,7 @@ public sealed class GameCache
     /// Scans one root. <paramref name="roots"/> is every configured root, the ones scanned as part of
     /// this one included, because a game is named after its folder below the deepest of them.
     /// </summary>
-    private int ScanDirectory(string basePath, IReadOnlyList<FolderPath> roots)
+    private IReadOnlyList<GameInfo> ScanDirectory(string basePath, IReadOnlyList<FolderPath> roots)
     {
         IReadOnlyList<GameInfo> games;
         IReadOnlyList<string> skipped;
@@ -164,7 +186,7 @@ public sealed class GameCache
 #pragma warning restore CA1031
         {
             Logger.Warn($"  Error scanning '{basePath}': {ex.Message}");
-            return 0;
+            return [];
         }
 
         foreach (var line in skipped)
@@ -182,7 +204,7 @@ public sealed class GameCache
             LogSteamDll(game);
         }
 
-        return games.Count;
+        return games;
     }
 
     /// <summary>
@@ -197,46 +219,20 @@ public sealed class GameCache
         // apart from them the finds that do have a schema. Grouping waits for the whole walk: a root
         // among those folders claims the copies of its appid below it (NameGame), and the walk can meet
         // a nested copy before the root's own file.
-        var appIdFolders = new List<(string AppId, FolderPath Folder)>();
-        var finds = new List<(string AppId, FolderPath GameDir, string SettingsDir)>();
         var skipped = new List<string>();
+        var appIdFolders = FindAppIdFolders(basePath, skipped);
+        var finds = new List<(string AppId, FolderPath GameDir, string SettingsDir)>();
 
-        foreach (var appIdFile in Directory.EnumerateFiles(basePath, "steam_appid.txt", AppUtilities.RecursiveScan))
+        foreach (var (appId, gameDir, folder) in appIdFolders)
         {
-            try
+            var settingsDir = Path.Combine(gameDir, "steam_settings");
+            if (!File.Exists(Path.Combine(settingsDir, "achievements.json")))
             {
-                var appId = ReadAppId(appIdFile);
-                if (string.IsNullOrWhiteSpace(appId))
-                {
-                    // Skipping is right; doing it silently is not. An empty, whitespace-only or
-                    // UTF-16 steam_appid.txt reads as blank here, and the game then goes untracked
-                    // with nothing anywhere to say why — the shape of report issue #2 was closed on.
-                    skipped.Add($"Skipped: '{appIdFile}' holds no readable appid (empty, or not UTF-8/ASCII text)");
-                    continue;
-                }
-
-                var gameDir = Path.GetDirectoryName(appIdFile)!;
-                // generate_emu_config places steam_appid.txt inside steam_settings/ — collapse to game root
-                if (string.Equals(Path.GetFileName(gameDir), "steam_settings", StringComparison.OrdinalIgnoreCase))
-                    gameDir = Path.GetDirectoryName(gameDir)!;
-                var folder = FolderPath.Parse(gameDir);
-                appIdFolders.Add((appId, folder));
-                var settingsDir = Path.Combine(gameDir, "steam_settings");
-
-                if (!File.Exists(Path.Combine(settingsDir, "achievements.json")))
-                {
-                    skipped.Add($"Skipped: appid={appId} at '{gameDir}' (no 'achievements.json')");
-                    continue;
-                }
-
-                finds.Add((appId, folder, settingsDir));
+                skipped.Add($"Skipped: appid={appId} at '{gameDir}' (no 'achievements.json')");
+                continue;
             }
-#pragma warning disable CA1031 // Per-game boundary: returns the failure among the skipped finds, which the scan logs at Warn, and goes on to the other games
-            catch (Exception ex)
-#pragma warning restore CA1031
-            {
-                skipped.Add($"Error processing '{appIdFile}': {ex.Message}");
-            }
+
+            finds.Add((appId, folder, settingsDir));
         }
 
         // Keyed by appid *and* first-level game folder, not appid alone: two installs claiming one appid
@@ -244,7 +240,7 @@ public sealed class GameCache
         // both. By the folder rather than the name it gives the game, because each install is named
         // below its own deepest root, so installs under two nested roots can share a name.
         var byGame = new Dictionary<(string AppId, string GameFolder), (string GameName, List<string> Dirs)>(SameGame);
-        var foldersByAppId = appIdFolders.ToLookup(entry => entry.AppId, entry => entry.Folder);
+        var foldersByAppId = ByAppId(appIdFolders);
 
         foreach (var (appId, gameDir, settingsDir) in finds)
         {
@@ -282,6 +278,7 @@ public sealed class GameCache
                 AppId = entry.Key.AppId,
                 MetadataPath = Path.Combine(ordered[0], "achievements.json"),
                 GameName = entry.Value.GameName,
+                GameDir = entry.Key.GameFolder,
                 SettingsDirs = ordered,
                 SteamDll = steamDll
             };
@@ -330,6 +327,47 @@ public sealed class GameCache
     }
 
     /// <summary>
+    /// The game folder (<see cref="AppIdFileGameDir"/>) of every <c>steam_appid.txt</c> under one root, with the
+    /// appid it names. A file naming none, or one that cannot be read, adds a line to <paramref name="skipped"/>
+    /// saying so. Throws when the root cannot be walked.
+    /// </summary>
+    public static List<(string AppId, string GameDir, FolderPath Folder)> FindAppIdFolders(string basePath, List<string> skipped)
+    {
+        var found = new List<(string AppId, string GameDir, FolderPath Folder)>();
+        foreach (var appIdFile in Directory.EnumerateFiles(basePath, "steam_appid.txt", AppUtilities.RecursiveScan))
+        {
+            try
+            {
+                if (AppIdResolver.ParseAppIdTxt(File.ReadAllText(appIdFile)) is not { } appId)
+                {
+                    // Skipping is right; doing it silently is not. An empty, whitespace-only or
+                    // UTF-16 steam_appid.txt reads as blank here, and the game then goes untracked
+                    // with nothing anywhere to say why — the shape of report issue #2 was closed on.
+                    skipped.Add($"Skipped: '{appIdFile}' holds no readable appid (empty, not digits, or not UTF-8/ASCII text)");
+                    continue;
+                }
+
+                var gameDir = AppIdFileGameDir(appIdFile);
+                found.Add((appId, gameDir, FolderPath.Parse(gameDir)));
+            }
+#pragma warning disable CA1031 // Per-game boundary: returns the failure among the skipped finds, which the scan logs at Warn, and goes on to the other games
+            catch (Exception ex)
+#pragma warning restore CA1031
+            {
+                skipped.Add($"Error processing '{appIdFile}': {ex.Message}");
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// The <paramref name="appIdFolders"/> by appid, as <see cref="NameGame"/> takes them: only a folder holding a
+    /// <c>steam_appid.txt</c> for an appid claims that appid's copies below it.
+    /// </summary>
+    public static ILookup<string, FolderPath> ByAppId(IEnumerable<(string AppId, string GameDir, FolderPath Folder)> appIdFolders) => appIdFolders.ToLookup(entry => entry.AppId, entry => entry.Folder);
+
+    /// <summary>
     /// A game's first-level folder, which it is grouped by, and its name, which is that folder's: the
     /// first folder below the deepest configured root holding it. So with both <c>D:\</c> and
     /// <c>D:\Games</c> configured, <c>D:\Games\SampleQuest\...\Win64</c> is <c>D:\Games\SampleQuest</c>,
@@ -346,7 +384,7 @@ public sealed class GameCache
     /// called "bin". The folder is taken from the walk's record of it rather than from the root, so the
     /// name is spelled as the scan found the folder, as every other game's is.
     /// </remarks>
-    private static (string Folder, string Name) NameGame(FolderPath game, IReadOnlyList<FolderPath> roots, IEnumerable<FolderPath> sameAppIdFolders)
+    public static (string Folder, string Name) NameGame(FolderPath game, IReadOnlyList<FolderPath> roots, IEnumerable<FolderPath> sameAppIdFolders)
     {
         var anchor = roots.Where(root => root.Contains(game)).MaxBy(root => root.Names.Count) ?? game;
         var named = sameAppIdFolders.FirstOrDefault(anchor.IsSameFolder) ?? game;
@@ -354,12 +392,14 @@ public sealed class GameCache
         return (anchor.Names.Count < named.Names.Count ? Path.Join(anchor.ToString(), name) : named.ToString(), name);
     }
 
-    private static string ReadAppId(string appIdFilePath)
+    /// <summary>
+    /// The game folder a <c>steam_appid.txt</c> belongs to: the folder holding it, or the one above when it sits
+    /// inside <c>steam_settings/</c>, where generate_emu_config places it.
+    /// </summary>
+    public static string AppIdFileGameDir(string appIdFile)
     {
-        var content = File.ReadAllText(appIdFilePath).Trim();
-        // steam_appid.txt contains just the numeric appid
-        return content.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                      .FirstOrDefault() ?? "";
+        var dir = Path.GetDirectoryName(appIdFile)!;
+        return string.Equals(Path.GetFileName(dir), "steam_settings", StringComparison.OrdinalIgnoreCase) ? Path.GetDirectoryName(dir)! : dir;
     }
 
     /// <summary>

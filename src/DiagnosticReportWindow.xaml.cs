@@ -8,30 +8,6 @@ using AchievementOverlay.GbeOverlay;
 namespace AchievementOverlay;
 
 /// <summary>
-/// One game the report can be built for. Games with no <see cref="GameInfo"/> are listed too: a game
-/// tracked through a self-describing unlock file has no <c>steam_settings</c> at all, and it is
-/// exactly the configuration most likely to be the subject of a report.
-/// </summary>
-public sealed class DiagnosticGameChoice
-{
-    public required string AppId { get; init; }
-    public GameInfo? Game { get; init; }
-
-    /// <summary>A save folder for a game that was never set up here: listed only on request, and marked.</summary>
-    public bool Unconfigured { get; init; }
-
-    /// <summary>The game's name from <see cref="SteamAppNames.Name"/>, or null when it has none.</summary>
-    public string? Name { get; init; }
-
-    public override string ToString()
-    {
-        var name = Name;
-        var label = string.IsNullOrWhiteSpace(name) ? AppId : $"{name} ({AppId})";
-        return Unconfigured ? "* " + label : label;
-    }
-}
-
-/// <summary>
 /// Shows the diagnostic report for one game so the user can read it before sending it anywhere, then
 /// saves it as a single JSON file to attach to an issue.
 /// <para>
@@ -79,9 +55,9 @@ public sealed partial class DiagnosticReportWindow : Window
     private readonly bool _loaded;
 
     private string _reportText = "";
-    private readonly IReadOnlyList<DiagnosticGameChoice> _choices;
+    private readonly IReadOnlyList<GameChoice> _choices;
 
-    public DiagnosticReportWindow(IReadOnlyList<DiagnosticGameChoice> choices, IReadOnlyList<string> gseSavesPaths, IReadOnlyList<string> gamesPaths)
+    public DiagnosticReportWindow(IReadOnlyList<GameChoice> choices, IReadOnlyList<string> gseSavesPaths, IReadOnlyList<string> gamesPaths)
     {
         _choices = choices;
         _gseSavesPaths = gseSavesPaths;
@@ -126,7 +102,7 @@ public sealed partial class DiagnosticReportWindow : Window
         {
             // A rule between the configured games and the unconfigured ones after them. Disabled, so neither the
             // mouse nor the arrow keys can select it.
-            if (choice.Unconfigured && GameBox.Items.Count > 0 && GameBox.Items[^1] is DiagnosticGameChoice { Unconfigured: false })
+            if (choice.Unconfigured && GameBox.Items.Count > 0 && GameBox.Items[^1] is GameChoice { Unconfigured: false })
                 GameBox.Items.Add(new ComboBoxItem { Content = new Separator(), IsEnabled = false, Focusable = false });
             GameBox.Items.Add(choice);
         }
@@ -192,8 +168,8 @@ public sealed partial class DiagnosticReportWindow : Window
         PageIntroText.Text = section.Description;
         // With no game listed there is no report for the switch to change, and Rebuild could not redraw the
         // rail's marks to match it.
-        IncludeToggle.Visibility = section.Optional && GameBox.SelectedItem is DiagnosticGameChoice ? Visibility.Visible : Visibility.Collapsed;
-        IncludeLabel.Visibility = GameBox.SelectedItem is DiagnosticGameChoice ? Visibility.Visible : Visibility.Collapsed;
+        IncludeToggle.Visibility = section.Optional && GameBox.SelectedItem is GameChoice ? Visibility.Visible : Visibility.Collapsed;
+        IncludeLabel.Visibility = GameBox.SelectedItem is GameChoice ? Visibility.Visible : Visibility.Collapsed;
         IncludeToggle.IsChecked = section.Included;
         IncludeLabel.Text = section.Optional ? "Include" : "Always included";
         Pane.Text = section.Pane;
@@ -211,7 +187,7 @@ public sealed partial class DiagnosticReportWindow : Window
 
     private void Rebuild()
     {
-        if (GameBox.SelectedItem is not DiagnosticGameChoice choice)
+        if (GameBox.SelectedItem is not GameChoice choice)
             return;
 
         try
@@ -353,7 +329,7 @@ public sealed partial class DiagnosticReportWindow : Window
 
     private void OnSave(object sender, RoutedEventArgs e)
     {
-        if (_reportText.Length == 0 || GameBox.SelectedItem is not DiagnosticGameChoice choice)
+        if (_reportText.Length == 0 || GameBox.SelectedItem is not GameChoice choice)
             return;
 
         // Not IDisposable, unlike the WinForms one: 'using' here would not compile.

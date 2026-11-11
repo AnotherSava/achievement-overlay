@@ -100,6 +100,23 @@ public sealed class GameCacheTests : IDisposable
     }
 
     [Fact]
+    public void ScanAll_DropsGameWhoseFolderWasDeleted()
+    {
+        var achievementsJson = """[{"name": "ACH01", "displayName": "Test"}]""";
+        CreateGameDir("Kept", "11111", achievementsJson);
+        var removed = CreateGameDir("Removed", "22222", achievementsJson);
+
+        var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
+        cache.ScanAll();
+        Directory.Delete(removed, true);
+        cache.ScanAll();
+
+        Assert.NotNull(cache.LookupCached("11111"));
+        Assert.Null(cache.LookupCached("22222"));
+        Assert.Single(cache.GetAll());
+    }
+
+    [Fact]
     public void ScanAll_LogsDetectedGames()
     {
         var achievementsJson = """[{"name": "ACH01", "displayName": "Test"}]""";

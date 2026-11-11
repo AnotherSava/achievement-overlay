@@ -7,12 +7,12 @@ nav_order: 1
 
 # Tray menu
 
-Right-click the tray icon to reach everything the app can do.
+Right-click the tray icon to reach everything the app can do. A left click opens the [Games](games) window.
 
 <a href="../../screenshots/tray-menu.png"><img src="../../screenshots/tray-menu.png" alt="System tray menu"></a>
 
+- **Games…** — open the [Games](games) window, which lists every game, adds new ones through the [Add game](adding-a-game) wizard, and reverts a game's setup. Shown in bold because a left click on the icon opens it too.
 - **Show recent achievements** *(keyboard shortcut)* — display the last few unlocks. Press the shortcut again, or Esc, to dismiss. This is also the quickest way to confirm the overlay is running.
-- **Add game…** — open the [Add game](adding-a-game) wizard, which generates a game's achievement metadata and starts tracking it.
 - **Pause notifications** — suppress popups while checked. Unlocks are still recorded by the emulator; only the popup is withheld. The setting resets on restart, which is why it is a tray toggle rather than something in [Settings](settings).
 - **Settings…** — open the [Settings](settings) window.
 - **Open config/logs location** — opens Explorer with `config.json` selected. `overlay.log` sits in the same folder.

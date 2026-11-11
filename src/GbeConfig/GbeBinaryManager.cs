@@ -25,7 +25,13 @@ public static class GbeBinaryManager
     /// plain name to <c>-vs26</c> (gbe_fork issue #605); <c>-vs22</c> beside it is a Windows 7
     /// compatibility build this app has no use for, since it needs Windows 10 itself.
     /// </summary>
-    private static readonly string[] AssetNames = ["emu-win-release-vs26.7z", "emu-win-release.7z"];
+    private static readonly string[] ReleaseAssetNames = ["emu-win-release-vs26.7z", "emu-win-release.7z"];
+
+    /// <summary>The debug build's archive, named the same way. It extracts under <c>debug/</c>, beside the release build's <c>release/</c>.</summary>
+    private static readonly string[] DebugAssetNames = ["emu-win-debug-vs26.7z", "emu-win-debug.7z"];
+
+    /// <summary>The folder a debug build's binaries sit under, which is how they are told from the release build's.</summary>
+    private const string DebugFolder = "/debug/";
 
     public static string CacheRoot =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -35,30 +41,32 @@ public static class GbeBinaryManager
     /// Resolves GBE binaries in <paramref name="folder"/>. When <paramref name="downloadLatest"/>
     /// is false, only what's already in the folder is used (no network). Otherwise the latest
     /// release is downloaded into the folder (under a tag subfolder) and reused if already present.
+    /// <paramref name="debug"/> asks for GBE's debug build, which logs every Steam call the game makes.
     /// Throws if the required binaries can't be found/obtained.
     /// </summary>
     public static async Task<GbeRelease> EnsureAsync(
-        string folder, bool downloadLatest, HttpClient http, IConfigProgress log, CancellationToken ct = default)
+        string folder, bool downloadLatest, bool debug, HttpClient http, IConfigProgress log, CancellationToken ct = default)
     {
+        var build = debug ? "debug" : "release";
         if (string.IsNullOrWhiteSpace(folder))
             folder = CacheRoot;
 
         if (!downloadLatest)
         {
-            var located = LocateBinaries(folder, "(local)") ?? throw new FileNotFoundException($"No GBE release found in '{folder}'. Enable 'Download the latest GBE release', or point at a folder containing one.");
-            log.Report(ConfigLogLevel.Info, $"Using existing GBE release in '{folder}'.");
+            var located = LocateBinaries(folder, "(local)", debug) ?? throw new FileNotFoundException($"No GBE {build} build found in '{folder}'. Enable 'Download the latest GBE release', or point at a folder containing one.");
+            log.Report(ConfigLogLevel.Info, $"Using the existing GBE {build} build in '{folder}'.");
             return located;
         }
 
         log.Report(ConfigLogLevel.Step, "Resolving latest GBE release...");
-        var (tag, assetName, downloadUrl) = await GetLatestReleaseAsync(http, ct);
+        var (tag, assetName, downloadUrl) = await GetLatestReleaseAsync(http, debug, ct);
         log.Report(ConfigLogLevel.Debug, $"Latest GBE tag: {tag}");
 
         var tagDir = Path.Combine(folder, tag);
-        var cached = LocateBinaries(tagDir, tag);
+        var cached = LocateBinaries(tagDir, tag, debug);
         if (cached != null)
         {
-            log.Report(ConfigLogLevel.Info, $"Using cached GBE release {tag}.");
+            log.Report(ConfigLogLevel.Info, $"Using the cached GBE {build} build of {tag}.");
             return cached;
         }
 
@@ -79,15 +87,16 @@ public static class GbeBinaryManager
             try { File.Delete(archivePath); } catch (IOException) { /* best-effort */ }
         }
 
-        return LocateBinaries(tagDir, tag)
-            ?? throw new FileNotFoundException($"GBE release {tag} extracted but expected binaries were not found in '{tagDir}'");
+        return LocateBinaries(tagDir, tag, debug)
+            ?? throw new FileNotFoundException($"GBE {build} build of {tag} extracted but expected binaries were not found in '{tagDir}'");
     }
 
     /// <summary>
-    /// Finds the regular x64 DLL and the interface generator under a directory tree.
-    /// Returns null if either is missing.
+    /// Finds the regular x64 DLL of the release or the debug build, and the interface generator, under a
+    /// directory tree. Returns null if either is missing. A cache folder holds both builds once both have
+    /// been asked for, so the DLL is chosen by whether it sits under <c>debug/</c>.
     /// </summary>
-    public static GbeRelease? LocateBinaries(string rootDir, string version)
+    public static GbeRelease? LocateBinaries(string rootDir, string version, bool debug = false)
     {
         if (!Directory.Exists(rootDir))
             return null;
@@ -95,7 +104,7 @@ public static class GbeBinaryManager
         var options = AppUtilities.RecursiveScan;
 
         var regularDll = Directory.EnumerateFiles(rootDir, "steam_api64.dll", options)
-            .FirstOrDefault(p => p.Replace('\\', '/').Contains("/regular/", StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(p => Below(p).Contains("/regular/", StringComparison.OrdinalIgnoreCase) && Below(p).Contains(DebugFolder, StringComparison.OrdinalIgnoreCase) == debug);
 
         var generator = Directory.EnumerateFiles(rootDir, "generate_interfaces_x64.exe", options).FirstOrDefault();
 
@@ -103,9 +112,12 @@ public static class GbeBinaryManager
             return null;
 
         return new GbeRelease(regularDll, generator, version);
+
+        // Only the part below rootDir is a build's layout; the folder the user chose may be named anything.
+        string Below(string path) => "/" + Path.GetRelativePath(rootDir, path).Replace('\\', '/');
     }
 
-    private static async Task<(string Tag, string AssetName, string DownloadUrl)> GetLatestReleaseAsync(HttpClient http, CancellationToken ct)
+    private static async Task<(string Tag, string AssetName, string DownloadUrl)> GetLatestReleaseAsync(HttpClient http, bool debug, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, LatestReleaseApi);
         request.Headers.UserAgent.ParseAdd("AchievementOverlay");
@@ -114,11 +126,12 @@ public static class GbeBinaryManager
         using var response = await http.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync(ct);
-        return ParseLatestRelease(json);
+        return ParseLatestRelease(json, debug);
     }
 
-    public static (string Tag, string AssetName, string DownloadUrl) ParseLatestRelease(string json)
+    public static (string Tag, string AssetName, string DownloadUrl) ParseLatestRelease(string json, bool debug = false)
     {
+        var assetNames = debug ? DebugAssetNames : ReleaseAssetNames;
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
         var tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() ?? "latest" : "latest";
@@ -133,13 +146,13 @@ public static class GbeBinaryManager
             }
         }
 
-        foreach (var assetName in AssetNames)
+        foreach (var assetName in assetNames)
         {
             if (urls.TryGetValue(assetName, out var url))
                 return (tag, assetName, url ?? throw new InvalidOperationException("Release asset has no download URL"));
         }
 
-        throw new InvalidOperationException($"Latest GBE release has none of the expected assets ({string.Join(", ", AssetNames)})");
+        throw new InvalidOperationException($"Latest GBE release has none of the expected assets ({string.Join(", ", assetNames)})");
     }
 
     private static async Task DownloadAsync(string url, string destination, HttpClient http, IConfigProgress log, CancellationToken ct)

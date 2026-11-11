@@ -63,6 +63,24 @@ public sealed class GbeBinaryManagerTests : IDisposable
     }
 
     [Fact]
+    public void ParseLatestRelease_Debug_PicksTheDebugArchive()
+    {
+        var json = """
+        {
+          "tag_name": "release-2026_09_27",
+          "assets": [
+            {"name": "emu-win-release-vs26.7z", "browser_download_url": "https://x/release.7z"},
+            {"name": "emu-win-debug-vs22.7z", "browser_download_url": "https://x/debug-vs22.7z"},
+            {"name": "emu-win-debug-vs26.7z", "browser_download_url": "https://x/debug.7z"}
+          ]
+        }
+        """;
+        var (_, asset, url) = GbeBinaryManager.ParseLatestRelease(json, debug: true);
+        Assert.Equal("emu-win-debug-vs26.7z", asset);
+        Assert.Equal("https://x/debug.7z", url);
+    }
+
+    [Fact]
     public void ParseLatestRelease_OnlyVs22_Throws()
     {
         var json = """{"tag_name": "v1", "assets": [{"name": "emu-win-release-vs22.7z", "browser_download_url": "u"}]}""";
@@ -98,6 +116,40 @@ public sealed class GbeBinaryManagerTests : IDisposable
 
         // Only experimental present → no "regular" DLL → cannot locate.
         Assert.Null(GbeBinaryManager.LocateBinaries(_tempDir, "v1"));
+    }
+
+    [Theory]
+    [InlineData(false, "release")]
+    [InlineData(true, "debug")]
+    public void LocateBinaries_BothBuildsCached_PicksTheAskedOne(bool debug, string expectedTop)
+    {
+        Touch(@"release\regular\x64\steam_api64.dll");
+        Touch(@"release\tools\generate_interfaces\generate_interfaces_x64.exe");
+        Touch(@"debug\regular\x64\steam_api64.dll");
+        Touch(@"debug\tools\generate_interfaces\generate_interfaces_x64.exe");
+
+        var located = GbeBinaryManager.LocateBinaries(_tempDir, "v1", debug);
+
+        Assert.NotNull(located);
+        Assert.StartsWith(Path.Combine(_tempDir, expectedTop), located!.RegularDll64, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LocateBinaries_DebugAskedButOnlyReleaseCached_ReturnsNull()
+    {
+        Touch(@"release\regular\x64\steam_api64.dll");
+        Touch(@"release\tools\generate_interfaces\generate_interfaces_x64.exe");
+
+        Assert.Null(GbeBinaryManager.LocateBinaries(_tempDir, "v1", debug: true));
+    }
+
+    [Fact]
+    public void LocateBinaries_RootInsideAFolderNamedDebug_StillFindsTheReleaseBuild()
+    {
+        Touch(@"debug\gbe\release\regular\x64\steam_api64.dll");
+        Touch(@"debug\gbe\release\tools\generate_interfaces\generate_interfaces_x64.exe");
+
+        Assert.NotNull(GbeBinaryManager.LocateBinaries(Path.Combine(_tempDir, "debug", "gbe"), "v1"));
     }
 
     [Fact]

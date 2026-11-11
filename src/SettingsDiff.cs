@@ -9,7 +9,7 @@ internal static class SettingsDiff
 {
     /// <summary>
     /// Returns the user-facing settings that differ, keyed by <see cref="SettingsData"/> property
-    /// name. App-managed state — the trackingConfigured map, lastGamesRoot — is never part of the
+    /// name. App-managed state — the trackingConfigured map, lastGamesRoot, the Games window's hidden columns — is never part of the
     /// comparison, so a save can't drop or resurrect a game's setup confirmation or the remembered
     /// games folder.
     /// </summary>

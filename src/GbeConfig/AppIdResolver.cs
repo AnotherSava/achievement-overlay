@@ -20,6 +20,13 @@ public static partial class AppIdResolver
     public static bool IsAppId(string? text) => !string.IsNullOrEmpty(text) && text.All(char.IsAsciiDigit);
 
     /// <summary>
+    /// The AppID a <c>steam_appid.txt</c> holds: its first non-blank line, trimmed, when that is all digits; null
+    /// otherwise. Every reader of the file goes through this, so none accepts an AppID another would refuse.
+    /// </summary>
+    public static string? ParseAppIdTxt(string text) =>
+        text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() is { } id && IsAppId(id) ? id : null;
+
+    /// <summary>
     /// Reads an AppID from the first <c>steam_appid.txt</c> found under the game directory.
     /// </summary>
     public static string? FromAppIdTxt(string gameDir)
@@ -32,10 +39,7 @@ public static partial class AppIdResolver
         {
             try
             {
-                var id = File.ReadAllText(file)
-                    .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .FirstOrDefault();
-                if (IsAppId(id))
+                if (ParseAppIdTxt(File.ReadAllText(file)) is { } id)
                     return id;
             }
             catch (IOException)
