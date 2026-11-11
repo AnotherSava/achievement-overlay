@@ -203,7 +203,24 @@ public static class AchievementMetadata
         if (skipped > 0)
             Logger.Warn($"Skipped {skipped}/{names.Count} unreadable achievement entries (first: {firstError})");
 
+        WarnAboutNamelessUnlock(ini);
         return states;
+    }
+
+    /// <summary>
+    /// A RUNE emulator has been seen writing an earned achievement under an empty header (<c>[]</c>),
+    /// with the matching index entry blank too. Nothing names the achievement, so it cannot be
+    /// announced; the warning is what lets a report explain an unlock that showed no popup.
+    /// <see cref="IniFile"/> files <c>[]</c> under the same empty name as lines before any header.
+    /// </summary>
+    private static void WarnAboutNamelessUnlock(IniFile ini)
+    {
+        if (ini.Get("", "Achieved") != "1")
+            return;
+
+        // Once per unlock: the file is re-read on every write the emulator makes.
+        var unlockTime = ini.Get("", "UnlockTime") ?? "(none)";
+        WarnOnce($"An earned achievement has no name in achievements.ini (section '[]', UnlockTime={unlockTime}); the emulator lost which achievement it was, so it cannot be announced");
     }
 
     private static bool ProgressComplete(IniFile ini, string name) =>

@@ -4,6 +4,7 @@ using Xunit;
 
 namespace AchievementOverlay.Tests;
 
+[Collection("App log")]
 public sealed class UnlockFileTests : IDisposable
 {
     /// <summary>Shaped like a RUNE file: sections sorted by name, the index section between them.</summary>
@@ -34,6 +35,21 @@ public sealed class UnlockFileTests : IDisposable
         Assert.True(states["CarStorage"].Earned);
         Assert.Equal(1710018873L, states["CarStorage"].EarnedTime);
         Assert.Null(states["CarStorage"].DisplayName);
+    }
+
+    [Fact]
+    public void ParseIni_NamelessEarnedEntry_IsDroppedAndWarnedOnce()
+    {
+        var unlockTime = DateTime.UtcNow.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var text = $"[]\nAchieved=1\nUnlockTime={unlockTime}\n\n[SteamAchievements]\n00000=\nCount=1\n";
+
+        AppLog.While(() =>
+        {
+            Assert.Empty(AchievementMetadata.ParseIniUnlockStates(text));
+            Assert.Empty(AchievementMetadata.ParseIniUnlockStates(text));
+        });
+
+        Assert.Single(File.ReadLines(Logger.LogPath), line => line.Contains("[WARN]", StringComparison.Ordinal) && line.Contains($"UnlockTime={unlockTime}", StringComparison.Ordinal));
     }
 
     [Fact]
