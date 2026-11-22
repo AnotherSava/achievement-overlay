@@ -695,7 +695,7 @@ public partial class SettingsWindow : Window, IWin32Window
 
     /// <summary>
     /// Draws one card per folder: the path as stored, what checking it right now says about it, and
-    /// Change/Remove. The status is the check that used to run only when the dialog was closed.
+    /// Change/Remove.
     /// <paramref name="describe"/> gets the whole list alongside the entry, and runs off the UI thread.
     /// </summary>
     private void RebuildFolderList(ItemsControl list, List<string> folders, Func<string, IReadOnlyList<string>, (string Text, string BrushKey)> describe)

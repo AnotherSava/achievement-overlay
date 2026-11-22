@@ -9,7 +9,7 @@
         ShowActivated="False"
         SizeToContent="WidthAndHeight">
     <!-- No RenderTransformOrigin: a translate ignores it, and naming an origin of "0.5,1" would
-         state a bottom anchor this window no longer has. -->
+         state a bottom anchor this window does not have. -->
     <Window.RenderTransform>
         <TranslateTransform x:Name="SlideTransform" Y="0" />
     </Window.RenderTransform>

@@ -604,8 +604,8 @@ public sealed class AddGameForm : Form, IConfigProgress
 
             // Lay out at the current width, then size the dialog so the page's grid fits exactly. (The grid's
             // PreferredSize under-measures stacked wrapped labels, but its realized height is correct.) The button
-            // row is measured from the realized layout too: a hand-summed constant under-counted it by a few px,
-            // clipping the last line of a label that had just wrapped.
+            // row is measured from the realized layout too: a hand-summed constant under-counts it by a few px and
+            // clips the last line of a label that has just wrapped.
             PerformLayout();
             var contentRow = ContentRowHeight(grid);
             var detailsRow = details ? _detailsHeight + _logBox.Margin.Vertical : 0;

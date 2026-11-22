@@ -600,11 +600,10 @@ public static class AchievementMetadata
     /// Choosing wholesale would then discard a description the unlock file did carry.
     /// </para>
     /// <para>
-    /// A definition found by the leading-zero fallback leads exactly like one found by name. That
-    /// reverses the first fix for issue #7, which let such a match supply only the icon: the reporter's
-    /// schema matched all 93 of his achievements by folding zeros and none by name, so the cautious
-    /// rule left his localised schema unused in every case it was written for. The risk it traded away
-    /// — a wrong fold showing another achievement's text — is bounded by <see cref="FindDefinition"/>
+    /// A definition found by the leading-zero fallback leads exactly like one found by name. Letting
+    /// such a match supply only the icon would leave a padded-name schema's text unused: the issue #7
+    /// reporter's schema matches all 93 of his achievements by folding zeros and none by name. The risk
+    /// of leading — a wrong fold showing another achievement's text — is bounded by <see cref="FindDefinition"/>
     /// refusing an ambiguous fold, and was never bounded by the appid guard, which a digits-only schema
     /// defeats whether or not zeros are folded.
     /// </para>

@@ -250,10 +250,9 @@ public sealed partial class DiagnosticReportWindow : Window
     }
 
     /// <summary>
-    /// The one line of text a part gets. It is computed rather than written down beside a separate
-    /// summary, because the two used to say the same things in different words: an intro claiming
-    /// "API keys are replaced before you see them" over a summary reading "API keys hidden". Here the
-    /// description and this part's live figures are one sentence, so there is nothing to keep in sync.
+    /// The one line of text a part gets: the description and this part's live figures in one sentence.
+    /// A summary written beside a separate description says the same things in other words and
+    /// drifts from it, so there is nothing here to keep in sync.
     /// </summary>
     private static string Describe(string title, bool included, JsonNode? node)
     {

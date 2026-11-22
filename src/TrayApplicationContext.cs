@@ -90,7 +90,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        // An empty cache is no longer fatal: a game whose unlock file describes its own
+        // An empty cache is not fatal: a game whose unlock file describes its own
         // achievements needs no steam_settings/ and no 'gamesPaths' entry, and exiting here would
         // hit exactly the user who has installed the overlay but not yet run the game — the one
         // case the folder watcher exists to catch.

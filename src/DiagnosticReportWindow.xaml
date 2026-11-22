@@ -167,11 +167,7 @@
                         </Grid.RowDefinitions>
 
                         <!-- The part's name and its switch on one line, then a single line of text.
-                             There used to be a card here holding "Include this part" over a summary,
-                             under an intro that said the same things again in other words: the intro's
-                             "API keys are replaced" beside the summary's "API keys hidden", and a
-                             title labelling a switch that already says what it does. One computed
-                             line carries the description and this part's live figures together. -->
+                             One computed line carries the description and this part's live figures together. -->
                         <DockPanel Grid.Row="0" Margin="0,0,0,4">
                             <ToggleButton x:Name="IncludeToggle" DockPanel.Dock="Right"
                                           Style="{StaticResource ToggleSwitch}" Margin="18,0,0,0"
