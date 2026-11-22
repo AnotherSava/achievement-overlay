@@ -43,7 +43,7 @@ public readonly record struct NotificationScale
     public const double MinFactor = 1.0;
     public const double MaxFactor = 2.5;
 
-    /// <summary>What automatic always meant, and what a fresh config gets.</summary>
+    /// <summary>The share of the display's width a fresh config gets.</summary>
     public const double DefaultScreenPercent = 15;
 
     public ScaleUnit Unit { get; private init; }
