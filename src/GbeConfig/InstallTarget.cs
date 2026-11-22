@@ -34,8 +34,7 @@ public sealed record InstallTarget(LoadedSteamDll Dll, InstallAction Action)
         if (detection.Loaded is not { } dll)
             return (null, $"Couldn't tell which Steam library this game loads: {detection.Undecided}.");
 
-        var name = Path.GetFileName(dll.Path);
-        if (name.StartsWith("steam_api", StringComparison.OrdinalIgnoreCase))
+        if (SteamDllDetector.IsSteamApi(dll.Path))
             return (new InstallTarget(dll, InstallAction.ReplaceSteamApi), null);
 
         if (SceneEmulatorDetector.IsGbe(File.ReadAllBytes(dll.Path)))

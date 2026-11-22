@@ -180,7 +180,7 @@ public static class GameList
         var settingsDir = game.SettingsDirs[0];
         var dllDir = Path.GetDirectoryName(settingsDir)!;
 
-        if (game.SteamDll?.Loaded is { } loaded && !FolderPath.Parse(loaded.SettingsDir).IsSameFolder(FolderPath.Parse(settingsDir)))
+        if (game.SteamDll?.Loaded is { } loaded && !game.SettingsBesideSteamDll)
             problems.Add($"The game loads {loaded.Path}, and no achievement list sits beside it.");
         else if (!SteamDllDetector.SteamApiNames.Concat(SteamDllDetector.SteamClientNames).Any(name => File.Exists(Path.Combine(dllDir, name))))
             problems.Add("No Steam library sits beside the achievement list, so no emulator reads it.");

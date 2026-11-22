@@ -32,6 +32,12 @@ public sealed class GameInfo
     /// the folder beside that DLL is the one its emulator reads, so it leads <see cref="SettingsDirs"/>.
     /// </summary>
     public SteamDllDetection? SteamDll { get; init; }
+
+    /// <summary>
+    /// True when one of <see cref="SettingsDirs"/> sits beside the DLL <see cref="SteamDll"/> found, and
+    /// therefore leads the list; false when it found none, or a DLL with no collected settings folder.
+    /// </summary>
+    public bool SettingsBesideSteamDll { get; init; }
 }
 
 /// <summary>
@@ -261,10 +267,11 @@ public sealed class GameCache
                 .ThenBy(d => d, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             SteamDllDetection? steamDll = null;
+            var beside = -1;
             if (ordered.Count > 1)
             {
                 steamDll = SteamDllDetector.Detect(entry.Key.GameFolder);
-                var beside = steamDll.Loaded is { } loaded ? ordered.FindIndex(d => FolderPath.Parse(d).IsSameFolder(FolderPath.Parse(loaded.SettingsDir))) : -1;
+                beside = steamDll.Loaded is { } loaded ? ordered.FindIndex(d => FolderPath.Parse(d).IsSameFolder(FolderPath.Parse(loaded.SettingsDir))) : -1;
                 if (beside > 0)
                 {
                     var lead = ordered[beside];
@@ -280,7 +287,8 @@ public sealed class GameCache
                 GameName = entry.Value.GameName,
                 GameDir = entry.Key.GameFolder,
                 SettingsDirs = ordered,
-                SteamDll = steamDll
+                SteamDll = steamDll,
+                SettingsBesideSteamDll = beside >= 0
             };
         }).ToList();
 
@@ -301,7 +309,7 @@ public sealed class GameCache
             return;
         }
 
-        if (FolderPath.Parse(game.SettingsDirs[0]).IsSameFolder(FolderPath.Parse(loaded.SettingsDir)))
+        if (game.SettingsBesideSteamDll)
             Logger.Info($"  Steam DLL: appid={game.AppId}, rule={loaded.RuleName}, dll='{loaded.Path}'");
         else
             Logger.Warn($"  Steam DLL: appid={game.AppId}, rule={loaded.RuleName}, dll='{loaded.Path}', but no achievements.json sits beside it; reading the deepest settings folder");

@@ -134,7 +134,8 @@ public static class SteamDllDetector
     /// <summary>True for the 64-bit name of a Steam DLL, <c>steam_api64.dll</c> or <c>steamclient64.dll</c>.</summary>
     public static bool Is64(string dll) => Path.GetFileNameWithoutExtension(dll).EndsWith("64", StringComparison.Ordinal);
 
-    private static bool IsSteamApi(string dll) => SteamApiNames.Contains(Path.GetFileName(dll), StringComparer.OrdinalIgnoreCase);
+    /// <summary>True for Valve's <c>steam_api</c> name in either bitness, as against a <c>steamclient</c>.</summary>
+    public static bool IsSteamApi(string dll) => SteamApiNames.Contains(Path.GetFileName(dll), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// True for a Steam DLL that is not Valve's. CODEX and RUNE keep Valve's <c>steam_api64.dll</c>,
