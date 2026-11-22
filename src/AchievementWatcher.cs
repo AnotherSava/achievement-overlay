@@ -101,7 +101,7 @@ public sealed class AchievementWatcher : IDisposable
 
     /// <summary>
     /// Starts watching the GSE Saves directory for achievement changes.
-    /// Seeds every existing appid's achievements so they don't replay as new. Seeding is no longer
+    /// Seeds every existing appid's achievements so they don't replay as new. Seeding is not
     /// filtered by the configured games: an appid that becomes resolvable later (a self-describing
     /// unlock file needs no configuration) would otherwise replay its whole backlog at once.
     /// </summary>
@@ -397,15 +397,16 @@ public sealed class AchievementWatcher : IDisposable
             {
                 return await File.ReadAllTextAsync(filePath);
             }
+            // Ahead of the retry: both derive from IOException, and a file that has gone is not locked.
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                Logger.Info($"File not found (may have been deleted): '{filePath}'");
+                return null;
+            }
             catch (IOException) when (attempt < _maxRetries)
             {
                 Logger.Info($"File locked, retry {attempt + 1}/{_maxRetries}: '{filePath}'");
                 await Task.Delay(_retryDelay);
-            }
-            catch (FileNotFoundException)
-            {
-                Logger.Info($"File not found (may have been deleted): '{filePath}'");
-                return null;
             }
             catch (IOException ex)
             {

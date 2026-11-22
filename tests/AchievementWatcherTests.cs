@@ -76,6 +76,27 @@ public sealed class AchievementWatcherTests : IDisposable
         return watcher;
     }
 
+    /// <summary>
+    /// Waits for a started watcher to report <paramref name="expected"/> events, then for one more
+    /// debounce-and-processing window so a duplicate would have arrived too. Polling rather than a
+    /// fixed sleep: on a slow CI runner the debounce plus the read can outlast any fixed figure that
+    /// keeps the suite quick, and the test then fails with no events at all.
+    /// </summary>
+    private async Task WaitForEventsAsync(int expected)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            lock (_eventsLock)
+            {
+                if (_events.Count >= expected)
+                    break;
+            }
+            await Task.Delay(20);
+        }
+        await Task.Delay(300);
+    }
+
     // --- ExtractAppId tests ---
 
     [Fact]
@@ -370,8 +391,7 @@ public sealed class AchievementWatcherTests : IDisposable
         var json = """{"ACH01": {"earned": true, "earned_time": 1700000000}}""";
         WriteFile(filePath, json);
 
-        // Wait for debounce + processing
-        await Task.Delay(500);
+        await WaitForEventsAsync(1);
 
         Assert.Single(_events);
         Assert.Equal("77777", _events[0].AppId);
@@ -397,8 +417,7 @@ public sealed class AchievementWatcherTests : IDisposable
         await Task.Delay(5);
         WriteFile(filePath, """{"ACH01": {"earned": true, "earned_time": 1700000000}, "ACH02": {"earned": true, "earned_time": 1700000001}}""");
 
-        // Wait for debounce + processing
-        await Task.Delay(500);
+        await WaitForEventsAsync(2);
 
         // No duplicates: a repeated pass over the same earned_time is dropped by the seen-unlock map.
         Assert.Equal(2, _events.Count);
@@ -537,7 +556,7 @@ public sealed class AchievementWatcherTests : IDisposable
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         WriteIni(path, IniFileWith(("CarStorage", 1710018873), ("Achievement02", now)), how);
-        await Task.Delay(500);
+        await WaitForEventsAsync(1);
 
         Assert.Single(_events);
         Assert.Equal("480", _events[0].AppId);
@@ -563,5 +582,44 @@ public sealed class AchievementWatcherTests : IDisposable
 
         Assert.Single(_events);
         Assert.Equal("Achievement03", _events[0].AchievementName);
+    }
+}
+
+/// <summary>The watcher's log lines, read back from the app log, so this class joins its collection.</summary>
+[Collection("App log")]
+public sealed class AchievementWatcherLogTests : IDisposable
+{
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "AchievementWatcherLogTests_" + Guid.NewGuid().ToString("N"));
+
+    public AchievementWatcherLogTests()
+    {
+        Directory.CreateDirectory(_tempDir);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_tempDir))
+            Directory.Delete(_tempDir, true);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ProcessFile_FileGoneBeforeTheRead_IsReportedAsMissingNotLocked(bool folderExists)
+    {
+        var appDir = Path.Combine(_tempDir, "12345");
+        if (folderExists)
+            Directory.CreateDirectory(appDir);
+        var filePath = Path.Combine(appDir, "achievements.json");
+
+        AppLog.While(() =>
+        {
+            using var watcher = new AchievementWatcher([_tempDir], retryDelay: TimeSpan.Zero);
+            watcher.ProcessFileAsync(filePath).GetAwaiter().GetResult();
+        });
+
+        var lines = File.ReadLines(Logger.LogPath).Where(line => line.Contains(filePath, StringComparison.Ordinal)).ToList();
+        Assert.Single(lines, line => line.Contains("File not found", StringComparison.Ordinal));
+        Assert.DoesNotContain(lines, line => line.Contains("File locked", StringComparison.Ordinal) || line.Contains("[WARN]", StringComparison.Ordinal));
     }
 }
