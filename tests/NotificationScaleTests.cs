@@ -88,4 +88,29 @@ public class NotificationScaleTests
             NotificationScale.DesignWidth * NotificationScale.MinFactor,
             NotificationScale.DesignWidth * NotificationScale.MaxFactor);
     }
+
+    // A throw here would escape AppConfig's load and put the config-error dialog in front of a user
+    // whose only mistake was the popup's size.
+    [Theory]
+    [InlineData("\"20%\"", 20, true)]
+    [InlineData("500", 500, false)]
+    [InlineData("null", 15, true)]
+    [InlineData("true", 15, true)]
+    [InlineData("{}", 15, true)]
+    [InlineData("[1,2]", 15, true)]
+    public void Deserializes_WithoutThrowingOnAnyToken(string json, double value, bool isPercent)
+    {
+        var expected = isPercent ? NotificationScale.ScreenPercent(value) : NotificationScale.Pixels(value);
+        Assert.Equal(expected, System.Text.Json.JsonSerializer.Deserialize<NotificationScale>(json));
+    }
+
+    [Fact]
+    public void Deserializes_AnObjectInsideConfig_WithoutLosingTheKeysAfterIt()
+    {
+        var data = System.Text.Json.JsonSerializer.Deserialize<ScaleHolder>("""{"Scale":{"a":[1]},"After":"kept"}""")!;
+        Assert.Equal(NotificationScale.Default, data.Scale);
+        Assert.Equal("kept", data.After);
+    }
+
+    public sealed record ScaleHolder(NotificationScale Scale, string After);
 }

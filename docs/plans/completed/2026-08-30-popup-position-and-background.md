@@ -184,10 +184,9 @@ Two rules make it safe:
 - **Alpha is clamped to `[0x66, 0xFF]` on parse**, so a hand-edited `#001A1A2E` cannot produce an
   invisible popup reported as "notifications stopped working". Clamping on construction is what
   `NotificationScale.ScreenPercent` already does.
-- **The converter never throws.** An unexpected token returns the default and skips. This is a
-  deliberate divergence from `NotificationScaleConverter`, whose `throw new JsonException` escapes
-  `AppConfig.Load` into the constructor's catch and shows the startup config-error dialog — a real
-  defect, tracked separately, and not one the new converters will share.
+- **The converter never throws.** An unexpected token returns the default and skips, as
+  `NotificationScaleConverter` also does. A throw would escape `AppConfig.Load` into the
+  constructor's catch and show the startup config-error dialog for one hand-edited value.
 
 Opacity lives in the brush's alpha byte and nowhere else. The `Window.Opacity` property is owned by
 the fade animations, which drive it to 1 on every show, so a user opacity written there would be
@@ -458,6 +457,3 @@ comment needs narrowing all the same — "considered and rejected — position, 
   shipped default.
 - The unlock popup and the recent panel's footer disagree by one slide distance. Preserved here on
   purpose; worth its own commit.
-- `NotificationScaleConverter.Read` throws on an unexpected token, so `"scale": true` in a hand-edited
-  config stops the app from starting, against that file's own stated policy. A separate defect; the two
-  new converters do not share it.

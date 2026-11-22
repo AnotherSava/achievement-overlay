@@ -56,7 +56,7 @@ public class NotificationAnchorTests
     [Fact]
     public void Serializes_AsGbesStringNotAsANumber() => Assert.Equal("\"top_right\"", JsonSerializer.Serialize(NotificationAnchor.TopRight));
 
-    // Deliberately unlike NotificationScaleConverter: a throw here would escape AppConfig's load
+    // A throw here would escape AppConfig's load
     // and put the config-error dialog in front of a user who mistyped a corner.
     [Theory]
     [InlineData("\"top_left\"", NotificationAnchor.TopLeft)]

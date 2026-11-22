@@ -73,10 +73,9 @@ public static class NotificationAnchors
 }
 
 /// <summary>
-/// Reads the anchor from GBE's spelling and writes it back the same way. Deliberately unlike
-/// <see cref="NotificationScaleConverter"/>, it never throws: a <c>JsonException</c> out of here would
-/// escape <see cref="AppConfig"/>'s load and put the config-error dialog in front of a user whose only
-/// mistake was mistyping a corner.
+/// Reads the anchor from GBE's spelling and writes it back the same way. It never throws: a
+/// <c>JsonException</c> out of here would escape <see cref="AppConfig"/>'s load and put the
+/// config-error dialog in front of a user whose only mistake was mistyping a corner.
 /// </summary>
 internal sealed class NotificationAnchorConverter : JsonConverter<NotificationAnchor>
 {

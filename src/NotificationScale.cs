@@ -37,8 +37,8 @@ public readonly record struct NotificationScale
     /// Guards both units: a popup below or above these is unreadable or absurd. The floor is the
     /// design size itself rather than a fraction of it — everything inside is laid out at a size
     /// chosen to be readable, so drawing smaller than that is drawing text nobody sized. It bites at
-    /// the default: 15% of a 1920 px display is 288 px against a 322 px design width, which used to
-    /// shrink the title to 12.5 px and the description to 10.7 px.
+    /// the default: 15% of a 1920 px display is 288 px against a 322 px design width, and a fractional
+    /// floor would shrink the title to 12.5 px and the description to 10.7 px.
     /// </summary>
     public const double MinFactor = 1.0;
     public const double MaxFactor = 2.5;
@@ -93,19 +93,24 @@ public readonly record struct NotificationScale
 
 /// <summary>
 /// Reads the scale from a string ("15%", "384px") or a bare number (pixels), and writes it back in
-/// the self-describing string form. Property-scoped, so the shared JsonOptions is untouched.
+/// the self-describing string form. It never throws: a <c>JsonException</c> out of here would escape
+/// <see cref="AppConfig"/>'s load and put the config-error dialog in front of a user whose only
+/// mistake was the popup's size, so any other token reads as the default.
 /// </summary>
 internal sealed class NotificationScaleConverter : JsonConverter<NotificationScale>
 {
     public override NotificationScale Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        return reader.TokenType switch
+        switch (reader.TokenType)
         {
-            JsonTokenType.Null => NotificationScale.Default,
-            JsonTokenType.Number => NotificationScale.Pixels(reader.GetDouble()),
-            JsonTokenType.String => NotificationScale.Parse(reader.GetString()),
-            _ => throw new JsonException($"Cannot convert token {reader.TokenType} to a scale.")
-        };
+            case JsonTokenType.Number:
+                return NotificationScale.Pixels(reader.GetDouble());
+            case JsonTokenType.String:
+                return NotificationScale.Parse(reader.GetString());
+            default:
+                reader.Skip(); // steps over a whole object or array; a stray scalar needs no skipping
+                return NotificationScale.Default;
+        }
     }
 
     public override void Write(Utf8JsonWriter writer, NotificationScale value, JsonSerializerOptions options) =>
