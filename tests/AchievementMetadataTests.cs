@@ -115,6 +115,27 @@ public sealed class AchievementMetadataTests : IDisposable
         Assert.Equal("ACH02", defs[1].Name);
     }
 
+    [Theory]
+    [InlineData("\"1\"", true)]
+    [InlineData("\"0\"", false)]
+    [InlineData("1", true)]
+    [InlineData("0", false)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    [InlineData("null", null)]
+    [InlineData("\"yes\"", null)]
+    [InlineData("1.5", null)]
+    [InlineData("{\"a\": 1}", null)]
+    public void ParseDefinitions_HiddenFlag_ReadsBothSpellingsAndKeepsTheSchemaOnABadOne(string value, bool? expected)
+    {
+        // The unreadable value costs only the flag: the entry after it is still parsed.
+        var defs = AchievementMetadata.ParseDefinitions($$"""[{"name": "A", "hidden": {{value}}}, {"name": "B"}]""");
+
+        Assert.Equal(new[] { "A", "B" }, defs.Select(d => d.Name));
+        Assert.Equal(expected, defs[0].Hidden);
+        Assert.Null(defs[1].Hidden);
+    }
+
     [Fact]
     public void ParseDefinitions_EmptyArray_ReturnsEmpty()
     {

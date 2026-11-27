@@ -43,24 +43,81 @@ internal sealed class FlexibleBooleanConverter : JsonConverter<bool>
 {
     public override bool Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
+        if (TryReadFlag(ref reader, out var flag))
+            return flag;
+
+        return reader.TokenType switch
+        {
+            JsonTokenType.Null => false,
+            JsonTokenType.Number => reader.GetDouble() != 0,
+            JsonTokenType.String => throw new JsonException($"Cannot convert string '{reader.GetString()}' to a boolean."),
+            _ => throw new JsonException($"Cannot convert token {reader.TokenType} to a boolean."),
+        };
+    }
+
+    /// <summary>
+    /// The spellings that count as a boolean flag: a JSON bool, an integer (0 = false), or a string
+    /// holding either. The one definition <see cref="HiddenFlagConverter"/> shares; each converter
+    /// decides for itself what anything else means.
+    /// </summary>
+    internal static bool TryReadFlag(ref Utf8JsonReader reader, out bool flag)
+    {
         switch (reader.TokenType)
         {
-            case JsonTokenType.True: return true;
+            case JsonTokenType.True:
+                flag = true;
+                return true;
             case JsonTokenType.False:
-            case JsonTokenType.Null: return false;
-            case JsonTokenType.Number: return reader.TryGetInt64(out var number) ? number != 0 : reader.GetDouble() != 0;
+                flag = false;
+                return true;
+            case JsonTokenType.Number when reader.TryGetInt64(out var number):
+                flag = number != 0;
+                return true;
             case JsonTokenType.String:
                 var text = reader.GetString();
-                if (bool.TryParse(text, out var parsed)) return parsed;
-                if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numeric)) return numeric != 0;
-                throw new JsonException($"Cannot convert string '{text}' to a boolean.");
+                if (bool.TryParse(text, out flag)) return true;
+                if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numeric))
+                {
+                    flag = numeric != 0;
+                    return true;
+                }
+                return false;
             default:
-                throw new JsonException($"Cannot convert token {reader.TokenType} to a boolean.");
+                flag = false;
+                return false;
         }
     }
 
     // Write a real boolean so a file we round-trip stays in GBE's canonical shape.
     public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions options) => writer.WriteBooleanValue(value);
+}
+
+/// <summary>
+/// Reads the schema's <c>hidden</c> flag, which real files write as a string (<c>"1"</c>) or a number
+/// (<c>1</c>). A value it cannot read is null — unknown — rather than an exception, because
+/// <see cref="AchievementMetadata.ParseDefinitions"/> deserialises the whole list at once and one bad
+/// flag would otherwise cost the game its schema.
+/// </summary>
+internal sealed class HiddenFlagConverter : JsonConverter<bool?>
+{
+    public override bool? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (FlexibleBooleanConverter.TryReadFlag(ref reader, out var flag))
+            return flag;
+
+        // An object or array must be consumed whole, or the reader is left inside it. Skip is a
+        // no-op on a scalar token.
+        reader.Skip();
+        return null;
+    }
+
+    public override void Write(Utf8JsonWriter writer, bool? value, JsonSerializerOptions options)
+    {
+        if (value is { } flag)
+            writer.WriteBooleanValue(flag);
+        else
+            writer.WriteNullValue();
+    }
 }
 
 /// <summary>
@@ -108,6 +165,15 @@ public sealed class AchievementDefinition
 
     [JsonPropertyName("icon")]
     public string? Icon { get; set; }
+
+    /// <summary>
+    /// Whether Steam hides the achievement until it is earned; null when the schema does not say or
+    /// says it in a form <see cref="HiddenFlagConverter"/> cannot read. Steam publishes no description
+    /// for a hidden achievement, so a blank one there is expected rather than a badly generated schema.
+    /// </summary>
+    [JsonPropertyName("hidden")]
+    [JsonConverter(typeof(HiddenFlagConverter))]
+    public bool? Hidden { get; set; }
 }
 
 public static class AchievementMetadata
@@ -259,6 +325,13 @@ public static class AchievementMetadata
             _ => false
         };
     }
+
+    /// <summary>
+    /// True when a schema entry has no english description: blank, or the placeholder a config
+    /// generator writes for a hidden achievement it found no text for.
+    /// </summary>
+    public static bool LacksDescription(AchievementDefinition definition) =>
+        GetDisplayText(definition.Description, "english").Trim() is "" or "No description available";
 
     /// <summary>
     /// Parses the game's steam_settings/achievements.json (array of definitions).

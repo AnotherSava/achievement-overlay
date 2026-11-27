@@ -191,7 +191,7 @@ public static class GameList
         }
         else
         {
-            var noDescription = definitions.Count(definition => AchievementMetadata.GetDisplayText(definition.Description, "english").Trim() is "" or "No description available");
+            var noDescription = definitions.Count(AchievementMetadata.LacksDescription);
             if (noDescription > 0)
                 problems.Add($"{AppUtilities.CountOf(noDescription, "achievement")} without a description, usually hidden ones.");
             var noIcon = definitions.Count(definition => AchievementMetadata.ResolveIconPath(definition, settingsDir) is not { } icon || !File.Exists(icon));

@@ -316,8 +316,8 @@ public sealed class GameCache
     }
 
     /// <summary>
-    /// A one-line digest of a game's schema: how many achievements, how their names are spelled, and
-    /// which languages the text carries. These are the questions every report about a wrong name,
+    /// A one-line digest of a game's schema: how many achievements, how their names are spelled,
+    /// which languages the text carries, and how many lack a description and are hidden. These are the questions every report about a wrong name,
     /// a missing icon or an ignored language turns on, and answering them in the log means a reporter
     /// no longer has to open the file and describe it by hand.
     /// </summary>
@@ -331,7 +331,11 @@ public sealed class GameCache
         var shape = AchievementMetadata.DescribeTextShape(definitions.Select(d => d.DisplayName));
         var names = AchievementMetadata.DescribeNameStyle(definitions.Select(d => d.Name));
         var langs = languages.Count > 0 ? string.Join(",", languages.OrderBy(l => l, StringComparer.OrdinalIgnoreCase)) : "-";
-        return $"count={definitions.Count}, names={names}, text={shape}, langs=[{langs}]";
+        // How many of the missing descriptions are hidden achievements tells "Steam redacted them" apart
+        // from "the generator left them out".
+        var noDescription = definitions.Where(AchievementMetadata.LacksDescription).ToList();
+        var hidden = noDescription.Count(d => d.Hidden == true);
+        return $"count={definitions.Count}, names={names}, text={shape}, langs=[{langs}], noDescription={noDescription.Count} ({hidden} hidden)";
     }
 
     /// <summary>

@@ -490,6 +490,25 @@ public sealed class GameCacheTests : IDisposable
         Assert.True(cache.LookupCached("33333") != null);
     }
 
+    [Fact]
+    public void ScanAll_SchemaLine_CountsMissingDescriptionsAndHowManyAreHidden()
+    {
+        CreateGameDir("GameH", "1000008", """
+            [
+                {"name": "A", "description": "Visible", "hidden": "0"},
+                {"name": "B", "description": "", "hidden": "1"},
+                {"name": "C", "description": "No description available", "hidden": 1},
+                {"name": "D", "description": ""}
+            ]
+            """);
+        var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
+
+        AppLog.While(cache.ScanAll);
+
+        var line = File.ReadLines(Logger.LogPath).Last(line => line.Contains("Schema: appid=1000008", StringComparison.Ordinal));
+        Assert.EndsWith("noDescription=3 (2 hidden)", line, StringComparison.Ordinal);
+    }
+
     // --- Games carrying more than one steam_settings folder ---
 
     private const string Schema = """[{"name": "ACH01", "displayName": "Test"}]""";
@@ -537,6 +556,53 @@ public sealed class GameCacheTests : IDisposable
         Assert.Equal(new[] { root, nested }, info.SettingsDirs);
         Assert.Equal(Path.Combine(root, "achievements.json"), info.MetadataPath);
         Assert.Equal(SteamDllRule.EmulatorSteamApi, info.SteamDll!.Loaded!.Rule);
+    }
+
+    [Fact]
+    public void ScanAll_SteamDllWithNoSettingsBesideIt_ReadsTheDeepestAndWarns()
+    {
+        // The game loads the DLL from x64\, where no steam_settings was collected.
+        var root = CreateSettingsDir("1000006", "GameE");
+        var nested = CreateSettingsDir("1000006", "GameE", "bin", "coldclient");
+        var x64 = Path.Combine(_tempDir, "games", "GameE", "x64");
+        PeFixture.WriteImporter(Path.Combine(x64, "Game.exe"), imports: ["steam_api64.dll"]);
+        PeFixture.WriteGbeDll(Path.Combine(x64, "steam_api64.dll"));
+        var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
+
+        AppLog.While(cache.ScanAll);
+
+        var info = cache.LookupCached("1000006")!;
+        Assert.Equal(Path.Combine(x64, "steam_api64.dll"), info.SteamDll!.Loaded!.Path);
+        Assert.False(info.SettingsBesideSteamDll);
+        Assert.Equal(new[] { nested, root }, info.SettingsDirs);
+        Assert.Equal(Path.Combine(nested, "achievements.json"), info.MetadataPath);
+        var line = File.ReadLines(Logger.LogPath).Last(line => line.Contains("Steam DLL: appid=1000006", StringComparison.Ordinal));
+        Assert.Contains("[WARN]", line, StringComparison.Ordinal);
+        Assert.Contains("no achievements.json sits beside it", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ScanAll_UndecidedSteamDll_ReadsTheDeepestAndWarns()
+    {
+        // Two GBE copies loading from folders at one depth: rule 1 ties and the detection stops.
+        var root = CreateSettingsDir("1000007", "GameF");
+        var nested = CreateSettingsDir("1000007", "GameF", "bin", "coldclient");
+        foreach (var folder in new[] { "a", "b" })
+        {
+            var dir = Path.Combine(_tempDir, "games", "GameF", folder);
+            PeFixture.WriteImporter(Path.Combine(dir, "Game.exe"), imports: ["steam_api64.dll"]);
+            PeFixture.WriteGbeDll(Path.Combine(dir, "steam_api64.dll"));
+        }
+        var cache = new GameCache(new[] { Path.Combine(_tempDir, "games") });
+
+        AppLog.While(cache.ScanAll);
+
+        var info = cache.LookupCached("1000007")!;
+        Assert.Null(info.SteamDll!.Loaded);
+        Assert.Equal(new[] { nested, root }, info.SettingsDirs);
+        var line = File.ReadLines(Logger.LogPath).Last(line => line.Contains("Steam DLL: appid=1000007", StringComparison.Ordinal));
+        Assert.Contains("[WARN]", line, StringComparison.Ordinal);
+        Assert.Contains("undecided", line, StringComparison.Ordinal);
     }
 
     [Theory]
