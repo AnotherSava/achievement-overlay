@@ -27,6 +27,9 @@ internal static class PeFixture
     /// <summary>A Steam DLL carrying GBE's marker and GBE's company name.</summary>
     public static void WriteGbeDll(string path) => Write(path, [], [], company: "GSE", marker: GbeMarker);
 
+    /// <summary>A Steam DLL whose version info names <paramref name="company"/>, with no emulator marker.</summary>
+    public static void WriteDllFrom(string path, string company) => Write(path, [], [], company, marker: null);
+
     private static void Write(string path, string[] imports, string[] delayImports, string? company, string? marker)
     {
         var section = new List<byte>();

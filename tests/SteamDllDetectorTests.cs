@@ -77,6 +77,16 @@ public sealed class SteamDllDetectorTests : IDisposable
     }
 
     [Fact]
+    public void Detect_NonValveCompanyAlone_IsAnEmulator()
+    {
+        // No GBE marker and no steam_emu.ini: only the version info says this is not Valve's DLL.
+        PeFixture.WriteImporter(At("Game.exe"), imports: ["steam_api64.dll"]);
+        PeFixture.WriteDllFrom(At("steam_api64.dll"), "Goldberg");
+
+        Assert.Equal(new LoadedSteamDll(At("steam_api64.dll"), SteamDllRule.EmulatorSteamApi), Detected());
+    }
+
+    [Fact]
     public void Detect_ValveDllWithSteamEmuIni_IsAnEmulator()
     {
         // CODEX and RUNE keep Valve's DLL, version info included, and load themselves through it.
