@@ -236,4 +236,4 @@ A reply drafted in the session that wrote this plan introduces the maintainer, t
 
 ## Separate defect found during research
 
-The framework-dependent release zip omits `SharpCompress.dll`, which its `deps.json` declares; the file list is in the "Package zips" step of `.github/workflows/build.yml`. The Add game wizard's 7z extract (`GbeBinaryManager`, `SharpCompress.Archives.SevenZip`) therefore probably fails in that build; the runtime failure is UNVERIFIED. It is independent of #8 and belongs in its own commit.
+The framework-dependent release zip omits `SharpCompress.dll`, which its `deps.json` declares; the file list is in the "Package zips" step of `.github/workflows/build.yml`. The Add game wizard's 7z extract (`GbeBinaryManager`, `SharpCompress.Archives.SevenZip`) therefore probably fails in that build; the runtime failure is UNVERIFIED. It is independent of #8 and belongs in its own commit. Fixed in be1bdfe (`fix(ci): ship SharpCompress.dll in the framework-dependent zip`), which zips the whole publish folder; the framework-dependent size quoted under **Size** still needs re-measuring on a release built after it.
